@@ -212,30 +212,6 @@ export function parseNfseXml(xml: string): NotaFiscal | null {
       dCompet = dhEmi ? dhEmi.slice(0, 10) : "";
     }
 
-    // Advanced cancellation & substitution logic
-    // Active statuses: 100 (autorizada). Cancelled: 101, 102, 135, 155 etc.
-    const cancelCodes = new Set(["101", "102", "135", "155"]);
-    
-    // Check for cancellation/substitution events or tags
-    const jsonStr = JSON.stringify(json).toLowerCase();
-    const hasCancellationKeywords =
-      jsonStr.includes("pedidocancelamento") ||
-      jsonStr.includes("infpedcanc") ||
-      jsonStr.includes("cannfse") ||
-      jsonStr.includes("cancelamento") ||
-      jsonStr.includes("substituicao") ||
-      jsonStr.includes("substnfse") ||
-      jsonStr.includes("substituida") ||
-      jsonStr.includes("dsubst");
-
-    const situacao = pick(inf, ["situacao"]) ?? pick(inf, ["DPS", "infDPS", "situacao"]);
-    const isCancelled =
-      hasSubst ||
-      cancelCodes.has(cStat) ||
-      situacao === "2" || situacao === 2 || // 2 = Cancelada
-      situacao === "3" || situacao === 3 || // 3 = Substituída
-      hasCancellationKeywords;
-
     if (!nNFSe || !cnpjPrestador) return null;
 
     return {
@@ -248,7 +224,7 @@ export function parseNfseXml(xml: string): NotaFiscal | null {
       cliente,
       servico,
       cStat,
-      status: isCancelled ? "cancelada" : "ativa",
+      status: "ativa",
       chave,
       cnpjCpfCliente,
       vlrLiquido,

@@ -365,6 +365,30 @@ function Dashboard() {
     return (n.dhEmi || "").split("T")[0];
   }, [periodType]);
 
+  // Mapa fast das chaves da planilha e seu status correspondente
+  const xlsxStatusMap = useMemo(() => {
+    const map = new Map<string, "ativa" | "cancelada" | "nao_encontrado">();
+    if (xlsxRows.length > 0 && keyCol && statusCol) {
+      xlsxRows.forEach((row) => {
+        const rawKey = String(row[keyCol] ?? "").trim();
+        const key = rawKey.replace(/\D/g, "");
+        if (key) {
+          const rawStatus = String(row[statusCol] ?? "").trim();
+          map.set(key, parseExcelStatus(rawStatus));
+        }
+      });
+    }
+    return map;
+  }, [xlsxRows, keyCol, statusCol]);
+
+  // Função para determinar o status com base puramente na planilha se ela estiver carregada
+  const getNoteStatus = useCallback((n: NotaFiscal) => {
+    if (xlsxRows.length > 0 && n.chave && xlsxStatusMap.has(n.chave)) {
+      return xlsxStatusMap.get(n.chave) || "ativa";
+    }
+    return n.status || "ativa";
+  }, [xlsxStatusMap, xlsxRows]);
+
   const anos = useMemo(() => {
     const set = new Set<string>();
     todasNotas?.forEach((n) => {
@@ -398,8 +422,8 @@ function Dashboard() {
     });
   }, [todasNotas, empresaFiltro, mesFiltro, anoFiltro, cServFiltro, searchCliente, getDateField]);
 
-  const notasAtivas = notasFiltradas.filter((n) => n.status === "ativa");
-  const notasCanceladas = notasFiltradas.filter((n) => n.status === "cancelada");
+  const notasAtivas = notasFiltradas.filter((n) => getNoteStatus(n) === "ativa");
+  const notasCanceladas = notasFiltradas.filter((n) => getNoteStatus(n) === "cancelada");
   const faturamento = notasAtivas.reduce((sum, n) => sum + n.valor, 0);
   const ticketMedio = notasAtivas.length ? faturamento / notasAtivas.length : 0;
 
@@ -458,12 +482,12 @@ function Dashboard() {
   }, [todasNotas, empresaFiltro, mesFiltro, anoFiltro, cServFiltro, searchCliente, anos, getDateField]);
 
   const prevNotasAtivas = useMemo(() => {
-    return prevNotasFiltradas.filter((n) => n.status === "ativa");
-  }, [prevNotasFiltradas]);
+    return prevNotasFiltradas.filter((n) => getNoteStatus(n) === "ativa");
+  }, [prevNotasFiltradas, getNoteStatus]);
 
   const prevNotasCanceladas = useMemo(() => {
-    return prevNotasFiltradas.filter((n) => n.status === "cancelada");
-  }, [prevNotasFiltradas]);
+    return prevNotasFiltradas.filter((n) => getNoteStatus(n) === "cancelada");
+  }, [prevNotasFiltradas, getNoteStatus]);
 
   const prevFaturamento = useMemo(() => {
     return prevNotasAtivas.reduce((sum, n) => sum + n.valor, 0);
@@ -546,7 +570,7 @@ function Dashboard() {
   const notasParaGrafico = useMemo(() => {
     if (!todasNotas) return [];
     return todasNotas.filter((n) => {
-      if (n.status !== "ativa") return false;
+      if (getNoteStatus(n) !== "ativa") return false;
       if (empresaFiltro !== "__all__" && n.cnpjPrestador !== empresaFiltro) return false;
       const dateStr = getDateField(n);
       if (anoFiltro !== "__all__" && dateStr.slice(0, 4) !== anoFiltro) return false;
@@ -562,7 +586,7 @@ function Dashboard() {
         return false;
       return true;
     });
-  }, [todasNotas, empresaFiltro, anoFiltro, cServFiltro, searchCliente, getDateField]);
+  }, [todasNotas, empresaFiltro, anoFiltro, cServFiltro, searchCliente, getDateField, getNoteStatus]);
 
   const prevNotasParaGrafico = useMemo(() => {
     if (!todasNotas) return [];
@@ -577,7 +601,7 @@ function Dashboard() {
     }
 
     return todasNotas.filter((n) => {
-      if (n.status !== "ativa") return false;
+      if (getNoteStatus(n) !== "ativa") return false;
       if (empresaFiltro !== "__all__" && n.cnpjPrestador !== empresaFiltro) return false;
       const dateStr = getDateField(n);
       if (prevAno !== "__all__" && dateStr.slice(0, 4) !== prevAno) return false;
@@ -593,7 +617,7 @@ function Dashboard() {
         return false;
       return true;
     });
-  }, [todasNotas, empresaFiltro, anoFiltro, cServFiltro, searchCliente, anos, getDateField]);
+  }, [todasNotas, empresaFiltro, anoFiltro, cServFiltro, searchCliente, anos, getDateField, getNoteStatus]);
 
   const lineChartData = useMemo(() => {
     const currentMap = new Map<string, number>();
@@ -913,7 +937,7 @@ function Dashboard() {
       (n.vlrIrrf ?? 0).toFixed(2),
       (n.vlrInss ?? 0).toFixed(2),
       n.codTribNacional ? `${n.codTribNacional} - ${getServicoDescricao(n.codTribNacional)}` : "—",
-      n.status === "ativa" ? "Ativa" : "Cancelada",
+      getNoteStatus(n) === "ativa" ? "Ativa" : "Cancelada",
     ]);
     const csv = [headers, ...rows]
       .map((r) => r.map((c) => `"${String(c ?? "").replace(/"/g, '""')}"`).join(";"))
@@ -2026,7 +2050,7 @@ function Dashboard() {
                               {n.codTribNacional ? `${n.codTribNacional} - ${getServicoDescricao(n.codTribNacional)}` : "—"}
                             </TableCell>
                             <TableCell>
-                              {n.status === "ativa" ? (
+                              {getNoteStatus(n) === "ativa" ? (
                                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100">
                                   Ativa
                                 </span>
