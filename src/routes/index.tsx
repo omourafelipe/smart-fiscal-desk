@@ -2486,14 +2486,22 @@ function KpiCardNew({
     amber: "bg-amber-50/70 border-amber-100/70 text-amber-800",
   };
 
+  const isLong = value.length > 12;
+  const isVeryLong = value.length > 16;
+  const valueFontSize = isVeryLong
+    ? "text-sm sm:text-base font-bold tracking-tighter"
+    : isLong
+      ? "text-base sm:text-lg lg:text-xl xl:text-base 2xl:text-lg font-extrabold tracking-tighter"
+      : "text-lg sm:text-2xl font-extrabold tracking-tight";
+
   return (
-    <div className={`p-5 rounded-2xl border ${bgColors[tone]} flex flex-col justify-between shadow-xs hover:shadow-sm transition-all duration-200 bg-white`}>
+    <div className={`p-4 sm:p-5 xl:p-4 2xl:p-5 rounded-2xl border ${bgColors[tone]} flex flex-col justify-between shadow-xs hover:shadow-sm transition-all duration-200 bg-white`}>
       <div className="space-y-1">
         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{label}</p>
-        <p className="text-2xl font-extrabold text-slate-900 tracking-tight">{value}</p>
+        <p className={`${valueFontSize} text-slate-900`}>{value}</p>
       </div>
 
-      <div className="flex items-center gap-2 mt-4 pt-2 border-t border-slate-100/30">
+      <div className="flex items-center gap-1.5 mt-4 pt-2 border-t border-slate-100/30 flex-wrap">
         <span
           className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[9px] font-bold ${
             isPositive ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"
@@ -2501,7 +2509,7 @@ function KpiCardNew({
         >
           {trendText} {isPositive ? "↗" : "↘"}
         </span>
-        <span className="text-[9px] text-slate-400 font-medium truncate">{subtext}</span>
+        <span className="text-[9px] text-slate-400 font-medium truncate max-w-[110px]" title={subtext}>{subtext}</span>
       </div>
     </div>
   );
