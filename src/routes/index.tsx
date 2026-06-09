@@ -350,7 +350,7 @@ function Dashboard() {
                       tickFormatter={(v) => `R$ ${(v / 1000).toFixed(0)}k`}
                     />
                     <Tooltip
-                      formatter={(v: number) => fmtBRL(v)}
+                      formatter={(v: any) => fmtBRL(Number(v))}
                       contentStyle={{ borderRadius: 8, border: "1px solid #e2e8f0" }}
                     />
                     <Bar dataKey="valor" fill="#6366f1" radius={[6, 6, 0, 0]} />
@@ -382,7 +382,7 @@ function Dashboard() {
                         <Cell key={i} fill={COLORS[i % COLORS.length]} />
                       ))}
                     </Pie>
-                    <Tooltip formatter={(v: number) => fmtBRL(v)} />
+                    <Tooltip formatter={(v: any) => fmtBRL(Number(v))} />
                     <Legend
                       verticalAlign="bottom"
                       iconType="circle"
