@@ -77,14 +77,18 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
+      { title: "Faturamento - Samel" },
+      { name: "description", content: "Fiscal Insights Hub is a client-side fiscal BI dashboard that processes NFS-e Nacional XML files." },
       { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { property: "og:title", content: "Faturamento - Samel" },
+      { property: "og:description", content: "Fiscal Insights Hub is a client-side fiscal BI dashboard that processes NFS-e Nacional XML files." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:title", content: "Faturamento - Samel" },
+      { name: "twitter:description", content: "Fiscal Insights Hub is a client-side fiscal BI dashboard that processes NFS-e Nacional XML files." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/465d81c5-1864-4f2a-85c9-62bacceb44f5/id-preview-c1ca1c5d--105fc311-8974-4da9-a1da-0e084c0c7769.lovable.app-1781021670793.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/465d81c5-1864-4f2a-85c9-62bacceb44f5/id-preview-c1ca1c5d--105fc311-8974-4da9-a1da-0e084c0c7769.lovable.app-1781021670793.png" },
     ],
     links: [
       {
