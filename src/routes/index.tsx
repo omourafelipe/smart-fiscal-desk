@@ -355,23 +355,35 @@ function Dashboard() {
     return null;
   }, [cnpjsGrupoMap]);
 
+  // regime selector: Competência vs Emissão
+  const [periodType, setPeriodType] = useState<"competencia" | "emissao">("competencia");
+
+  const getDateField = useCallback((n: NotaFiscal) => {
+    if (periodType === "competencia" && n.dCompet) {
+      return n.dCompet.split("T")[0]; // ensure YYYY-MM-DD
+    }
+    return (n.dhEmi || "").split("T")[0];
+  }, [periodType]);
+
   const anos = useMemo(() => {
     const set = new Set<string>();
     todasNotas?.forEach((n) => {
-      if (n.dhEmi) {
-        const y = n.dhEmi.slice(0, 4); // YYYY
+      const dateStr = getDateField(n);
+      if (dateStr) {
+        const y = dateStr.slice(0, 4); // YYYY
         if (y.length === 4) set.add(y);
       }
     });
     return Array.from(set).sort().reverse();
-  }, [todasNotas]);
+  }, [todasNotas, getDateField]);
 
   const notasFiltradas = useMemo(() => {
     if (!todasNotas) return [];
     return todasNotas.filter((n) => {
+      const dateStr = getDateField(n);
       if (empresaFiltro !== "__all__" && n.cnpjPrestador !== empresaFiltro) return false;
-      if (mesFiltro !== "__all__" && n.dhEmi.slice(5, 7) !== mesFiltro) return false;
-      if (anoFiltro !== "__all__" && n.dhEmi.slice(0, 4) !== anoFiltro) return false;
+      if (mesFiltro !== "__all__" && dateStr.slice(5, 7) !== mesFiltro) return false;
+      if (anoFiltro !== "__all__" && dateStr.slice(0, 4) !== anoFiltro) return false;
       if (cServFiltro !== "__all__") {
         const c1 = String(n.codTribNacional || "").replace(/^0+/, "");
         const c2 = String(cServFiltro).replace(/^0+/, "");
@@ -384,7 +396,7 @@ function Dashboard() {
         return false;
       return true;
     });
-  }, [todasNotas, empresaFiltro, mesFiltro, anoFiltro, cServFiltro, searchCliente]);
+  }, [todasNotas, empresaFiltro, mesFiltro, anoFiltro, cServFiltro, searchCliente, getDateField]);
 
   const notasAtivas = notasFiltradas.filter((n) => n.status === "ativa");
   const notasCanceladas = notasFiltradas.filter((n) => n.status === "cancelada");
@@ -414,7 +426,7 @@ function Dashboard() {
         prevAno = String(y - 1);
       }
     } else {
-      if (mesFiltro !== "__all__") {
+      if (mesFiltro !== "__all__" && mesFiltro !== undefined) {
         let m = parseInt(mesFiltro, 10);
         m--;
         if (m === 0) m = 12;
@@ -429,8 +441,9 @@ function Dashboard() {
     return todasNotas.filter((n) => {
       if (n.status !== "ativa") return false;
       if (empresaFiltro !== "__all__" && n.cnpjPrestador !== empresaFiltro) return false;
-      if (prevAno !== "__all__" && n.dhEmi.slice(0, 4) !== prevAno) return false;
-      if (prevMes !== "__all__" && n.dhEmi.slice(5, 7) !== prevMes) return false;
+      const dateStr = getDateField(n);
+      if (prevAno !== "__all__" && dateStr.slice(0, 4) !== prevAno) return false;
+      if (prevMes !== "__all__" && dateStr.slice(5, 7) !== prevMes) return false;
       if (cServFiltro !== "__all__") {
         const c1 = String(n.codTribNacional || "").replace(/^0+/, "");
         const c2 = String(cServFiltro).replace(/^0+/, "");
@@ -443,15 +456,11 @@ function Dashboard() {
         return false;
       return true;
     });
-  }, [todasNotas, empresaFiltro, mesFiltro, anoFiltro, cServFiltro, searchCliente, anos]);
+  }, [todasNotas, empresaFiltro, mesFiltro, anoFiltro, cServFiltro, searchCliente, anos, getDateField]);
 
   const prevFaturamento = useMemo(() => {
     return prevNotasAtivas.reduce((sum, n) => sum + n.valor, 0);
   }, [prevNotasAtivas]);
-
-  const prevTicketMedio = useMemo(() => {
-    return prevNotasAtivas.length ? prevFaturamento / prevNotasAtivas.length : 0;
-  }, [prevNotasAtivas, prevFaturamento]);
 
   const prevNotasCount = prevNotasAtivas.length;
 
@@ -467,44 +476,52 @@ function Dashboard() {
   };
 
   const faturamentoTrend = useMemo(() => getTrend(faturamento, prevFaturamento), [faturamento, prevFaturamento]);
-  const ticketTrend = useMemo(() => getTrend(ticketMedio, prevTicketMedio), [ticketMedio, prevTicketMedio]);
   const notasAtivasTrend = useMemo(() => getTrend(notasAtivas.length, prevNotasCount), [notasAtivas.length, prevNotasCount]);
 
-  const prevNotasCanceladasCount = useMemo(() => {
-    if (!todasNotas) return 0;
-    let prevAno = anoFiltro;
-    let prevMes = mesFiltro;
-    
-    if (anoFiltro !== "__all__") {
-      if (mesFiltro !== "__all__") {
-        let m = parseInt(mesFiltro, 10);
-        let y = parseInt(anoFiltro, 10);
-        m--;
-        if (m === 0) { m = 12; y--; }
-        prevMes = String(m).padStart(2, "0");
-        prevAno = String(y);
-      } else {
-        let y = parseInt(anoFiltro, 10);
-        prevAno = String(y - 1);
-      }
-    } else {
-      if (mesFiltro !== "__all__") {
-        let m = parseInt(mesFiltro, 10);
-        m--;
-        if (m === 0) m = 12;
-        prevMes = String(m).padStart(2, "0");
-      } else {
-        if (anos.length >= 1) {
-          prevAno = String(parseInt(anos[0], 10) - 1);
-        }
-      }
-    }
+  // Plano de Saúde (042201) Faturamento and Trend
+  const plansFaturamento = useMemo(() => {
+    return notasAtivas
+      .filter((n) => String(n.codTribNacional || "").replace(/^0+/, "") === "42201")
+      .reduce((sum, n) => sum + n.valor, 0);
+  }, [notasAtivas]);
 
+  const prevPlansFaturamento = useMemo(() => {
+    return prevNotasAtivas
+      .filter((n) => String(n.codTribNacional || "").replace(/^0+/, "") === "42201")
+      .reduce((sum, n) => sum + n.valor, 0);
+  }, [prevNotasAtivas]);
+
+  const plansTrend = useMemo(() => getTrend(plansFaturamento, prevPlansFaturamento), [plansFaturamento, prevPlansFaturamento]);
+
+  // Serviços Hospitalares (040301, 043301) Faturamento and Trend
+  const hospFaturamento = useMemo(() => {
+    return notasAtivas
+      .filter((n) => {
+        const c = String(n.codTribNacional || "").replace(/^0+/, "");
+        return c === "40301" || c === "43301";
+      })
+      .reduce((sum, n) => sum + n.valor, 0);
+  }, [notasAtivas]);
+
+  const prevHospFaturamento = useMemo(() => {
+    return prevNotasAtivas
+      .filter((n) => {
+        const c = String(n.codTribNacional || "").replace(/^0+/, "");
+        return c === "40301" || c === "43301";
+      })
+      .reduce((sum, n) => sum + n.valor, 0);
+  }, [prevNotasAtivas]);
+
+  const hospTrend = useMemo(() => getTrend(hospFaturamento, prevHospFaturamento), [hospFaturamento, prevHospFaturamento]);
+
+  // Main 12-month evolution chart (ignores mesFiltro, aggregates complete year)
+  const notasParaGrafico = useMemo(() => {
+    if (!todasNotas) return [];
     return todasNotas.filter((n) => {
-      if (n.status !== "cancelada") return false;
+      if (n.status !== "ativa") return false;
       if (empresaFiltro !== "__all__" && n.cnpjPrestador !== empresaFiltro) return false;
-      if (prevAno !== "__all__" && n.dhEmi.slice(0, 4) !== prevAno) return false;
-      if (prevMes !== "__all__" && n.dhEmi.slice(5, 7) !== prevMes) return false;
+      const dateStr = getDateField(n);
+      if (anoFiltro !== "__all__" && dateStr.slice(0, 4) !== anoFiltro) return false;
       if (cServFiltro !== "__all__") {
         const c1 = String(n.codTribNacional || "").replace(/^0+/, "");
         const c2 = String(cServFiltro).replace(/^0+/, "");
@@ -516,58 +533,70 @@ function Dashboard() {
       if (searchCliente && !n.cliente.toLowerCase().includes(searchCliente.toLowerCase()))
         return false;
       return true;
-    }).length;
-  }, [todasNotas, empresaFiltro, mesFiltro, anoFiltro, cServFiltro, searchCliente, anos]);
+    });
+  }, [todasNotas, empresaFiltro, anoFiltro, cServFiltro, searchCliente, getDateField]);
 
-  const notasCanceladasTrend = useMemo(() => getTrend(notasCanceladas.length, prevNotasCanceladasCount), [notasCanceladas.length, prevNotasCanceladasCount]);
+  const prevNotasParaGrafico = useMemo(() => {
+    if (!todasNotas) return [];
+    let prevAno = anoFiltro;
+    if (anoFiltro !== "__all__") {
+      let y = parseInt(anoFiltro, 10);
+      prevAno = String(y - 1);
+    } else {
+      if (anos.length >= 1) {
+        prevAno = String(parseInt(anos[0], 10) - 1);
+      }
+    }
 
-  // Dual series comparison chart data (matches ByeWind line chart)
+    return todasNotas.filter((n) => {
+      if (n.status !== "ativa") return false;
+      if (empresaFiltro !== "__all__" && n.cnpjPrestador !== empresaFiltro) return false;
+      const dateStr = getDateField(n);
+      if (prevAno !== "__all__" && dateStr.slice(0, 4) !== prevAno) return false;
+      if (cServFiltro !== "__all__") {
+        const c1 = String(n.codTribNacional || "").replace(/^0+/, "");
+        const c2 = String(cServFiltro).replace(/^0+/, "");
+        const isHospitalarMatch = 
+          (c2 === "43301" || c2 === "40301") && 
+          (c1 === "43301" || c1 === "40301");
+        if (c1 !== c2 && !isHospitalarMatch) return false;
+      }
+      if (searchCliente && !n.cliente.toLowerCase().includes(searchCliente.toLowerCase()))
+        return false;
+      return true;
+    });
+  }, [todasNotas, empresaFiltro, anoFiltro, cServFiltro, searchCliente, anos, getDateField]);
+
   const lineChartData = useMemo(() => {
     const currentMap = new Map<string, number>();
     const prevMap = new Map<string, number>();
-    const useDay = anoFiltro !== "__all__" && mesFiltro !== "__all__";
     
-    notasAtivas.forEach((n) => {
-      if (!n.dhEmi) return;
-      const key = useDay ? n.dhEmi.slice(8, 10) : n.dhEmi.slice(5, 7);
+    notasParaGrafico.forEach((n) => {
+      const dateStr = getDateField(n);
+      if (!dateStr) return;
+      const key = dateStr.slice(5, 7); // Always aggregate by Month (MM)
       currentMap.set(key, (currentMap.get(key) ?? 0) + n.valor);
     });
     
-    prevNotasAtivas.forEach((n) => {
-      if (!n.dhEmi) return;
-      const key = useDay ? n.dhEmi.slice(8, 10) : n.dhEmi.slice(5, 7);
+    prevNotasParaGrafico.forEach((n) => {
+      const dateStr = getDateField(n);
+      if (!dateStr) return;
+      const key = dateStr.slice(5, 7); // Always aggregate by Month (MM)
       prevMap.set(key, (prevMap.get(key) ?? 0) + n.valor);
     });
     
-    if (useDay) {
-      const data = [];
-      for (let i = 1; i <= 31; i++) {
-        const dayStr = String(i).padStart(2, "0");
-        if (currentMap.has(dayStr) || prevMap.has(dayStr)) {
-          data.push({
-            label: `Dia ${dayStr}`,
-            "Período Atual": currentMap.get(dayStr) ?? 0,
-            "Período Anterior": prevMap.get(dayStr) ?? 0,
-          });
-        }
-      }
-      return data;
-    } else {
-      const mesesAbrev = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
-      const data = [];
-      for (let i = 1; i <= 12; i++) {
-        const mesStr = String(i).padStart(2, "0");
-        if (currentMap.has(mesStr) || prevMap.has(mesStr)) {
-          data.push({
-            label: mesesAbrev[i - 1],
-            "Período Atual": currentMap.get(mesStr) ?? 0,
-            "Período Anterior": prevMap.get(mesStr) ?? 0,
-          });
-        }
-      }
-      return data;
+    const mesesAbrev = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+    const data = [];
+    for (let i = 1; i <= 12; i++) {
+      const mesStr = String(i).padStart(2, "0");
+      data.push({
+        label: mesesAbrev[i - 1],
+        "Período Atual": currentMap.get(mesStr) ?? 0,
+        "Período Anterior": prevMap.get(mesStr) ?? 0,
+      });
     }
-  }, [notasAtivas, prevNotasAtivas, mesFiltro, anoFiltro]);
+    return data;
+  }, [notasParaGrafico, prevNotasParaGrafico, getDateField]);
 
   // Top services by faturamento (matches Traffic by Website style)
   const topServicesList = useMemo(() => {
@@ -1094,6 +1123,41 @@ function Dashboard() {
             </div>
           </div>
 
+          {/* Regime de Data (Competência vs Emissão) */}
+          <div className="flex flex-col gap-2 px-1">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Regime de Data</span>
+            <div className="grid grid-cols-2 bg-slate-50 p-1 rounded-xl border border-slate-100/50">
+              <button
+                onClick={() => {
+                  setPeriodType("competencia");
+                  addActivity("update", "Regime Alterado: Competência", "Cálculos parametrizados pela data de Competência.");
+                  toast.info("Regime de Data: Competência");
+                }}
+                className={`py-1.5 rounded-lg text-[11px] font-medium transition-all text-center cursor-pointer ${
+                  periodType === "competencia"
+                    ? "bg-white text-slate-950 shadow-xs font-semibold"
+                    : "text-slate-400 hover:text-slate-700"
+                }`}
+              >
+                Competência
+              </button>
+              <button
+                onClick={() => {
+                  setPeriodType("emissao");
+                  addActivity("update", "Regime Alterado: Emissão", "Cálculos parametrizados pela data de Emissão.");
+                  toast.info("Regime de Data: Emissão");
+                }}
+                className={`py-1.5 rounded-lg text-[11px] font-medium transition-all text-center cursor-pointer ${
+                  periodType === "emissao"
+                    ? "bg-white text-slate-950 shadow-xs font-semibold"
+                    : "text-slate-400 hover:text-slate-700"
+                }`}
+              >
+                Emissão
+              </button>
+            </div>
+          </div>
+
           {/* Nav Items */}
           <nav className="flex flex-col gap-5 mt-4">
             {/* Favorites Category */}
@@ -1303,6 +1367,38 @@ function Dashboard() {
                 
                 {/* Responsive Filter Grid */}
                 <div className="flex items-center gap-2.5 flex-wrap">
+                  {/* Regime Toggle Pills */}
+                  <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200/40 mr-1">
+                    <button
+                      onClick={() => {
+                        setPeriodType("competencia");
+                        addActivity("update", "Regime Alterado: Competência", "Cálculos parametrizados pela data de Competência.");
+                        toast.info("Regime de Data: Competência");
+                      }}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                        periodType === "competencia"
+                          ? "bg-white text-slate-900 shadow-xs"
+                          : "text-slate-500 hover:text-slate-800"
+                      }`}
+                    >
+                      Competência
+                    </button>
+                    <button
+                      onClick={() => {
+                        setPeriodType("emissao");
+                        addActivity("update", "Regime Alterado: Emissão", "Cálculos parametrizados pela data de Emissão.");
+                        toast.info("Regime de Data: Emissão");
+                      }}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                        periodType === "emissao"
+                          ? "bg-white text-slate-900 shadow-xs"
+                          : "text-slate-500 hover:text-slate-800"
+                      }`}
+                    >
+                      Emissão
+                    </button>
+                  </div>
+
                   <Select value={empresaFiltro} onValueChange={setEmpresaFiltro}>
                     <SelectTrigger className="w-[220px] h-9 text-xs rounded-xl bg-slate-50 border-slate-100 hover:bg-slate-100/50 transition-colors">
                       <Building2 className="h-3.5 w-3.5 mr-2 text-slate-400 flex-shrink-0" />
@@ -1423,27 +1519,27 @@ function Dashboard() {
                   tone="blue"
                 />
                 <KpiCardNew
-                  label="Ticket Médio"
-                  value={fmtBRL(ticketMedio)}
-                  trendText={ticketTrend.text}
-                  isPositive={ticketTrend.isPositive}
-                  subtext="por NFS-e emitida"
+                  label="Faturamento Plano de Saúde"
+                  value={fmtBRL(plansFaturamento)}
+                  trendText={plansTrend.text}
+                  isPositive={plansTrend.isPositive}
+                  subtext="código 042201"
                   tone="purple"
                 />
                 <KpiCardNew
-                  label="Notas Emitidas (Ativas)"
+                  label="Faturamento Serviços Hospitalares"
+                  value={fmtBRL(hospFaturamento)}
+                  trendText={hospTrend.text}
+                  isPositive={hospTrend.isPositive}
+                  subtext="códigos 040301, 043301"
+                  tone="green"
+                />
+                <KpiCardNew
+                  label="Notas Emitidas Válidas"
                   value={notasAtivas.length.toLocaleString("pt-BR")}
                   trendText={notasAtivasTrend.text}
                   isPositive={notasAtivasTrend.isPositive}
                   subtext="notas fiscais com status ativo"
-                  tone="green"
-                />
-                <KpiCardNew
-                  label="Canceladas / Substituídas"
-                  value={notasCanceladas.length.toLocaleString("pt-BR")}
-                  trendText={notasCanceladasTrend.text}
-                  isPositive={!notasCanceladasTrend.isPositive} // positive means more cancellations, which is bad, so invert coloring
-                  subtext="notas fora de validade fiscal"
                   tone="rose"
                 />
               </div>
@@ -1524,7 +1620,37 @@ function Dashboard() {
                       <EmptyState />
                     ) : (
                       <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={lineChartData}>
+                        <BarChart
+                          data={lineChartData}
+                          onClick={(state) => {
+                            if (state && state.activeLabel) {
+                              const mesesSiglas: Record<string, string> = {
+                                Jan: "01",
+                                Fev: "02",
+                                Mar: "03",
+                                Abr: "04",
+                                Mai: "05",
+                                Jun: "06",
+                                Jul: "07",
+                                Ago: "08",
+                                Set: "09",
+                                Out: "10",
+                                Nov: "11",
+                                Dez: "12",
+                              };
+                              const selectedMonth = mesesSiglas[state.activeLabel];
+                              if (selectedMonth) {
+                                setMesFiltro(selectedMonth);
+                                addActivity(
+                                  "update",
+                                  `Mês Selecionado: ${state.activeLabel}`,
+                                  `Dashboard filtrado para o mês de ${state.activeLabel} via clique no gráfico.`
+                                );
+                                toast.success(`Filtrado pelo mês: ${state.activeLabel}`);
+                              }
+                            }
+                          }}
+                        >
                           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                           <XAxis dataKey="label" stroke="#94a3b8" fontSize={10} axisLine={false} tickLine={false} />
                           <YAxis
@@ -1540,8 +1666,21 @@ function Dashboard() {
                             formatter={(v) => fmtBRL(Number(v))}
                             contentStyle={{ borderRadius: 12, border: "1px solid #f1f5f9", boxShadow: "0 4px 12px rgba(0,0,0,0.03)" }}
                           />
-                          <Bar dataKey="Período Anterior" fill="#cbd5e1" opacity={0.6} radius={[4, 4, 0, 0]} barSize={12} />
-                          <Bar dataKey="Período Atual" fill="#6366f1" radius={[4, 4, 0, 0]} barSize={12} />
+                          <Bar
+                            dataKey="Período Anterior"
+                            fill="#cbd5e1"
+                            opacity={0.6}
+                            radius={[4, 4, 0, 0]}
+                            barSize={12}
+                            style={{ cursor: "pointer" }}
+                          />
+                          <Bar
+                            dataKey="Período Atual"
+                            fill="#6366f1"
+                            radius={[4, 4, 0, 0]}
+                            barSize={12}
+                            style={{ cursor: "pointer" }}
+                          />
                         </BarChart>
                       </ResponsiveContainer>
                     )}
