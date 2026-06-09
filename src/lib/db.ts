@@ -18,7 +18,10 @@ export interface NotaFiscal {
   issRetido: string;
   vlrCsll: number;
   vlrIrrf: number;
-  cServ: string;
+  vlrPis: number;
+  vlrCofins: number;
+  vlrInss: number;
+  codTribNacional: string;
   dCompet: string;
   raw?: string;
 }
@@ -35,6 +38,10 @@ class NfseDB extends Dexie {
     });
     this.version(3).stores({
       notas: "id, cnpjPrestador, nomePrestador, dhEmi, status, chave, cnpjCpfCliente, cServ",
+    });
+    this.version(4).stores({
+      notas:
+        "id, cnpjPrestador, nomePrestador, dhEmi, status, chave, cnpjCpfCliente, codTribNacional",
     });
   }
 }

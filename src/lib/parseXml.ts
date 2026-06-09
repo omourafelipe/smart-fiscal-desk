@@ -4,7 +4,7 @@ import type { NotaFiscal } from "./db";
 const parser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: "@_",
-  parseTagValue: true,
+  parseTagValue: false,
   trimValues: true,
 });
 
@@ -32,6 +32,66 @@ function findNFSe(obj: unknown): unknown {
   return null;
 }
 
+function getNumberFallback(root: unknown, relativePaths: string[][]): number {
+  for (const rel of relativePaths) {
+    // Try under infNFSe -> DPS -> infDPS -> valores -> [rel]
+    let val = pick(root, ["DPS", "infDPS", "valores", ...rel]);
+    if (val !== undefined && val !== null && val !== "") {
+      const num = Number(val);
+      if (!isNaN(num)) return num;
+    }
+    // Try under infNFSe -> valores -> [rel]
+    val = pick(root, ["valores", ...rel]);
+    if (val !== undefined && val !== null && val !== "") {
+      const num = Number(val);
+      if (!isNaN(num)) return num;
+    }
+    // Try under infNFSe -> DPS -> infDPS -> [rel]
+    val = pick(root, ["DPS", "infDPS", ...rel]);
+    if (val !== undefined && val !== null && val !== "") {
+      const num = Number(val);
+      if (!isNaN(num)) return num;
+    }
+    // Try directly on root
+    val = pick(root, rel);
+    if (val !== undefined && val !== null && val !== "") {
+      const num = Number(val);
+      if (!isNaN(num)) return num;
+    }
+  }
+  return 0;
+}
+
+function getIssRetido(root: unknown): "Sim" | "Não" {
+  // Try to find tpRetISSQN under tribMun: 1 = Retido, 2 = Não Retido
+  const tpRetISSQN = pick(root, ["DPS", "infDPS", "valores", "trib", "tribMun", "tpRetISSQN"]) ??
+                     pick(root, ["valores", "trib", "tribMun", "tpRetISSQN"]) ??
+                     pick(root, ["DPS", "infDPS", "valores", "tpRetISSQN"]) ??
+                     pick(root, ["valores", "tpRetISSQN"]);
+  if (tpRetISSQN === 1 || tpRetISSQN === "1") return "Sim";
+  if (tpRetISSQN === 2 || tpRetISSQN === "2") return "Não";
+
+  // Try to find RT (Retido)
+  const rt = pick(root, ["DPS", "infDPS", "valores", "trib", "tribMun", "RT"]) ??
+             pick(root, ["valores", "trib", "tribMun", "RT"]) ??
+             pick(root, ["DPS", "infDPS", "valores", "iss", "RT"]) ??
+             pick(root, ["valores", "iss", "RT"]) ??
+             pick(root, ["DPS", "infDPS", "valores", "RT"]) ??
+             pick(root, ["valores", "RT"]);
+  if (rt === 1 || rt === "1") return "Sim";
+  if (rt === 2 || rt === "2") return "Não";
+
+  // Try to check if vISSRet is greater than 0
+  const vISSRet = getNumberFallback(root, [
+    ["vISSRet"],
+    ["trib", "tribMun", "vISSRet"],
+    ["trib", "vISSRet"]
+  ]);
+  if (vISSRet > 0) return "Sim";
+
+  return "Não";
+}
+
 export function parseNfseXml(xml: string): NotaFiscal | null {
   try {
     const json = parser.parse(xml);
@@ -47,8 +107,10 @@ export function parseNfseXml(xml: string): NotaFiscal | null {
     if (dhEmi && isNaN(Date.parse(dhEmi))) {
       dhEmi = "";
     }
-    const valorRaw = pick(inf, ["DPS", "infDPS", "valores", "vServPrest", "vServ"]);
-    const valor = Number(valorRaw ?? 0) || 0;
+    const valor = getNumberFallback(inf, [
+      ["vServPrest", "vServ"],
+      ["vServ"]
+    ]);
     const cliente = String(pick(inf, ["DPS", "infDPS", "toma", "xNome"]) ?? "").trim();
     const servico = String(pick(inf, ["DPS", "infDPS", "serv", "cServ", "xDescServ"]) ?? "").trim();
     const cStat = String(inf.cStat ?? "").trim();
@@ -62,29 +124,71 @@ export function parseNfseXml(xml: string): NotaFiscal | null {
     const cpfCliente = String(pick(inf, ["DPS", "infDPS", "toma", "CPF"]) ?? "").trim();
     const cnpjCpfCliente = cnpjCliente || cpfCliente;
 
-    const vlrLiquido = Number(pick(inf, ["DPS", "infDPS", "valores", "vLiq"]) ?? valor);
-    const vlrIss = Number(
-      pick(inf, ["DPS", "infDPS", "valores", "vISSRet"]) ??
-        pick(inf, ["DPS", "infDPS", "valores", "vISS"]) ??
-        0,
-    );
-    const issRetido =
-      pick(inf, ["DPS", "infDPS", "valores", "iss", "RT"]) === 1 ||
-      Number(pick(inf, ["DPS", "infDPS", "valores", "vISSRet"]) ?? 0) > 0
-        ? "Sim"
-        : "Não";
+    const vlrLiquido = getNumberFallback(inf, [
+      ["vLiq"],
+      ["vLiquido"]
+    ]) || valor;
 
-    const vlrCsll = Number(
-      pick(inf, ["DPS", "infDPS", "valores", "vCSLL"]) ??
-        pick(inf, ["DPS", "infDPS", "valores", "vRetCSLL"]) ??
-        0,
-    );
-    const vlrIrrf = Number(
-      pick(inf, ["DPS", "infDPS", "valores", "vIRRF"]) ??
-        pick(inf, ["DPS", "infDPS", "valores", "vRetIRRF"]) ??
-        0,
-    );
-    const cServ = String(pick(inf, ["DPS", "infDPS", "serv", "cServ"]) ?? "").trim();
+    const vlrIss = getNumberFallback(inf, [
+      ["vISSRet"],
+      ["vISSQN"],
+      ["vISS"],
+      ["trib", "tribMun", "vISSQN"],
+      ["trib", "tribMun", "vISSRet"],
+      ["trib", "tribMun", "vISS"]
+    ]);
+
+    const issRetido = getIssRetido(inf);
+
+    const vlrCsll = getNumberFallback(inf, [
+      ["trib", "tribFed", "vRetCSLL"],
+      ["trib", "tribFed", "vCSLL"],
+      ["vRetCSLL"],
+      ["vCSLL"]
+    ]);
+
+    const vlrIrrf = getNumberFallback(inf, [
+      ["trib", "tribFed", "vRetIRRF"],
+      ["trib", "tribFed", "vIRRF"],
+      ["vRetIRRF"],
+      ["vIRRF"]
+    ]);
+
+    const vlrPis = getNumberFallback(inf, [
+      ["trib", "tribFed", "piscofins", "vPis"],
+      ["piscofins", "vPis"],
+      ["trib", "tribFed", "vRetPIS"],
+      ["trib", "tribFed", "vPIS"],
+      ["vRetPIS"],
+      ["vPIS"],
+      ["vPis"]
+    ]);
+
+    const vlrCofins = getNumberFallback(inf, [
+      ["trib", "tribFed", "piscofins", "vCofins"],
+      ["piscofins", "vCofins"],
+      ["trib", "tribFed", "vRetCOFINS"],
+      ["trib", "tribFed", "vCOFINS"],
+      ["vRetCOFINS"],
+      ["vCOFINS"],
+      ["vCofins"]
+    ]);
+
+    const vlrInss = getNumberFallback(inf, [
+      ["trib", "tribFed", "vRetCP"],
+      ["trib", "tribFed", "vRetINSS"],
+      ["trib", "tribFed", "vINSS"],
+      ["vRetCP"],
+      ["vRetINSS"],
+      ["vINSS"]
+    ]);
+
+    const codTribNacional = String(
+      pick(inf, ["DPS", "infDPS", "serv", "cServ", "cTribNac"]) ??
+        pick(inf, ["DPS", "infDPS", "serv", "cTribNac"]) ??
+        pick(inf, ["DPS", "infDPS", "serv", "cServ"]) ??
+        "",
+    ).trim();
     const dCompet =
       String(pick(inf, ["DPS", "infDPS", "dCompet"]) ?? "").trim() ||
       (dhEmi ? dhEmi.slice(0, 10) : "");
@@ -113,7 +217,10 @@ export function parseNfseXml(xml: string): NotaFiscal | null {
       issRetido,
       vlrCsll,
       vlrIrrf,
-      cServ,
+      vlrPis,
+      vlrCofins,
+      vlrInss,
+      codTribNacional,
       dCompet,
     };
   } catch (e) {

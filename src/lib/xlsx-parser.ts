@@ -34,7 +34,7 @@ const STATUS_SYNONYMS = [
   "situação da nfs-e",
 ];
 
-function normalizeString(s: string): string {
+export function normalizeString(s: string): string {
   return s
     .toLowerCase()
     .normalize("NFD")
@@ -136,6 +136,20 @@ export function parseExcelStatus(rawStatus: string): "ativa" | "cancelada" {
   }
 
   return "ativa"; // Padrão ativa
+}
+
+/**
+ * Normaliza os valores da coluna Operação para determinar a retenção do ISSQN (Sim ou Não)
+ */
+export function parseExcelOperacao(rawOperacao: string): "Sim" | "Não" | undefined {
+  const norm = normalizeString(rawOperacao);
+  if (norm.includes("issqnarecolher") || norm.includes("arecolher")) {
+    return "Não";
+  }
+  if (norm.includes("retencaodoissqn") || norm.includes("retencao")) {
+    return "Sim";
+  }
+  return undefined;
 }
 
 /**
