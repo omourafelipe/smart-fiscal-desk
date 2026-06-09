@@ -11,6 +11,7 @@ export interface NotaFiscal {
   servico: string;
   cStat: string;
   status: "ativa" | "cancelada";
+  chave: string;
   raw?: string;
 }
 
@@ -20,6 +21,9 @@ class NfseDB extends Dexie {
     super("nfse-dashboard");
     this.version(1).stores({
       notas: "id, cnpjPrestador, nomePrestador, dhEmi, status",
+    });
+    this.version(2).stores({
+      notas: "id, cnpjPrestador, nomePrestador, dhEmi, status, chave",
     });
   }
 }
