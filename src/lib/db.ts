@@ -12,6 +12,14 @@ export interface NotaFiscal {
   cStat: string;
   status: "ativa" | "cancelada";
   chave: string;
+  cnpjCpfCliente: string;
+  vlrLiquido: number;
+  vlrIss: number;
+  issRetido: string;
+  vlrCsll: number;
+  vlrIrrf: number;
+  cServ: string;
+  dCompet: string;
   raw?: string;
 }
 
@@ -24,6 +32,9 @@ class NfseDB extends Dexie {
     });
     this.version(2).stores({
       notas: "id, cnpjPrestador, nomePrestador, dhEmi, status, chave",
+    });
+    this.version(3).stores({
+      notas: "id, cnpjPrestador, nomePrestador, dhEmi, status, chave, cnpjCpfCliente, cServ",
     });
   }
 }

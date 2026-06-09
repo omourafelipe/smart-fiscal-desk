@@ -3,12 +3,35 @@ import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import JSZip from "jszip";
 import { useLiveQuery } from "dexie-react-hooks";
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
-  PieChart, Pie, Cell, Legend,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
 } from "recharts";
 import {
-  Upload, FileText, Trash2, Download, Building2, CheckCircle2, XCircle,
-  TrendingUp, Receipt, Loader2, FileSpreadsheet, AlertTriangle, Check,
+  Upload,
+  FileText,
+  Trash2,
+  Download,
+  Building2,
+  CheckCircle2,
+  XCircle,
+  TrendingUp,
+  Receipt,
+  Loader2,
+  FileSpreadsheet,
+  AlertTriangle,
+  Check,
+  Search,
+  Calendar,
+  Tag,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -20,29 +43,135 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
+import { Input } from "@/components/ui/input";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "Dashboard NFS-e Nacional | BI Fiscal Multiempresa" },
-      { name: "description", content: "Analise faturamento fiscal de NFS-e Nacional (SPED v1.01) com dashboards multiempresa, 100% no navegador." },
+      {
+        name: "description",
+        content:
+          "Analise faturamento fiscal de NFS-e Nacional (SPED v1.01) com dashboards multiempresa, 100% no navegador.",
+      },
       { property: "og:title", content: "Dashboard NFS-e Nacional" },
-      { property: "og:description", content: "BI fiscal multiempresa client-side para NFS-e Nacional." },
+      {
+        property: "og:description",
+        content: "BI fiscal multiempresa client-side para NFS-e Nacional.",
+      },
     ],
   }),
   component: Dashboard,
 });
 
-const COLORS = ["#6366f1", "#ec4899", "#14b8a6", "#f59e0b", "#8b5cf6", "#ef4444", "#10b981", "#3b82f6"];
+const COLORS = [
+  "#6366f1",
+  "#ec4899",
+  "#14b8a6",
+  "#f59e0b",
+  "#8b5cf6",
+  "#ef4444",
+  "#10b981",
+  "#3b82f6",
+];
 
-const fmtBRL = (n: number) =>
-  n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+const fmtBRL = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+const formatarData = (dataStr: string) => {
+  if (!dataStr) return "—";
+  try {
+    const clean = dataStr.split("T")[0];
+    const parts = clean.split("-");
+    if (parts.length === 3) {
+      return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
+    return dataStr;
+  } catch {
+    return dataStr;
+  }
+};
+
+const formatarPeriodo = (periodoStr: string) => {
+  if (!periodoStr || periodoStr.length !== 7) return periodoStr;
+  const [ano, mes] = periodoStr.split("-");
+  const meses = [
+    "Janeiro",
+    "Fevereiro",
+    "Março",
+    "Abril",
+    "Maio",
+    "Junho",
+    "Julho",
+    "Agosto",
+    "Setembro",
+    "Outubro",
+    "Novembro",
+    "Dezembro",
+  ];
+  const mesIndex = parseInt(mes, 10) - 1;
+  if (mesIndex >= 0 && mesIndex < 12) {
+    return `${meses[mesIndex]} de ${ano}`;
+  }
+  return periodoStr;
+};
+
+const formatarMesAnoCurto = (periodoStr: string) => {
+  if (!periodoStr || periodoStr.length !== 7) return periodoStr;
+  const [ano, mes] = periodoStr.split("-");
+  const mesesAbrev = [
+    "jan",
+    "fev",
+    "mar",
+    "abr",
+    "mai",
+    "jun",
+    "jul",
+    "ago",
+    "set",
+    "out",
+    "nov",
+    "dez",
+  ];
+  const mesIndex = parseInt(mes, 10) - 1;
+  const anoCurto = ano.slice(-2);
+  if (mesIndex >= 0 && mesIndex < 12) {
+    return `${mesesAbrev[mesIndex]}/${anoCurto}`;
+  }
+  return periodoStr;
+};
+
+const formatarDiaMes = (dataStr: string) => {
+  if (!dataStr || dataStr.length !== 10) return dataStr;
+  const parts = dataStr.split("-");
+  if (parts.length === 3) {
+    return `${parts[2]}/${parts[1]}`;
+  }
+  return dataStr;
+};
+
+const getServicoDescricao = (cServ: string) => {
+  const code = String(cServ).trim();
+  if (code === "42201") return "Plano de Saúde";
+  if (code === "40301") return "Serviço Hospitalar";
+  return code ? `Outros (${code})` : "Sem descrição";
+};
 
 interface ConciliationResult {
   rowNumber: number;
@@ -82,6 +211,8 @@ function Dashboard() {
 
   const [empresaFiltro, setEmpresaFiltro] = useState<string>("__all__");
   const [periodoFiltro, setPeriodoFiltro] = useState<string>("__all__");
+  const [cServFiltro, setCServFiltro] = useState<string>("__all__");
+  const [searchCliente, setSearchCliente] = useState<string>("");
 
   const [page, setPage] = useState(1);
   const pageSize = 15;
@@ -112,9 +243,12 @@ function Dashboard() {
     return todasNotas.filter((n) => {
       if (empresaFiltro !== "__all__" && n.cnpjPrestador !== empresaFiltro) return false;
       if (periodoFiltro !== "__all__" && n.dhEmi.slice(0, 7) !== periodoFiltro) return false;
+      if (cServFiltro !== "__all__" && n.cServ !== cServFiltro) return false;
+      if (searchCliente && !n.cliente.toLowerCase().includes(searchCliente.toLowerCase()))
+        return false;
       return true;
     });
-  }, [todasNotas, empresaFiltro, periodoFiltro]);
+  }, [todasNotas, empresaFiltro, periodoFiltro, cServFiltro, searchCliente]);
 
   const notasAtivas = notasFiltradas.filter((n) => n.status === "ativa");
   const notasCanceladas = notasFiltradas.filter((n) => n.status === "cancelada");
@@ -133,9 +267,7 @@ function Dashboard() {
     return Array.from(byKey.entries())
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([k, v]) => ({
-        label: useDay
-          ? format(parseISO(k), "dd/MM", { locale: ptBR })
-          : format(parseISO(k + "-01"), "MMM/yy", { locale: ptBR }),
+        label: useDay ? formatarDiaMes(k) : formatarMesAnoCurto(k),
         valor: v,
       }));
   }, [notasAtivas, periodoFiltro]);
@@ -145,7 +277,7 @@ function Dashboard() {
     const map = new Map<string, number>();
     const isGlobal = empresaFiltro === "__all__";
     notasAtivas.forEach((n) => {
-      const key = isGlobal ? (n.nomePrestador || n.cnpjPrestador) : (n.servico || "Sem descrição");
+      const key = isGlobal ? n.nomePrestador || n.cnpjPrestador : n.servico || "Sem descrição";
       map.set(key, (map.get(key) ?? 0) + n.valor);
     });
     return Array.from(map.entries())
@@ -154,7 +286,41 @@ function Dashboard() {
       .map(([name, value]) => ({ name, value }));
   }, [notasAtivas, empresaFiltro]);
 
-  const pieTitle = empresaFiltro === "__all__" ? "Faturamento por Empresa" : "Top Serviços por Faturamento";
+  const pieTitle =
+    empresaFiltro === "__all__" ? "Faturamento por Empresa" : "Top Serviços por Faturamento";
+
+  // Faturamento PJ vs PF
+  const pjPfData = useMemo(() => {
+    let pjTotal = 0;
+    let pfTotal = 0;
+
+    notasAtivas.forEach((n) => {
+      const cleanKey = String(n.cnpjCpfCliente ?? "").replace(/\D/g, "");
+      if (cleanKey.length === 14) {
+        pjTotal += n.valor;
+      } else if (cleanKey.length === 11) {
+        pfTotal += n.valor;
+      } else {
+        // Fallback: se tiver mais que 11 caracteres, assume PJ
+        if (cleanKey.length > 11) {
+          pjTotal += n.valor;
+        } else if (cleanKey.length > 0) {
+          pfTotal += n.valor;
+        } else {
+          pjTotal += n.valor;
+        }
+      }
+    });
+
+    const data = [];
+    if (pjTotal > 0) {
+      data.push({ name: "Pessoa Jurídica (PJ)", value: pjTotal });
+    }
+    if (pfTotal > 0) {
+      data.push({ name: "Pessoa Física (PF)", value: pfTotal });
+    }
+    return data;
+  }, [notasAtivas]);
 
   // Pagination
   const paged = useMemo(() => {
@@ -164,7 +330,9 @@ function Dashboard() {
   }, [notasFiltradas, page]);
   const totalPages = Math.max(1, Math.ceil(notasFiltradas.length / pageSize));
 
-  useEffect(() => { setPage(1); }, [empresaFiltro, periodoFiltro]);
+  useEffect(() => {
+    setPage(1);
+  }, [empresaFiltro, periodoFiltro, cServFiltro, searchCliente]);
 
   const processFiles = useCallback(async (files: FileList | File[]) => {
     setImporting(true);
@@ -239,10 +407,35 @@ function Dashboard() {
   };
 
   const exportCsv = () => {
-    const headers = ["Numero", "CNPJ Prestador", "Prestador", "Data", "Cliente", "Servico", "Valor", "Status", "cStat"];
+    const headers = [
+      "Número NFS",
+      "Data Emissão",
+      "Competência",
+      "CNPJ/CPF Cliente",
+      "Cliente",
+      "Vlr. Serviço",
+      "Vlr. Líquido",
+      "Vlr. ISS",
+      "ISS Retido?",
+      "Vlr. CSLL",
+      "Vlr. IRRF",
+      "Cód. Tributário",
+      "Situação",
+    ];
     const rows = notasFiltradas.map((n) => [
-      n.nNFSe, n.cnpjPrestador, n.nomePrestador, n.dhEmi, n.cliente,
-      n.servico, n.valor.toFixed(2), n.status, n.cStat,
+      n.nNFSe,
+      formatarData(n.dhEmi),
+      formatarData(n.dCompet),
+      n.cnpjCpfCliente || "—",
+      n.cliente,
+      n.valor.toFixed(2),
+      (n.vlrLiquido ?? n.valor).toFixed(2),
+      (n.vlrIss ?? 0).toFixed(2),
+      n.issRetido || "Não",
+      (n.vlrCsll ?? 0).toFixed(2),
+      (n.vlrIrrf ?? 0).toFixed(2),
+      n.cServ || "—",
+      n.status === "ativa" ? "Ativa" : "Cancelada",
     ]);
     const csv = [headers, ...rows]
       .map((r) => r.map((c) => `"${String(c ?? "").replace(/"/g, '""')}"`).join(";"))
@@ -256,63 +449,61 @@ function Dashboard() {
     URL.revokeObjectURL(url);
   };
 
-  const runConciliation = useCallback(async (
-    rows: ExcelRowData[],
-    kCol: string,
-    sCol: string,
-    localNotas: NotaFiscal[]
-  ) => {
-    setIsXlsxProcessing(true);
-    const mapped = mapExcelRows(rows, kCol, sCol);
-    const results: ConciliationResult[] = [];
-    
-    let updated = 0;
-    let alreadyCorrect = 0;
-    let notFound = 0;
+  const runConciliation = useCallback(
+    async (rows: ExcelRowData[], kCol: string, sCol: string, localNotas: NotaFiscal[]) => {
+      setIsXlsxProcessing(true);
+      const mapped = mapExcelRows(rows, kCol, sCol);
+      const results: ConciliationResult[] = [];
 
-    // Create a fast map of normalized chave to local note
-    const localMap = new Map<string, NotaFiscal>();
-    localNotas.forEach(n => {
-      if (n.chave) {
-        localMap.set(n.chave, n);
+      let updated = 0;
+      let alreadyCorrect = 0;
+      let notFound = 0;
+
+      // Create a fast map of normalized chave to local note
+      const localMap = new Map<string, NotaFiscal>();
+      localNotas.forEach((n) => {
+        if (n.chave) {
+          localMap.set(n.chave, n);
+        }
+      });
+
+      for (const item of mapped) {
+        const local = localMap.get(item.key);
+        const res: ConciliationResult = {
+          rowNumber: item.rowNumber,
+          rawKey: item.rawKey,
+          normalizedKey: item.key,
+          nNFSe: local?.nNFSe || "—",
+          prestador: local?.nomePrestador || "—",
+          rawStatus: item.rawStatus,
+          statusExcel: item.status,
+          statusLocal: local ? local.status : "nao_encontrado",
+          statusChanged: local ? local.status !== item.status : false,
+          notaId: local?.id,
+        };
+
+        if (!local) {
+          notFound++;
+        } else if (res.statusChanged) {
+          updated++;
+        } else {
+          alreadyCorrect++;
+        }
+
+        results.push(res);
       }
-    });
 
-    for (const item of mapped) {
-      const local = localMap.get(item.key);
-      const res: ConciliationResult = {
-        rowNumber: item.rowNumber,
-        rawKey: item.rawKey,
-        normalizedKey: item.key,
-        nNFSe: local?.nNFSe || "—",
-        prestador: local?.nomePrestador || "—",
-        rawStatus: item.rawStatus,
-        statusExcel: item.status,
-        statusLocal: local ? local.status : "nao_encontrado",
-        statusChanged: local ? local.status !== item.status : false,
-        notaId: local?.id,
-      };
-
-      if (!local) {
-        notFound++;
-      } else if (res.statusChanged) {
-        updated++;
-      } else {
-        alreadyCorrect++;
-      }
-
-      results.push(res);
-    }
-
-    setConciliatedItems(results);
-    setConciliatedStats({
-      total: mapped.length,
-      updated,
-      alreadyCorrect,
-      notFound,
-    });
-    setIsXlsxProcessing(false);
-  }, []);
+      setConciliatedItems(results);
+      setConciliatedStats({
+        total: mapped.length,
+        updated,
+        alreadyCorrect,
+        notFound,
+      });
+      setIsXlsxProcessing(false);
+    },
+    [],
+  );
 
   const processXlsxFile = async (file: File) => {
     setIsXlsxProcessing(true);
@@ -351,7 +542,7 @@ function Dashboard() {
   };
 
   const applyUpdates = async () => {
-    const changes = conciliatedItems.filter(item => item.statusChanged && item.notaId);
+    const changes = conciliatedItems.filter((item) => item.statusChanged && item.notaId);
     if (changes.length === 0) {
       toast.info("Nenhuma divergência de status encontrada para atualizar.");
       return;
@@ -373,8 +564,17 @@ function Dashboard() {
   };
 
   const exportValidationCsv = () => {
-    const headers = ["Linha Planilha", "Chave de Acesso", "Chave Normalizada", "Nº NFS-e", "Prestador", "Status Planilha", "Status Local", "Divergente"];
-    const rows = conciliatedItems.map(item => [
+    const headers = [
+      "Linha Planilha",
+      "Chave de Acesso",
+      "Chave Normalizada",
+      "Nº NFS-e",
+      "Prestador",
+      "Status Planilha",
+      "Status Local",
+      "Divergente",
+    ];
+    const rows = conciliatedItems.map((item) => [
       item.rowNumber,
       item.rawKey,
       item.normalizedKey,
@@ -382,7 +582,7 @@ function Dashboard() {
       item.prestador,
       item.statusExcel,
       item.statusLocal === "nao_encontrado" ? "Não Encontrado" : item.statusLocal,
-      item.statusChanged ? "Sim" : "Não"
+      item.statusChanged ? "Sim" : "Não",
     ]);
     const csv = [headers, ...rows]
       .map((r) => r.map((c) => `"${String(c ?? "").replace(/"/g, '""')}"`).join(";"))
@@ -428,22 +628,37 @@ function Dashboard() {
               <SelectContent>
                 <SelectItem value="__all__">Todas as Empresas (Total do Grupo)</SelectItem>
                 {empresas.map((e) => (
-                  <SelectItem key={e.cnpj} value={e.cnpj}>{e.nome}</SelectItem>
+                  <SelectItem key={e.cnpj} value={e.cnpj}>
+                    {e.nome}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
 
             <Select value={periodoFiltro} onValueChange={setPeriodoFiltro}>
               <SelectTrigger className="w-[180px]">
+                <Calendar className="h-4 w-4 mr-2 text-muted-foreground" />
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="__all__">Todos os períodos</SelectItem>
                 {periodos.map((p) => (
                   <SelectItem key={p} value={p}>
-                    {format(parseISO(p + "-01"), "MMMM 'de' yyyy", { locale: ptBR })}
+                    {formatarPeriodo(p)}
                   </SelectItem>
                 ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={cServFiltro} onValueChange={setCServFiltro}>
+              <SelectTrigger className="w-[200px]">
+                <Tag className="h-4 w-4 mr-2 text-muted-foreground" />
+                <SelectValue placeholder="Serviço" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">Todos os Serviços</SelectItem>
+                <SelectItem value="42201">42201 - Plano de Saúde</SelectItem>
+                <SelectItem value="40301">40301 - Serviço Hospitalar</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -466,7 +681,10 @@ function Dashboard() {
           <TabsContent value="dashboard" className="space-y-6 outline-none">
             {/* Upload */}
             <div
-              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDragOver(true);
+              }}
               onDragLeave={() => setDragOver(false)}
               onDrop={onDrop}
               onClick={() => fileRef.current?.click()}
@@ -500,7 +718,9 @@ function Dashboard() {
                     <div className="h-12 w-12 rounded-full bg-indigo-100 flex items-center justify-center">
                       <Upload className="h-6 w-6 text-indigo-600" />
                     </div>
-                    <p className="font-semibold">Arraste arquivos .zip aqui ou clique para selecionar</p>
+                    <p className="font-semibold">
+                      Arraste arquivos .zip aqui ou clique para selecionar
+                    </p>
                     <p className="text-sm text-muted-foreground">
                       Suporta múltiplos .zip contendo XMLs NFS-e Nacional (SPED v1.01)
                     </p>
@@ -538,8 +758,8 @@ function Dashboard() {
             </div>
 
             {/* Charts */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-              <Card className="lg:col-span-2">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+              <Card className="lg:col-span-12 xl:col-span-6">
                 <CardHeader>
                   <CardTitle className="text-base">Evolução do Faturamento</CardTitle>
                 </CardHeader>
@@ -554,7 +774,9 @@ function Dashboard() {
                         <YAxis
                           stroke="#64748b"
                           fontSize={12}
-                          tickFormatter={(v) => v >= 1000 ? `R$ ${(v / 1000).toFixed(0)}k` : `R$ ${v}`}
+                          tickFormatter={(v) =>
+                            v >= 1000 ? `R$ ${(v / 1000).toFixed(0)}k` : `R$ ${v}`
+                          }
                         />
                         <Tooltip
                           formatter={(v) => fmtBRL(Number(v))}
@@ -567,7 +789,7 @@ function Dashboard() {
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="lg:col-span-6 xl:col-span-3">
                 <CardHeader>
                   <CardTitle className="text-base">{pieTitle}</CardTitle>
                 </CardHeader>
@@ -603,6 +825,40 @@ function Dashboard() {
                   )}
                 </CardContent>
               </Card>
+
+              <Card className="lg:col-span-6 xl:col-span-3">
+                <CardHeader>
+                  <CardTitle className="text-base">Faturamento PJ vs PF</CardTitle>
+                </CardHeader>
+                <CardContent className="h-[320px]">
+                  {pjPfData.length === 0 ? (
+                    <EmptyState />
+                  ) : (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={pjPfData}
+                          dataKey="value"
+                          nameKey="name"
+                          innerRadius={55}
+                          outerRadius={90}
+                          paddingAngle={2}
+                        >
+                          {pjPfData.map((_, i) => (
+                            <Cell key={i} fill={i === 0 ? "#6366f1" : "#ec4899"} />
+                          ))}
+                        </Pie>
+                        <Tooltip formatter={(v) => fmtBRL(Number(v))} />
+                        <Legend
+                          verticalAlign="bottom"
+                          iconType="circle"
+                          wrapperStyle={{ fontSize: 11 }}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  )}
+                </CardContent>
+              </Card>
             </div>
 
             {/* Table */}
@@ -613,7 +869,12 @@ function Dashboard() {
                   Notas Fiscais ({notasFiltradas.length.toLocaleString("pt-BR")})
                 </CardTitle>
                 <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={exportCsv} disabled={!notasFiltradas.length}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={exportCsv}
+                    disabled={!notasFiltradas.length}
+                  >
                     <Download className="h-4 w-4 mr-2" /> Exportar CSV
                   </Button>
                   <Button variant="outline" size="sm" onClick={clearDb}>
@@ -622,57 +883,115 @@ function Dashboard() {
                 </div>
               </CardHeader>
               <CardContent>
+                <div className="flex flex-col sm:flex-row gap-4 mb-4 items-center justify-between">
+                  <div className="relative w-full sm:max-w-xs">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Buscar por cliente..."
+                      value={searchCliente}
+                      onChange={(e) => setSearchCliente(e.target.value)}
+                      className="pl-8"
+                    />
+                  </div>
+                </div>
+
                 <div className="rounded-lg border overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Nº</TableHead>
-                        <TableHead>Data</TableHead>
-                        <TableHead>Prestador</TableHead>
+                        <TableHead>Nº NFS</TableHead>
+                        <TableHead>Emissão</TableHead>
+                        <TableHead>Competência</TableHead>
+                        <TableHead>CNPJ/CPF Cliente</TableHead>
                         <TableHead>Cliente</TableHead>
-                        <TableHead>Serviço</TableHead>
-                        <TableHead className="text-right">Valor</TableHead>
-                        <TableHead>Status</TableHead>
+                        <TableHead className="text-right">Vlr. Serviço</TableHead>
+                        <TableHead className="text-right">Vlr. Líquido</TableHead>
+                        <TableHead className="text-right">Vlr. ISS</TableHead>
+                        <TableHead className="text-center">ISS Retido?</TableHead>
+                        <TableHead className="text-right">Vlr. CSLL</TableHead>
+                        <TableHead className="text-right">Vlr. IRRF</TableHead>
+                        <TableHead>Cód. Tributário</TableHead>
+                        <TableHead>Situação</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {paged.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                          <TableCell
+                            colSpan={13}
+                            className="text-center text-muted-foreground py-8"
+                          >
                             Nenhuma nota encontrada. Envie um .zip para começar.
                           </TableCell>
                         </TableRow>
-                      ) : paged.map((n) => (
-                        <TableRow key={n.id}>
-                          <TableCell className="font-mono text-xs">{n.nNFSe}</TableCell>
-                          <TableCell className="text-xs whitespace-nowrap">
-                            {n.dhEmi ? format(parseISO(n.dhEmi), "dd/MM/yyyy") : "—"}
-                          </TableCell>
-                          <TableCell className="text-xs max-w-[180px] truncate" title={n.nomePrestador}>
-                            {n.nomePrestador}
-                          </TableCell>
-                          <TableCell className="text-xs max-w-[180px] truncate" title={n.cliente}>
-                            {n.cliente}
-                          </TableCell>
-                          <TableCell className="text-xs max-w-[240px] truncate" title={n.servico}>
-                            {n.servico}
-                          </TableCell>
-                          <TableCell className="text-right font-mono text-xs whitespace-nowrap">
-                            {fmtBRL(n.valor)}
-                          </TableCell>
-                          <TableCell>
-                            {n.status === "ativa" ? (
-                              <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-emerald-200">
-                                Ativa
-                              </Badge>
-                            ) : (
-                              <Badge className="bg-rose-100 text-rose-700 hover:bg-rose-100 border-rose-200">
-                                Cancelada
-                              </Badge>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                      ) : (
+                        paged.map((n) => (
+                          <TableRow key={n.id}>
+                            <TableCell className="font-mono text-xs">{n.nNFSe}</TableCell>
+                            <TableCell className="text-xs whitespace-nowrap">
+                              {formatarData(n.dhEmi)}
+                            </TableCell>
+                            <TableCell className="text-xs whitespace-nowrap">
+                              {formatarData(n.dCompet)}
+                            </TableCell>
+                            <TableCell className="text-xs font-mono whitespace-nowrap">
+                              {n.cnpjCpfCliente || "—"}
+                            </TableCell>
+                            <TableCell className="text-xs max-w-[150px] truncate" title={n.cliente}>
+                              {n.cliente}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-xs whitespace-nowrap">
+                              {fmtBRL(n.valor)}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-xs whitespace-nowrap">
+                              {fmtBRL(n.vlrLiquido ?? n.valor)}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-xs whitespace-nowrap">
+                              {fmtBRL(n.vlrIss ?? 0)}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              {n.issRetido === "Sim" ? (
+                                <Badge
+                                  variant="outline"
+                                  className="bg-amber-50 text-amber-700 border-amber-200"
+                                >
+                                  Sim
+                                </Badge>
+                              ) : (
+                                <Badge
+                                  variant="outline"
+                                  className="bg-slate-50 text-slate-600 border-slate-200"
+                                >
+                                  Não
+                                </Badge>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-xs whitespace-nowrap">
+                              {fmtBRL(n.vlrCsll ?? 0)}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-xs whitespace-nowrap">
+                              {fmtBRL(n.vlrIrrf ?? 0)}
+                            </TableCell>
+                            <TableCell
+                              className="text-xs max-w-[150px] truncate"
+                              title={getServicoDescricao(n.cServ)}
+                            >
+                              {getServicoDescricao(n.cServ)}
+                            </TableCell>
+                            <TableCell>
+                              {n.status === "ativa" ? (
+                                <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-emerald-200">
+                                  Ativa
+                                </Badge>
+                              ) : (
+                                <Badge className="bg-rose-100 text-rose-700 hover:bg-rose-100 border-rose-200">
+                                  Cancelada
+                                </Badge>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
                     </TableBody>
                   </Table>
                 </div>
@@ -709,7 +1028,10 @@ function Dashboard() {
           <TabsContent value="conciliation" className="space-y-6 outline-none">
             {/* Dropzone planilha */}
             <div
-              onDragOver={(e) => { e.preventDefault(); setXlsxDragOver(true); }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setXlsxDragOver(true);
+              }}
               onDragLeave={() => setXlsxDragOver(false)}
               onDrop={onXlsxDrop}
               onClick={() => xlsxRef.current?.click()}
@@ -740,13 +1062,18 @@ function Dashboard() {
                     {xlsxFile ? (
                       <>
                         <p className="font-semibold text-indigo-600">{xlsxFile.name}</p>
-                        <p className="text-xs text-muted-foreground">Clique ou arraste outro arquivo para substituir</p>
+                        <p className="text-xs text-muted-foreground">
+                          Clique ou arraste outro arquivo para substituir
+                        </p>
                       </>
                     ) : (
                       <>
-                        <p className="font-semibold">Arraste a planilha de relatório (.xlsx) aqui ou clique para selecionar</p>
+                        <p className="font-semibold">
+                          Arraste a planilha de relatório (.xlsx) aqui ou clique para selecionar
+                        </p>
                         <p className="text-sm text-muted-foreground">
-                          O arquivo Excel deve conter as colunas de "Chave de Acesso" e "Situação/Status"
+                          O arquivo Excel deve conter as colunas de "Chave de Acesso" e
+                          "Situação/Status"
                         </p>
                       </>
                     )}
@@ -777,7 +1104,9 @@ function Dashboard() {
                           </SelectTrigger>
                           <SelectContent>
                             {xlsxHeaders.map((h) => (
-                              <SelectItem key={h} value={h}>{h}</SelectItem>
+                              <SelectItem key={h} value={h}>
+                                {h}
+                              </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -793,7 +1122,9 @@ function Dashboard() {
                           </SelectTrigger>
                           <SelectContent>
                             {xlsxHeaders.map((h) => (
-                              <SelectItem key={h} value={h}>{h}</SelectItem>
+                              <SelectItem key={h} value={h}>
+                                {h}
+                              </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -806,8 +1137,12 @@ function Dashboard() {
                     <Card className="bg-slate-50/50">
                       <CardContent className="p-5 flex items-center justify-between">
                         <div>
-                          <p className="text-xs font-semibold text-muted-foreground uppercase">Divergentes / Atualizáveis</p>
-                          <p className="text-3xl font-extrabold mt-2 text-indigo-600">{conciliatedStats.updated}</p>
+                          <p className="text-xs font-semibold text-muted-foreground uppercase">
+                            Divergentes / Atualizáveis
+                          </p>
+                          <p className="text-3xl font-extrabold mt-2 text-indigo-600">
+                            {conciliatedStats.updated}
+                          </p>
                         </div>
                         <div className="h-10 w-10 rounded-full bg-indigo-100 flex items-center justify-center">
                           <AlertTriangle className="h-5 w-5 text-indigo-600" />
@@ -818,8 +1153,12 @@ function Dashboard() {
                     <Card className="bg-slate-50/50">
                       <CardContent className="p-5 flex items-center justify-between">
                         <div>
-                          <p className="text-xs font-semibold text-muted-foreground uppercase">Já Conciliadas</p>
-                          <p className="text-3xl font-extrabold mt-2 text-emerald-600">{conciliatedStats.alreadyCorrect}</p>
+                          <p className="text-xs font-semibold text-muted-foreground uppercase">
+                            Já Conciliadas
+                          </p>
+                          <p className="text-3xl font-extrabold mt-2 text-emerald-600">
+                            {conciliatedStats.alreadyCorrect}
+                          </p>
                         </div>
                         <div className="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center">
                           <Check className="h-5 w-5 text-emerald-600" />
@@ -830,8 +1169,12 @@ function Dashboard() {
                     <Card className="bg-slate-50/50">
                       <CardContent className="p-5 flex items-center justify-between">
                         <div>
-                          <p className="text-xs font-semibold text-muted-foreground uppercase">Não Encontradas localmente</p>
-                          <p className="text-3xl font-extrabold mt-2 text-rose-500">{conciliatedStats.notFound}</p>
+                          <p className="text-xs font-semibold text-muted-foreground uppercase">
+                            Não Encontradas localmente
+                          </p>
+                          <p className="text-3xl font-extrabold mt-2 text-rose-500">
+                            {conciliatedStats.notFound}
+                          </p>
                         </div>
                         <div className="h-10 w-10 rounded-full bg-rose-100 flex items-center justify-center">
                           <XCircle className="h-5 w-5 text-rose-500" />
@@ -842,7 +1185,9 @@ function Dashboard() {
                     <Card className="bg-slate-50/50">
                       <CardContent className="p-5 flex items-center justify-between">
                         <div>
-                          <p className="text-xs font-semibold text-muted-foreground uppercase">Total Processado</p>
+                          <p className="text-xs font-semibold text-muted-foreground uppercase">
+                            Total Processado
+                          </p>
                           <p className="text-3xl font-extrabold mt-2">{conciliatedStats.total}</p>
                         </div>
                         <div className="h-10 w-10 rounded-full bg-slate-200 flex items-center justify-center">
@@ -895,19 +1240,35 @@ function Dashboard() {
                         <TableBody>
                           {conciliatedItems.length === 0 ? (
                             <TableRow>
-                              <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                              <TableCell
+                                colSpan={7}
+                                className="text-center py-8 text-muted-foreground"
+                              >
                                 Mapeie as colunas de Chave e Status acima para visualizar os dados.
                               </TableCell>
                             </TableRow>
                           ) : (
                             conciliatedItems.map((item, idx) => (
-                              <TableRow key={idx} className={item.statusChanged ? "bg-amber-50/40 hover:bg-amber-50/60" : ""}>
-                                <TableCell className="text-xs font-mono">{item.rowNumber}</TableCell>
-                                <TableCell className="text-xs font-mono max-w-[220px] truncate" title={item.rawKey}>
+                              <TableRow
+                                key={idx}
+                                className={
+                                  item.statusChanged ? "bg-amber-50/40 hover:bg-amber-50/60" : ""
+                                }
+                              >
+                                <TableCell className="text-xs font-mono">
+                                  {item.rowNumber}
+                                </TableCell>
+                                <TableCell
+                                  className="text-xs font-mono max-w-[220px] truncate"
+                                  title={item.rawKey}
+                                >
                                   {item.rawKey}
                                 </TableCell>
                                 <TableCell className="text-xs font-mono">{item.nNFSe}</TableCell>
-                                <TableCell className="text-xs max-w-[150px] truncate" title={item.prestador}>
+                                <TableCell
+                                  className="text-xs max-w-[150px] truncate"
+                                  title={item.prestador}
+                                >
                                   {item.prestador}
                                 </TableCell>
                                 <TableCell className="text-xs">
@@ -923,7 +1284,10 @@ function Dashboard() {
                                 </TableCell>
                                 <TableCell className="text-xs">
                                   {item.statusLocal === "nao_encontrado" ? (
-                                    <Badge variant="outline" className="text-slate-400 border-slate-200 bg-slate-50">
+                                    <Badge
+                                      variant="outline"
+                                      className="text-slate-400 border-slate-200 bg-slate-50"
+                                    >
                                       Não Encontrado
                                     </Badge>
                                   ) : item.statusLocal === "ativa" ? (
@@ -941,7 +1305,8 @@ function Dashboard() {
                                     <span className="text-rose-500">Inexistente no Banco</span>
                                   ) : item.statusChanged ? (
                                     <span className="text-amber-600 flex items-center gap-1">
-                                      <AlertTriangle className="h-3.5 w-3.5" /> Divergente (Pronto para atualizar)
+                                      <AlertTriangle className="h-3.5 w-3.5" /> Divergente (Pronto
+                                      para atualizar)
                                     </span>
                                   ) : (
                                     <span className="text-emerald-600 flex items-center gap-1">
@@ -971,9 +1336,14 @@ function Dashboard() {
 }
 
 function KpiCard({
-  label, value, icon, tone,
+  label,
+  value,
+  icon,
+  tone,
 }: {
-  label: string; value: string; icon: React.ReactNode;
+  label: string;
+  value: string;
+  icon: React.ReactNode;
   tone: "indigo" | "purple" | "emerald" | "rose";
 }) {
   const tones: Record<string, string> = {
@@ -987,7 +1357,9 @@ function KpiCard({
       <CardContent className="p-5">
         <div className="flex items-start justify-between">
           <div>
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</p>
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              {label}
+            </p>
             <p className="text-2xl font-bold tracking-tight mt-2">{value}</p>
           </div>
           <div

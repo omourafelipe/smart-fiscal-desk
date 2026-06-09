@@ -53,7 +53,41 @@ export function parseNfseXml(xml: string): NotaFiscal | null {
     const servico = String(pick(inf, ["DPS", "infDPS", "serv", "cServ", "xDescServ"]) ?? "").trim();
     const cStat = String(inf.cStat ?? "").trim();
     const hasSubst = !!pick(inf, ["DPS", "infDPS", "subst"]);
-    const chave = String(inf["@_Id"] ?? "").replace(/\D/g, "").trim();
+    const chave = String(inf["@_Id"] ?? "")
+      .replace(/\D/g, "")
+      .trim();
+
+    // Extração dos novos campos
+    const cnpjCliente = String(pick(inf, ["DPS", "infDPS", "toma", "CNPJ"]) ?? "").trim();
+    const cpfCliente = String(pick(inf, ["DPS", "infDPS", "toma", "CPF"]) ?? "").trim();
+    const cnpjCpfCliente = cnpjCliente || cpfCliente;
+
+    const vlrLiquido = Number(pick(inf, ["DPS", "infDPS", "valores", "vLiq"]) ?? valor);
+    const vlrIss = Number(
+      pick(inf, ["DPS", "infDPS", "valores", "vISSRet"]) ??
+        pick(inf, ["DPS", "infDPS", "valores", "vISS"]) ??
+        0,
+    );
+    const issRetido =
+      pick(inf, ["DPS", "infDPS", "valores", "iss", "RT"]) === 1 ||
+      Number(pick(inf, ["DPS", "infDPS", "valores", "vISSRet"]) ?? 0) > 0
+        ? "Sim"
+        : "Não";
+
+    const vlrCsll = Number(
+      pick(inf, ["DPS", "infDPS", "valores", "vCSLL"]) ??
+        pick(inf, ["DPS", "infDPS", "valores", "vRetCSLL"]) ??
+        0,
+    );
+    const vlrIrrf = Number(
+      pick(inf, ["DPS", "infDPS", "valores", "vIRRF"]) ??
+        pick(inf, ["DPS", "infDPS", "valores", "vRetIRRF"]) ??
+        0,
+    );
+    const cServ = String(pick(inf, ["DPS", "infDPS", "serv", "cServ"]) ?? "").trim();
+    const dCompet =
+      String(pick(inf, ["DPS", "infDPS", "dCompet"]) ?? "").trim() ||
+      (dhEmi ? dhEmi.slice(0, 10) : "");
 
     // Active statuses: 100 (autorizada). Cancelled: 101, 102, 135, 155 etc.
     const cancelCodes = new Set(["101", "102", "135", "155"]);
@@ -73,6 +107,14 @@ export function parseNfseXml(xml: string): NotaFiscal | null {
       cStat,
       status: isCancelled ? "cancelada" : "ativa",
       chave,
+      cnpjCpfCliente,
+      vlrLiquido,
+      vlrIss,
+      issRetido,
+      vlrCsll,
+      vlrIrrf,
+      cServ,
+      dCompet,
     };
   } catch (e) {
     console.error("parseNfseXml error", e);

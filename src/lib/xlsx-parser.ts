@@ -13,8 +13,26 @@ export interface ConciliationItem {
 }
 
 // Cabeçalhos comuns para identificar as colunas automaticamente
-const CHAVE_SYNONYMS = ["chave", "chave de acesso", "chave da nota", "chdfe", "id", "chave nfse", "chave nfs-e", "access key"];
-const STATUS_SYNONYMS = ["status", "situacao", "situação", "cstat", "descrição status", "status da nota", "situacao da nfs-e", "situação da nfs-e"];
+const CHAVE_SYNONYMS = [
+  "chave",
+  "chave de acesso",
+  "chave da nota",
+  "chdfe",
+  "id",
+  "chave nfse",
+  "chave nfs-e",
+  "access key",
+];
+const STATUS_SYNONYMS = [
+  "status",
+  "situacao",
+  "situação",
+  "cstat",
+  "descrição status",
+  "status da nota",
+  "situacao da nfs-e",
+  "situação da nfs-e",
+];
 
 function normalizeString(s: string): string {
   return s
@@ -34,7 +52,7 @@ export function detectColumns(headers: string[]): { keyColumn?: string; statusCo
 
   for (const header of headers) {
     const norm = normalizeString(header);
-    
+
     // Procura por sinônimos da chave
     if (!keyColumn) {
       for (const synonym of CHAVE_SYNONYMS) {
@@ -58,10 +76,14 @@ export function detectColumns(headers: string[]): { keyColumn?: string; statusCo
 
   // Fallback se não encontrar
   if (!keyColumn) {
-    keyColumn = headers.find(h => normalizeString(h).includes("key") || normalizeString(h).includes("code"));
+    keyColumn = headers.find(
+      (h) => normalizeString(h).includes("key") || normalizeString(h).includes("code"),
+    );
   }
   if (!statusColumn) {
-    statusColumn = headers.find(h => normalizeString(h).includes("state") || normalizeString(h).includes("descr"));
+    statusColumn = headers.find(
+      (h) => normalizeString(h).includes("state") || normalizeString(h).includes("descr"),
+    );
   }
 
   return { keyColumn, statusColumn };
@@ -70,17 +92,20 @@ export function detectColumns(headers: string[]): { keyColumn?: string; statusCo
 /**
  * Lê o arquivo Excel e retorna os dados brutos e os cabeçalhos.
  */
-export function parseExcelFile(arrayBuffer: ArrayBuffer): { headers: string[]; rows: ExcelRowData[] } {
+export function parseExcelFile(arrayBuffer: ArrayBuffer): {
+  headers: string[];
+  rows: ExcelRowData[];
+} {
   const workbook = XLSX.read(arrayBuffer, { type: "array" });
   const sheetName = workbook.SheetNames[0];
   const sheet = workbook.Sheets[sheetName];
-  
+
   const rows = XLSX.utils.sheet_to_json<ExcelRowData>(sheet, { defval: "" });
-  
+
   // Extrai cabeçalhos da primeira linha ou das chaves dos objetos
   const headersSet = new Set<string>();
-  rows.forEach(row => {
-    Object.keys(row).forEach(k => headersSet.add(k));
+  rows.forEach((row) => {
+    Object.keys(row).forEach((k) => headersSet.add(k));
   });
   const headers = Array.from(headersSet);
 
@@ -92,12 +117,24 @@ export function parseExcelFile(arrayBuffer: ArrayBuffer): { headers: string[]; r
  */
 export function parseExcelStatus(rawStatus: string): "ativa" | "cancelada" {
   const norm = normalizeString(rawStatus);
-  
-  const cancelTerms = ["cancelada", "cancelado", "substituida", "substituido", "inativa", "inativo", "rejeitada", "101", "102", "135", "155"];
+
+  const cancelTerms = [
+    "cancelada",
+    "cancelado",
+    "substituida",
+    "substituido",
+    "inativa",
+    "inativo",
+    "rejeitada",
+    "101",
+    "102",
+    "135",
+    "155",
+  ];
   for (const term of cancelTerms) {
     if (norm.includes(term)) return "cancelada";
   }
-  
+
   return "ativa"; // Padrão ativa
 }
 
@@ -107,7 +144,7 @@ export function parseExcelStatus(rawStatus: string): "ativa" | "cancelada" {
 export function mapExcelRows(
   rows: ExcelRowData[],
   keyCol: string,
-  statusCol: string
+  statusCol: string,
 ): ConciliationItem[] {
   return rows
     .map((row, idx) => {
@@ -124,5 +161,5 @@ export function mapExcelRows(
         rowNumber: idx + 2, // Excel começa em 1 e tem cabeçalho
       };
     })
-    .filter(item => item.key.length > 0); // Remove linhas sem chave
+    .filter((item) => item.key.length > 0); // Remove linhas sem chave
 }
