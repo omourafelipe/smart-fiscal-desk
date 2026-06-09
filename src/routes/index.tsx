@@ -32,6 +32,19 @@ import {
   Search,
   Calendar,
   Tag,
+  Menu,
+  Bell,
+  Star,
+  Clock,
+  Sparkles,
+  Settings,
+  User,
+  HelpCircle,
+  ChevronLeft,
+  ChevronRight,
+  Database,
+  LayoutDashboard,
+  Filter,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -249,6 +262,43 @@ function Dashboard() {
   const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  // Layout & Navigation States
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [rightPanelOpen, setRightPanelOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<"dashboard" | "conciliation">("dashboard");
+
+  // Activity Log Type & State
+  interface ActivityLogItem {
+    id: string;
+    type: "upload" | "conciliation" | "clear" | "update";
+    title: string;
+    description: string;
+    time: Date;
+  }
+
+  const [activities, setActivities] = useState<ActivityLogItem[]>([
+    {
+      id: "init",
+      type: "update",
+      title: "Sistema Inicializado",
+      description: "Banco de dados local carregado com sucesso.",
+      time: new Date(),
+    }
+  ]);
+
+  const addActivity = useCallback((type: ActivityLogItem["type"], title: string, description: string) => {
+    setActivities(prev => [
+      {
+        id: Math.random().toString(36).substring(7),
+        type,
+        title,
+        description,
+        time: new Date(),
+      },
+      ...prev.slice(0, 19)
+    ]);
+  }, []);
+
   // Estados do Conciliador de Planilhas
   const xlsxRef = useRef<HTMLInputElement>(null);
   const [xlsxDragOver, setXlsxDragOver] = useState(false);
@@ -340,6 +390,223 @@ function Dashboard() {
   const notasCanceladas = notasFiltradas.filter((n) => n.status === "cancelada");
   const faturamento = notasAtivas.reduce((sum, n) => sum + n.valor, 0);
   const ticketMedio = notasAtivas.length ? faturamento / notasAtivas.length : 0;
+
+  // Comparative period trend calculations
+  const prevNotasAtivas = useMemo(() => {
+    if (!todasNotas) return [];
+    
+    let prevAno = anoFiltro;
+    let prevMes = mesFiltro;
+    
+    if (anoFiltro !== "__all__") {
+      if (mesFiltro !== "__all__") {
+        let m = parseInt(mesFiltro, 10);
+        let y = parseInt(anoFiltro, 10);
+        m--;
+        if (m === 0) {
+          m = 12;
+          y--;
+        }
+        prevMes = String(m).padStart(2, "0");
+        prevAno = String(y);
+      } else {
+        let y = parseInt(anoFiltro, 10);
+        prevAno = String(y - 1);
+      }
+    } else {
+      if (mesFiltro !== "__all__") {
+        let m = parseInt(mesFiltro, 10);
+        m--;
+        if (m === 0) m = 12;
+        prevMes = String(m).padStart(2, "0");
+      } else {
+        if (anos.length >= 1) {
+          prevAno = String(parseInt(anos[0], 10) - 1);
+        }
+      }
+    }
+
+    return todasNotas.filter((n) => {
+      if (n.status !== "ativa") return false;
+      if (empresaFiltro !== "__all__" && n.cnpjPrestador !== empresaFiltro) return false;
+      if (prevAno !== "__all__" && n.dhEmi.slice(0, 4) !== prevAno) return false;
+      if (prevMes !== "__all__" && n.dhEmi.slice(5, 7) !== prevMes) return false;
+      if (cServFiltro !== "__all__") {
+        const c1 = String(n.codTribNacional || "").replace(/^0+/, "");
+        const c2 = String(cServFiltro).replace(/^0+/, "");
+        const isHospitalarMatch = 
+          (c2 === "43301" || c2 === "40301") && 
+          (c1 === "43301" || c1 === "40301");
+        if (c1 !== c2 && !isHospitalarMatch) return false;
+      }
+      if (searchCliente && !n.cliente.toLowerCase().includes(searchCliente.toLowerCase()))
+        return false;
+      return true;
+    });
+  }, [todasNotas, empresaFiltro, mesFiltro, anoFiltro, cServFiltro, searchCliente, anos]);
+
+  const prevFaturamento = useMemo(() => {
+    return prevNotasAtivas.reduce((sum, n) => sum + n.valor, 0);
+  }, [prevNotasAtivas]);
+
+  const prevTicketMedio = useMemo(() => {
+    return prevNotasAtivas.length ? prevFaturamento / prevNotasAtivas.length : 0;
+  }, [prevNotasAtivas, prevFaturamento]);
+
+  const prevNotasCount = prevNotasAtivas.length;
+
+  const getTrend = (current: number, previous: number) => {
+    if (previous === 0) return { percent: 0, isPositive: true, text: "0%" };
+    const diff = ((current - previous) / previous) * 100;
+    const isPositive = diff >= 0;
+    return {
+      percent: Math.abs(diff),
+      isPositive,
+      text: `${isPositive ? "+" : ""}${diff.toFixed(1)}%`
+    };
+  };
+
+  const faturamentoTrend = useMemo(() => getTrend(faturamento, prevFaturamento), [faturamento, prevFaturamento]);
+  const ticketTrend = useMemo(() => getTrend(ticketMedio, prevTicketMedio), [ticketMedio, prevTicketMedio]);
+  const notasAtivasTrend = useMemo(() => getTrend(notasAtivas.length, prevNotasCount), [notasAtivas.length, prevNotasCount]);
+
+  const prevNotasCanceladasCount = useMemo(() => {
+    if (!todasNotas) return 0;
+    let prevAno = anoFiltro;
+    let prevMes = mesFiltro;
+    
+    if (anoFiltro !== "__all__") {
+      if (mesFiltro !== "__all__") {
+        let m = parseInt(mesFiltro, 10);
+        let y = parseInt(anoFiltro, 10);
+        m--;
+        if (m === 0) { m = 12; y--; }
+        prevMes = String(m).padStart(2, "0");
+        prevAno = String(y);
+      } else {
+        let y = parseInt(anoFiltro, 10);
+        prevAno = String(y - 1);
+      }
+    } else {
+      if (mesFiltro !== "__all__") {
+        let m = parseInt(mesFiltro, 10);
+        m--;
+        if (m === 0) m = 12;
+        prevMes = String(m).padStart(2, "0");
+      } else {
+        if (anos.length >= 1) {
+          prevAno = String(parseInt(anos[0], 10) - 1);
+        }
+      }
+    }
+
+    return todasNotas.filter((n) => {
+      if (n.status !== "cancelada") return false;
+      if (empresaFiltro !== "__all__" && n.cnpjPrestador !== empresaFiltro) return false;
+      if (prevAno !== "__all__" && n.dhEmi.slice(0, 4) !== prevAno) return false;
+      if (prevMes !== "__all__" && n.dhEmi.slice(5, 7) !== prevMes) return false;
+      if (cServFiltro !== "__all__") {
+        const c1 = String(n.codTribNacional || "").replace(/^0+/, "");
+        const c2 = String(cServFiltro).replace(/^0+/, "");
+        const isHospitalarMatch = 
+          (c2 === "43301" || c2 === "40301") && 
+          (c1 === "43301" || c1 === "40301");
+        if (c1 !== c2 && !isHospitalarMatch) return false;
+      }
+      if (searchCliente && !n.cliente.toLowerCase().includes(searchCliente.toLowerCase()))
+        return false;
+      return true;
+    }).length;
+  }, [todasNotas, empresaFiltro, mesFiltro, anoFiltro, cServFiltro, searchCliente, anos]);
+
+  const notasCanceladasTrend = useMemo(() => getTrend(notasCanceladas.length, prevNotasCanceladasCount), [notasCanceladas.length, prevNotasCanceladasCount]);
+
+  // Dual series comparison chart data (matches ByeWind line chart)
+  const lineChartData = useMemo(() => {
+    const currentMap = new Map<string, number>();
+    const prevMap = new Map<string, number>();
+    const useDay = anoFiltro !== "__all__" && mesFiltro !== "__all__";
+    
+    notasAtivas.forEach((n) => {
+      if (!n.dhEmi) return;
+      const key = useDay ? n.dhEmi.slice(8, 10) : n.dhEmi.slice(5, 7);
+      currentMap.set(key, (currentMap.get(key) ?? 0) + n.valor);
+    });
+    
+    prevNotasAtivas.forEach((n) => {
+      if (!n.dhEmi) return;
+      const key = useDay ? n.dhEmi.slice(8, 10) : n.dhEmi.slice(5, 7);
+      prevMap.set(key, (prevMap.get(key) ?? 0) + n.valor);
+    });
+    
+    if (useDay) {
+      const data = [];
+      for (let i = 1; i <= 31; i++) {
+        const dayStr = String(i).padStart(2, "0");
+        if (currentMap.has(dayStr) || prevMap.has(dayStr)) {
+          data.push({
+            label: `Dia ${dayStr}`,
+            "Período Atual": currentMap.get(dayStr) ?? 0,
+            "Período Anterior": prevMap.get(dayStr) ?? 0,
+          });
+        }
+      }
+      return data;
+    } else {
+      const mesesAbrev = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+      const data = [];
+      for (let i = 1; i <= 12; i++) {
+        const mesStr = String(i).padStart(2, "0");
+        if (currentMap.has(mesStr) || prevMap.has(mesStr)) {
+          data.push({
+            label: mesesAbrev[i - 1],
+            "Período Atual": currentMap.get(mesStr) ?? 0,
+            "Período Anterior": prevMap.get(mesStr) ?? 0,
+          });
+        }
+      }
+      return data;
+    }
+  }, [notasAtivas, prevNotasAtivas, mesFiltro, anoFiltro]);
+
+  // Top services by faturamento (matches Traffic by Website style)
+  const topServicesList = useMemo(() => {
+    const map = new Map<string, { cod: string; desc: string; total: number }>();
+    notasAtivas.forEach((n) => {
+      const cod = n.codTribNacional || "";
+      const key = cod || "Outros";
+      const desc = getServicoDescricao(cod);
+      const curr = map.get(key) || { cod, desc, total: 0 };
+      curr.total += n.valor;
+      map.set(key, curr);
+    });
+    
+    const sorted = Array.from(map.values())
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 5);
+      
+    return sorted.map((s) => ({
+      name: s.desc,
+      value: s.total,
+      percentage: faturamento > 0 ? (s.total / faturamento) * 100 : 0
+    }));
+  }, [notasAtivas, faturamento]);
+
+  // Top clients by faturamento (matches Top Selling Products table style)
+  const topClientesList = useMemo(() => {
+    const map = new Map<string, { cnpjCpf: string; nome: string; total: number; count: number }>();
+    notasAtivas.forEach((n) => {
+      const key = n.cnpjCpfCliente || "Desconhecido";
+      const curr = map.get(key) || { cnpjCpf: key, nome: n.cliente || "Desconhecido", total: 0, count: 0 };
+      curr.total += n.valor;
+      curr.count += 1;
+      map.set(key, curr);
+    });
+    
+    return Array.from(map.values())
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 5);
+  }, [notasAtivas]);
 
   // Cálculos de tributos
   const issRetidoTotal = useMemo(() => {
@@ -512,13 +779,15 @@ function Dashboard() {
 
     if (allNotas.length) {
       await db.notas.bulkPut(allNotas);
+      addActivity("upload", `${allNotas.length} Notas Importadas`, `Importação de XMLs finalizada com sucesso.`);
+      setRightPanelOpen(true);
     }
     setProgress(null);
     setImporting(false);
     toast.success(
       `${allNotas.length} nota(s) importada(s). ${skipped ? skipped + " ignorada(s)." : ""}`,
     );
-  }, []);
+  }, [addActivity]);
 
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault();
@@ -529,6 +798,7 @@ function Dashboard() {
   const clearDb = async () => {
     if (confirm("Apagar TODA a base de dados local? Esta ação não pode ser desfeita.")) {
       await db.notas.clear();
+      addActivity("clear", "Base de Dados Limpa", "Todas as notas foram excluídas do banco local.");
       toast.success("Base de dados local apagada.");
     }
   };
@@ -694,6 +964,8 @@ function Dashboard() {
       if (kCol && sCol && todasNotas) {
         runConciliation(rows, kCol, sCol, opCol, todasNotas);
       }
+      addActivity("conciliation", "Planilha Carregada", `Relatório "${file.name}" carregado com ${rows.length} linhas.`);
+      setRightPanelOpen(true);
       toast.success(`Planilha "${file.name}" carregada com ${rows.length} linhas.`);
     } catch (e) {
       console.error(e);
@@ -735,6 +1007,8 @@ function Dashboard() {
           }
         }
       });
+      addActivity("update", "Divergências Aplicadas", `${changes.length} nota(s) retificada(s) no banco local.`);
+      setRightPanelOpen(true);
       toast.success("Divergências de Status e/ou ISS retificadas no banco de dados local!");
     } catch (e) {
       console.error(e);
@@ -788,516 +1062,764 @@ function Dashboard() {
   }, [todasNotas, xlsxRows, keyCol, statusCol, operacaoCol, runConciliation]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/40">
+    <div className="min-h-screen bg-slate-50/50 flex font-sans antialiased text-slate-800 w-full overflow-hidden">
       <Toaster richColors position="top-right" />
 
-      {/* Header */}
-      <header className="border-b bg-white/70 backdrop-blur sticky top-0 z-30">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between gap-4 flex-wrap">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center text-white shadow-lg shadow-indigo-500/30">
-              <Receipt className="h-5 w-5" />
+      {/* LEFT SIDEBAR (ByeWind / SnowUI style) */}
+      <aside
+        className={`fixed inset-y-0 left-0 z-40 bg-white border-r border-slate-100 flex flex-col justify-between transition-transform duration-300 ease-in-out md:translate-x-0 md:static md:w-64 flex-shrink-0 ${
+          sidebarOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
+        <div className="flex flex-col flex-1 overflow-y-auto px-5 py-6 gap-6">
+          {/* Logo & Header */}
+          <div className="flex items-center gap-3 px-1">
+            <div className="h-9 w-9 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-md shadow-indigo-500/20">
+              <Sparkles className="h-4 w-4" />
             </div>
             <div>
-              <h1 className="text-lg font-bold tracking-tight">Dashboard NFS-e Nacional</h1>
-              <p className="text-xs text-muted-foreground">SPED v1.01 · BI Fiscal Multiempresa</p>
+              <h2 className="text-sm font-semibold tracking-tight text-slate-900 leading-none">Smart Fiscal</h2>
+              <span className="text-[10px] font-medium text-indigo-600 uppercase tracking-wider">Diretoria BI</span>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
-            <Select value={empresaFiltro} onValueChange={setEmpresaFiltro}>
-              <SelectTrigger className="w-[260px]">
-                <Building2 className="h-4 w-4 mr-2 text-muted-foreground" />
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__all__">Todas as Empresas (Total do Grupo)</SelectItem>
-                {empresas.map((e) => (
-                  <SelectItem key={e.cnpj} value={e.cnpj}>
-                    {e.nome}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select value={mesFiltro} onValueChange={setMesFiltro}>
-              <SelectTrigger className="w-[150px]">
-                <Calendar className="h-4 w-4 mr-2 text-muted-foreground" />
-                <SelectValue placeholder="Mês" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__all__">Todos os meses</SelectItem>
-                {mesesOpcoes.map((m) => (
-                  <SelectItem key={m.value} value={m.value}>
-                    {m.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select value={anoFiltro} onValueChange={setAnoFiltro}>
-              <SelectTrigger className="w-[110px]">
-                <Calendar className="h-4 w-4 mr-2 text-muted-foreground" />
-                <SelectValue placeholder="Ano" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__all__">Todos os anos</SelectItem>
-                {anos.map((a) => (
-                  <SelectItem key={a} value={a}>
-                    {a}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select value={cServFiltro} onValueChange={setCServFiltro}>
-              <SelectTrigger className="w-[220px]">
-                <Tag className="h-4 w-4 mr-2 text-muted-foreground" />
-                <SelectValue placeholder="Serviço" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__all__">Todos os Serviços</SelectItem>
-                <SelectItem value="042201">042201 - Planos de Saúde</SelectItem>
-                <SelectItem value="040301">040301 - Serviços Hospitalares</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-      </header>
-
-      <main className="max-w-7xl mx-auto px-4 py-6">
-        <Tabs defaultValue="dashboard" className="space-y-6">
-          <div className="flex justify-start">
-            <TabsList className="grid w-full max-w-[440px] grid-cols-2 bg-slate-100 p-1 rounded-xl">
-              <TabsTrigger value="dashboard" className="flex items-center gap-2">
-                <Receipt className="h-4 w-4" /> BI & Dashboards
-              </TabsTrigger>
-              <TabsTrigger value="conciliation" className="flex items-center gap-2">
-                <FileSpreadsheet className="h-4 w-4" /> Validador Sintético (.xlsx)
-              </TabsTrigger>
-            </TabsList>
+          {/* User Profile Info */}
+          <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100/50 mt-2">
+            <div className="h-9 w-9 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-sm">
+              DS
+            </div>
+            <div className="overflow-hidden">
+              <p className="text-xs font-semibold text-slate-800 truncate">Diretoria Samel</p>
+              <p className="text-[10px] text-slate-400 truncate">diretoria@samel.com.br</p>
+            </div>
           </div>
 
-          <TabsContent value="dashboard" className="space-y-6 outline-none">
-            {/* Upload */}
-            <div
-              onDragOver={(e) => {
-                e.preventDefault();
-                setDragOver(true);
-              }}
-              onDragLeave={() => setDragOver(false)}
-              onDrop={onDrop}
-              onClick={() => fileRef.current?.click()}
-              className={`rounded-2xl border-2 border-dashed p-8 text-center cursor-pointer transition-all ${
-                dragOver
-                  ? "border-indigo-500 bg-indigo-50/60 scale-[1.01]"
-                  : "border-slate-300 bg-white hover:border-indigo-400 hover:bg-slate-50"
-              }`}
-            >
-              <input
-                ref={fileRef}
-                type="file"
-                accept=".zip"
-                multiple
-                className="hidden"
-                onChange={(e) => e.target.files && processFiles(e.target.files)}
-              />
-              <div className="flex flex-col items-center gap-2">
-                {importing ? (
-                  <>
-                    <Loader2 className="h-10 w-10 text-indigo-600 animate-spin" />
-                    <p className="font-semibold">Processando…</p>
-                    {progress && (
-                      <p className="text-sm text-muted-foreground">
-                        {progress.done} / {progress.total} XMLs
-                      </p>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    <div className="h-12 w-12 rounded-full bg-indigo-100 flex items-center justify-center">
-                      <Upload className="h-6 w-6 text-indigo-600" />
-                    </div>
-                    <p className="font-semibold">
-                      Arraste arquivos .zip aqui ou clique para selecionar
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      Suporta múltiplos .zip contendo XMLs NFS-e Nacional (SPED v1.01)
-                    </p>
-                  </>
+          {/* Nav Items */}
+          <nav className="flex flex-col gap-5 mt-4">
+            {/* Favorites Category */}
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1">Favoritos</span>
+              <button
+                onClick={() => setActiveTab("dashboard")}
+                className={`flex items-center gap-3 px-3 py-2 text-xs font-medium rounded-xl transition-all relative w-full text-left ${
+                  activeTab === "dashboard"
+                    ? "bg-slate-50 text-slate-950 font-semibold"
+                    : "text-slate-500 hover:text-slate-900 hover:bg-slate-50/50"
+                }`}
+              >
+                {activeTab === "dashboard" && (
+                  <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r-md bg-slate-950" />
                 )}
-              </div>
+                <LayoutDashboard className="h-4 w-4" /> Visão Geral Faturamento
+              </button>
+              <button
+                onClick={() => setActiveTab("conciliation")}
+                className={`flex items-center gap-3 px-3 py-2 text-xs font-medium rounded-xl transition-all relative w-full text-left ${
+                  activeTab === "conciliation"
+                    ? "bg-slate-50 text-slate-950 font-semibold"
+                    : "text-slate-500 hover:text-slate-900 hover:bg-slate-50/50"
+                }`}
+              >
+                {activeTab === "conciliation" && (
+                  <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r-md bg-slate-950" />
+                )}
+                <FileSpreadsheet className="h-4 w-4" /> Validador Sintético
+              </button>
             </div>
 
-            {/* KPIs */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <KpiCard
-                label="Faturamento Válido"
-                value={fmtBRL(faturamento)}
-                icon={<TrendingUp className="h-5 w-5" />}
-                tone="indigo"
-              />
-              <KpiCard
-                label="Ticket Médio"
-                value={fmtBRL(ticketMedio)}
-                icon={<Receipt className="h-5 w-5" />}
-                tone="purple"
-              />
-              <KpiCard
-                label="Notas Ativas"
-                value={notasAtivas.length.toLocaleString("pt-BR")}
-                icon={<CheckCircle2 className="h-5 w-5" />}
-                tone="emerald"
-              />
-              <KpiCard
-                label="Canceladas / Substituídas"
-                value={notasCanceladas.length.toLocaleString("pt-BR")}
-                icon={<XCircle className="h-5 w-5" />}
-                tone="rose"
-              />
-            </div>
-
-            {/* Resumo de Tributos */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <KpiCard
-                label="ISS Retido"
-                value={fmtBRL(issRetidoTotal)}
-                icon={<Building2 className="h-5 w-5" />}
-                tone="purple"
-                subtext="Retido na fonte pelo tomador"
-              />
-              <KpiCard
-                label="ISS a Recolher"
-                value={fmtBRL(issARecolherTotal)}
-                icon={<Receipt className="h-5 w-5" />}
-                tone="indigo"
-                subtext="Recolhimento próprio do prestador"
-              />
-              <KpiCard
-                label="Demais Tributos (Federais)"
-                value={fmtBRL(tributosFederaisTotal)}
-                icon={<TrendingUp className="h-5 w-5" />}
-                tone="emerald"
-                subtext={`PIS: ${fmtBRL(pisTotal)} · COFINS: ${fmtBRL(cofinsTotal)} · CSLL: ${fmtBRL(csllTotal)} · IR: ${fmtBRL(irrfTotal)} · INSS: ${fmtBRL(inssTotal)}`}
-              />
-            </div>
-
-            {/* Charts */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-              <Card className="lg:col-span-12 xl:col-span-6">
-                <CardHeader>
-                  <CardTitle className="text-base">Evolução do Faturamento</CardTitle>
-                </CardHeader>
-                <CardContent className="h-[320px]">
-                  {barData.length === 0 ? (
-                    <EmptyState />
-                  ) : (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={barData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                        <XAxis dataKey="label" stroke="#64748b" fontSize={12} />
-                        <YAxis
-                          stroke="#64748b"
-                          fontSize={12}
-                          tickFormatter={(v) =>
-                            v >= 1000 ? `R$ ${(v / 1000).toFixed(0)}k` : `R$ ${v}`
-                          }
-                        />
-                        <Tooltip
-                          formatter={(v) => fmtBRL(Number(v))}
-                          contentStyle={{ borderRadius: 8, border: "1px solid #e2e8f0" }}
-                        />
-                        <Bar dataKey="valor" fill="#6366f1" radius={[6, 6, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card className="lg:col-span-6 xl:col-span-6">
-                <CardHeader>
-                  <CardTitle className="text-base">Comparativo: Planos de Saúde x Serviços Hospitalares</CardTitle>
-                </CardHeader>
-                <CardContent className="h-[320px]">
-                  {comparativoServicosData.every((d) => d.value === 0) ? (
-                    <EmptyState />
-                  ) : (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={comparativoServicosData.filter((d) => d.value > 0)}
-                          dataKey="value"
-                          nameKey="name"
-                          innerRadius={55}
-                          outerRadius={90}
-                          paddingAngle={2}
-                        >
-                          {comparativoServicosData
-                            .filter((d) => d.value > 0)
-                            .map((entry, i) => (
-                              <Cell key={i} fill={entry.fill} />
-                            ))}
-                        </Pie>
-                        <Tooltip formatter={(v) => fmtBRL(Number(v))} />
-                        <Legend
-                          verticalAlign="bottom"
-                          iconType="circle"
-                          wrapperStyle={{ fontSize: 11 }}
-                        />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card className="lg:col-span-6 xl:col-span-6">
-                <CardHeader>
-                  <CardTitle className="text-base">{pieTitle}</CardTitle>
-                </CardHeader>
-                <CardContent className="h-[320px]">
-                  {pieData.length === 0 ? (
-                    <EmptyState />
-                  ) : (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={pieData}
-                          dataKey="value"
-                          nameKey="name"
-                          innerRadius={55}
-                          outerRadius={90}
-                          paddingAngle={2}
-                        >
-                          {pieData.map((_, i) => (
-                            <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                          ))}
-                        </Pie>
-                        <Tooltip formatter={(v) => fmtBRL(Number(v))} />
-                        <Legend
-                          verticalAlign="bottom"
-                          iconType="circle"
-                          wrapperStyle={{ fontSize: 11 }}
-                          formatter={(value: string) =>
-                            value.length > 22 ? value.slice(0, 22) + "…" : value
-                          }
-                        />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card className="lg:col-span-6 xl:col-span-6">
-                <CardHeader>
-                  <CardTitle className="text-base">Faturamento PJ vs PF</CardTitle>
-                </CardHeader>
-                <CardContent className="h-[320px]">
-                  {pjPfData.length === 0 ? (
-                    <EmptyState />
-                  ) : (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={pjPfData}
-                          dataKey="value"
-                          nameKey="name"
-                          innerRadius={55}
-                          outerRadius={90}
-                          paddingAngle={2}
-                        >
-                          {pjPfData.map((_, i) => (
-                            <Cell key={i} fill={i === 0 ? "#6366f1" : "#ec4899"} />
-                          ))}
-                        </Pie>
-                        <Tooltip formatter={(v) => fmtBRL(Number(v))} />
-                        <Legend
-                          verticalAlign="bottom"
-                          iconType="circle"
-                          wrapperStyle={{ fontSize: 11 }}
-                        />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Table */}
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <FileText className="h-4 w-4" />
-                  Notas Fiscais ({notasFiltradas.length.toLocaleString("pt-BR")})
-                </CardTitle>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={exportCsv}
-                    disabled={!notasFiltradas.length}
-                  >
-                    <Download className="h-4 w-4 mr-2" /> Exportar CSV
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={clearDb}>
-                    <Trash2 className="h-4 w-4 mr-2" /> Limpar Base
-                  </Button>
+            {/* Dashboards Category */}
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1">Dashboards</span>
+              <button
+                onClick={() => setActiveTab("dashboard")}
+                className={`flex items-center justify-between px-3 py-2 text-xs font-medium rounded-xl transition-all w-full text-left ${
+                  activeTab === "dashboard" ? "text-slate-950 font-semibold" : "text-slate-500 hover:text-slate-900"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <Database className="h-4 w-4" /> Faturamento
                 </div>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-col sm:flex-row gap-4 mb-4 items-center justify-between w-full">
-                  <div className="flex flex-1 gap-2 items-center w-full sm:max-w-md flex-wrap">
-                    <div className="relative flex-1 min-w-[200px]">
-                      <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                {notasAtivas.length > 0 && (
+                  <span className="text-[9px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-md font-mono">
+                    {notasAtivas.length}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => setActiveTab("conciliation")}
+                className={`flex items-center justify-between px-3 py-2 text-xs font-medium rounded-xl transition-all w-full text-left ${
+                  activeTab === "conciliation" ? "text-slate-950 font-semibold" : "text-slate-500 hover:text-slate-900"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <FileSpreadsheet className="h-4 w-4" /> Conciliador
+                </div>
+                {conciliatedStats.updated > 0 && (
+                  <span className="text-[9px] bg-amber-50 text-amber-600 border border-amber-100 px-1.5 py-0.5 rounded-md font-mono">
+                    {conciliatedStats.updated}
+                  </span>
+                )}
+              </button>
+            </div>
+
+            {/* Quick Actions Category */}
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1">Ações Rápidas</span>
+              <button
+                onClick={exportCsv}
+                disabled={!notasFiltradas.length}
+                className="flex items-center gap-3 px-3 py-2 text-xs font-medium text-slate-500 hover:text-slate-900 hover:bg-slate-50/50 rounded-xl transition-all disabled:opacity-50 disabled:hover:bg-transparent w-full text-left"
+              >
+                <Download className="h-4 w-4" /> Exportar Relatório CSV
+              </button>
+              <button
+                onClick={clearDb}
+                className="flex items-center gap-3 px-3 py-2 text-xs font-medium text-rose-600 hover:text-rose-700 hover:bg-rose-50/50 rounded-xl transition-all w-full text-left"
+              >
+                <Trash2 className="h-4 w-4" /> Limpar Base Local
+              </button>
+            </div>
+          </nav>
+        </div>
+
+        {/* Sidebar Footer */}
+        <div className="p-4 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400 font-medium">
+          <span>v1.01 SPED</span>
+          <span className="bg-slate-50 border border-slate-100 px-2 py-0.5 rounded-full text-slate-500">100% Local</span>
+        </div>
+      </aside>
+
+      {/* OVERLAY FOR MOBILE SIDEBAR */}
+      {sidebarOpen && (
+        <div
+          onClick={() => setSidebarOpen(false)}
+          className="fixed inset-0 z-30 bg-slate-950/20 backdrop-blur-xs md:hidden"
+        />
+      )}
+
+      {/* MAIN CONTAINER */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-y-auto h-screen">
+        {/* HEADER BAR (ByeWind Style) */}
+        <header className="h-14 bg-white border-b border-slate-100 flex items-center justify-between px-6 sticky top-0 z-20 flex-shrink-0">
+          {/* Header Left */}
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="h-8 w-8 rounded-lg border border-slate-100 hover:bg-slate-50 flex items-center justify-center text-slate-500 hover:text-slate-800 transition-colors"
+            >
+              <Menu className="h-4 w-4" />
+            </button>
+            <button className="text-slate-300 hover:text-amber-400 transition-colors hidden sm:block">
+              <Star className="h-4 w-4 fill-current text-slate-200" />
+            </button>
+            <div className="flex items-center gap-1.5 text-xs font-medium text-slate-400">
+              <span>Dashboards</span>
+              <span>/</span>
+              <span className="text-slate-800 font-semibold">
+                {activeTab === "dashboard" ? "Faturamento Geral" : "Validador Planilhas"}
+              </span>
+            </div>
+          </div>
+
+          {/* Header Right */}
+          <div className="flex items-center gap-3">
+            {/* Search Input Placeholder */}
+            <div className="relative w-48 lg:w-64 hidden sm:block">
+              <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Buscar cliente..."
+                value={searchCliente}
+                onChange={(e) => setSearchCliente(e.target.value)}
+                className="w-full h-8 pl-8 pr-10 rounded-lg bg-slate-50 border border-slate-100 text-xs focus:bg-white focus:outline-none focus:ring-1 focus:ring-slate-200 transition-all placeholder:text-slate-400"
+              />
+              <span className="absolute right-2.5 top-2 text-[9px] font-mono text-slate-400 bg-slate-200/60 px-1 rounded-md">
+                ⌘/
+              </span>
+            </div>
+
+            {/* Utility Icons */}
+            <button
+              onClick={() => addActivity("update", "Preferências Atualizadas", "O usuário atualizou as preferências do sistema.")}
+              className="h-8 w-8 rounded-lg border border-slate-100 hover:bg-slate-50 flex items-center justify-center text-slate-500 hover:text-slate-800 transition-colors"
+            >
+              <Clock className="h-4 w-4" />
+            </button>
+
+            <button
+              onClick={() => setRightPanelOpen(!rightPanelOpen)}
+              className="h-8 w-8 rounded-lg border border-slate-100 hover:bg-slate-50 flex items-center justify-center text-slate-500 hover:text-slate-800 transition-colors relative"
+            >
+              <Bell className="h-4 w-4" />
+              {activities.length > 1 && (
+                <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-indigo-600 ring-2 ring-white" />
+              )}
+            </button>
+
+            <button
+              onClick={() => setRightPanelOpen(!rightPanelOpen)}
+              className="h-8 w-8 rounded-lg border border-slate-100 hover:bg-slate-50 flex items-center justify-center text-slate-500 hover:text-slate-800 transition-colors hidden md:flex"
+            >
+              <LayoutDashboard className="h-4 w-4" />
+            </button>
+          </div>
+        </header>
+
+        {/* WORKSPACE CONTENT */}
+        <main className="flex-1 p-6 md:p-8 max-w-[1400px] w-full mx-auto space-y-6">
+          
+          {/* MOBILE TABS CONTROLLER (Fallback Tab List for small screens) */}
+          <div className="flex justify-between items-center gap-4 flex-wrap md:hidden bg-white p-3 rounded-2xl border border-slate-100 shadow-sm">
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Visualização</span>
+            <div className="flex gap-1.5">
+              <button
+                onClick={() => setActiveTab("dashboard")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  activeTab === "dashboard" ? "bg-slate-900 text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
+              >
+                BI & Dashboards
+              </button>
+              <button
+                onClick={() => setActiveTab("conciliation")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  activeTab === "conciliation" ? "bg-slate-900 text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
+              >
+                Validador (.xlsx)
+              </button>
+            </div>
+          </div>
+
+          <Tabs value={activeTab} onValueChange={(val) => setActiveTab(val as any)} className="space-y-6">
+            <TabsContent value="dashboard" className="space-y-6 mt-0 outline-none">
+              
+              {/* PAGE MAIN HEADER / FILTERS PANEL */}
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 flex-wrap bg-white p-5 rounded-2xl border border-slate-100 shadow-xs">
+                <div>
+                  <h1 className="text-xl font-bold tracking-tight text-slate-900">Consulta de Faturamento</h1>
+                  <p className="text-xs text-slate-400 mt-1">Análise consolidada para a diretoria · Samel</p>
+                </div>
+                
+                {/* Responsive Filter Grid */}
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <Select value={empresaFiltro} onValueChange={setEmpresaFiltro}>
+                    <SelectTrigger className="w-[220px] h-9 text-xs rounded-xl bg-slate-50 border-slate-100 hover:bg-slate-100/50 transition-colors">
+                      <Building2 className="h-3.5 w-3.5 mr-2 text-slate-400 flex-shrink-0" />
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-xl shadow-lg border-slate-100">
+                      <SelectItem value="__all__">Todas as Empresas</SelectItem>
+                      {empresas.map((e) => (
+                        <SelectItem key={e.cnpj} value={e.cnpj}>
+                          {e.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  <Select value={mesFiltro} onValueChange={setMesFiltro}>
+                    <SelectTrigger className="w-[130px] h-9 text-xs rounded-xl bg-slate-50 border-slate-100 hover:bg-slate-100/50 transition-colors">
+                      <Calendar className="h-3.5 w-3.5 mr-2 text-slate-400 flex-shrink-0" />
+                      <SelectValue placeholder="Mês" />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-xl shadow-lg border-slate-100">
+                      <SelectItem value="__all__">Todos os meses</SelectItem>
+                      {mesesOpcoes.map((m) => (
+                        <SelectItem key={m.value} value={m.value}>
+                          {m.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  <Select value={anoFiltro} onValueChange={setAnoFiltro}>
+                    <SelectTrigger className="w-[105px] h-9 text-xs rounded-xl bg-slate-50 border-slate-100 hover:bg-slate-100/50 transition-colors">
+                      <Calendar className="h-3.5 w-3.5 mr-2 text-slate-400 flex-shrink-0" />
+                      <SelectValue placeholder="Ano" />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-xl shadow-lg border-slate-100">
+                      <SelectItem value="__all__">Todos os anos</SelectItem>
+                      {anos.map((a) => (
+                        <SelectItem key={a} value={a}>
+                          {a}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  <Select value={cServFiltro} onValueChange={setCServFiltro}>
+                    <SelectTrigger className="w-[180px] h-9 text-xs rounded-xl bg-slate-50 border-slate-100 hover:bg-slate-100/50 transition-colors">
+                      <Tag className="h-3.5 w-3.5 mr-2 text-slate-400 flex-shrink-0" />
+                      <SelectValue placeholder="Serviço" />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-xl shadow-lg border-slate-100">
+                      <SelectItem value="__all__">Todos os Serviços</SelectItem>
+                      <SelectItem value="042201">Planos de Saúde</SelectItem>
+                      <SelectItem value="040301">Serviços Hospitalares</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* UPLOAD ZIP PANEL */}
+              <div
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDragOver(true);
+                }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={onDrop}
+                onClick={() => fileRef.current?.click()}
+                className={`rounded-2xl border border-dashed p-6 text-center cursor-pointer transition-all duration-200 ${
+                  dragOver
+                    ? "border-indigo-500 bg-indigo-50/50 scale-[1.005]"
+                    : "border-slate-200 bg-white hover:border-indigo-400 hover:bg-slate-50/30"
+                }`}
+              >
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept=".zip"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => e.target.files && processFiles(e.target.files)}
+                />
+                <div className="flex flex-col items-center gap-2">
+                  {importing ? (
+                    <>
+                      <Loader2 className="h-8 w-8 text-indigo-600 animate-spin" />
+                      <p className="font-semibold text-xs text-slate-700">Processando XMLs NFS-e...</p>
+                      {progress && (
+                        <p className="text-[10px] text-slate-400">
+                          {progress.done} / {progress.total} XMLs
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <div className="h-10 w-10 rounded-xl bg-indigo-50 flex items-center justify-center">
+                        <Upload className="h-5 w-5 text-indigo-600" />
+                      </div>
+                      <p className="font-semibold text-xs text-slate-700">
+                        Arraste os arquivos .zip de XMLs aqui ou clique para selecionar
+                      </p>
+                      <p className="text-[10px] text-slate-400">
+                        Suporta múltiplos arquivos ZIP contendo XMLs no padrão NFS-e Nacional (SPED v1.01)
+                      </p>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* METRICS / KPI GRID (ByeWind style: clean card layout, light pastel colors, trend arrows) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                <KpiCardNew
+                  label="Faturamento Válido"
+                  value={fmtBRL(faturamento)}
+                  trendText={faturamentoTrend.text}
+                  isPositive={faturamentoTrend.isPositive}
+                  subtext="comparado ao período anterior"
+                  tone="blue"
+                />
+                <KpiCardNew
+                  label="Ticket Médio"
+                  value={fmtBRL(ticketMedio)}
+                  trendText={ticketTrend.text}
+                  isPositive={ticketTrend.isPositive}
+                  subtext="por NFS-e emitida"
+                  tone="purple"
+                />
+                <KpiCardNew
+                  label="Notas Emitidas (Ativas)"
+                  value={notasAtivas.length.toLocaleString("pt-BR")}
+                  trendText={notasAtivasTrend.text}
+                  isPositive={notasAtivasTrend.isPositive}
+                  subtext="notas fiscais com status ativo"
+                  tone="green"
+                />
+                <KpiCardNew
+                  label="Canceladas / Substituídas"
+                  value={notasCanceladas.length.toLocaleString("pt-BR")}
+                  trendText={notasCanceladasTrend.text}
+                  isPositive={!notasCanceladasTrend.isPositive} // positive means more cancellations, which is bad, so invert coloring
+                  subtext="notas fora de validade fiscal"
+                  tone="rose"
+                />
+              </div>
+
+              {/* TAXES SUMMARY PANEL */}
+              <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-xs">
+                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">Detalhamento de Impostos & Tributos</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                  {/* ISS Retido */}
+                  <div className="p-4 rounded-xl bg-slate-50 border border-slate-100/50 flex items-start justify-between">
+                    <div>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">ISS Retido</p>
+                      <p className="text-lg font-bold text-slate-900 mt-1.5">{fmtBRL(issRetidoTotal)}</p>
+                      <p className="text-[10px] text-slate-400 mt-1">Retido na fonte pelo tomador</p>
+                    </div>
+                    <div className="h-8 w-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                      <Building2 className="h-4.5 w-4.5" />
+                    </div>
+                  </div>
+                  
+                  {/* ISS a Recolher */}
+                  <div className="p-4 rounded-xl bg-slate-50 border border-slate-100/50 flex items-start justify-between">
+                    <div>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">ISS a Recolher</p>
+                      <p className="text-lg font-bold text-slate-900 mt-1.5">{fmtBRL(issARecolherTotal)}</p>
+                      <p className="text-[10px] text-slate-400 mt-1">Recolhimento próprio do prestador</p>
+                    </div>
+                    <div className="h-8 w-8 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center">
+                      <Receipt className="h-4.5 w-4.5" />
+                    </div>
+                  </div>
+
+                  {/* Demais Tributos Federais */}
+                  <div className="p-4 rounded-xl bg-slate-50 border border-slate-100/50 flex items-start justify-between">
+                    <div className="flex-1">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Tributos Federais</p>
+                      <p className="text-lg font-bold text-slate-900 mt-1.5">{fmtBRL(tributosFederaisTotal)}</p>
+                      <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 mt-2 pt-1 border-t border-slate-200/50 text-[9px] text-slate-400 font-mono">
+                        <div>PIS: <span className="text-slate-700 font-semibold">{fmtBRL(pisTotal)}</span></div>
+                        <div>COFINS: <span className="text-slate-700 font-semibold">{fmtBRL(cofinsTotal)}</span></div>
+                        <div>CSLL: <span className="text-slate-700 font-semibold">{fmtBRL(csllTotal)}</span></div>
+                        <div>IRRF: <span className="text-slate-700 font-semibold">{fmtBRL(irrfTotal)}</span></div>
+                        <div className="col-span-2">INSS: <span className="text-slate-700 font-semibold">{fmtBRL(inssTotal)}</span></div>
+                      </div>
+                    </div>
+                    <div className="h-8 w-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center flex-shrink-0">
+                      <TrendingUp className="h-4.5 w-4.5" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* PRIMARY CHARTS & DETAILS GRID */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                
+                {/* Faturamento Line Chart (ByeWind Image 1 line chart layout) */}
+                <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-xs lg:col-span-8">
+                  <div className="flex items-center justify-between gap-4 mb-5 flex-wrap">
+                    <div>
+                      <h3 className="text-xs font-bold text-slate-800">Evolução do Faturamento</h3>
+                      <p className="text-[10px] text-slate-400 mt-0.5">Comparativo do faturamento com o período imediatamente anterior</p>
+                    </div>
+                    {/* Legend keys matching image 1 & 2 */}
+                    <div className="flex items-center gap-4 text-[10px] font-medium text-slate-500">
+                      <div className="flex items-center gap-1.5">
+                        <span className="h-1.5 w-1.5 rounded-full bg-indigo-600" />
+                        <span>Período Atual</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="h-1.5 w-1.5 rounded-full bg-slate-300" />
+                        <span className="border-b border-dashed border-slate-500 pb-0.5">Período Anterior</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="h-[280px]">
+                    {lineChartData.length === 0 ? (
+                      <EmptyState />
+                    ) : (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={lineChartData}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                          <XAxis dataKey="label" stroke="#94a3b8" fontSize={10} axisLine={false} tickLine={false} />
+                          <YAxis
+                            stroke="#94a3b8"
+                            fontSize={10}
+                            axisLine={false}
+                            tickLine={false}
+                            tickFormatter={(v) =>
+                              v >= 1000000 ? `R$ ${(v / 1000000).toFixed(1)}M` : v >= 1000 ? `R$ ${(v / 1000).toFixed(0)}k` : `R$ ${v}`
+                            }
+                          />
+                          <Tooltip
+                            formatter={(v) => fmtBRL(Number(v))}
+                            contentStyle={{ borderRadius: 12, border: "1px solid #f1f5f9", boxShadow: "0 4px 12px rgba(0,0,0,0.03)" }}
+                          />
+                          <Bar dataKey="Período Anterior" fill="#cbd5e1" opacity={0.6} radius={[4, 4, 0, 0]} barSize={12} />
+                          <Bar dataKey="Período Atual" fill="#6366f1" radius={[4, 4, 0, 0]} barSize={12} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    )}
+                  </div>
+                </div>
+
+                {/* Top Services (ByeWind "Traffic by Website" progress layout) */}
+                <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-xs lg:col-span-4 flex flex-col justify-between">
+                  <div>
+                    <h3 className="text-xs font-bold text-slate-800 mb-1">Faturamento por Serviço</h3>
+                    <p className="text-[10px] text-slate-400 mb-4">Participação dos principais serviços prestados</p>
+                    
+                    <div className="space-y-4">
+                      {topServicesList.length === 0 ? (
+                        <div className="text-center text-xs text-slate-400 py-12">Nenhum serviço registrado</div>
+                      ) : (
+                        topServicesList.map((service, index) => (
+                          <div key={index} className="space-y-1.5">
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="font-semibold text-slate-700 truncate max-w-[200px]" title={service.name}>
+                                {service.name}
+                              </span>
+                              <span className="font-medium text-slate-500 font-mono text-[10px]">
+                                {service.percentage.toFixed(1)}%
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              {/* Custom styled progress bars following image 1 */}
+                              <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                                <div
+                                  className="h-full rounded-full transition-all duration-500"
+                                  style={{
+                                    width: `${service.percentage}%`,
+                                    backgroundColor: COLORS[index % COLORS.length]
+                                  }}
+                                />
+                              </div>
+                              <span className="text-[10px] font-bold text-slate-700 whitespace-nowrap w-16 text-right">
+                                {service.value >= 1000 ? `R$ ${(service.value / 1000).toFixed(0)}k` : `R$ ${service.value}`}
+                              </span>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="border-t border-slate-100 pt-3 mt-4 flex justify-between items-center text-[10px] text-slate-400 font-medium">
+                    <span>Base local Samel</span>
+                    <span>Multiempresa</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* SECONDARY CHARTS GRID (Donut Charts & Top Clients Table) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                
+                {/* Donut Chart: Faturamento PJ vs PF */}
+                <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-xs">
+                  <h3 className="text-xs font-bold text-slate-800 mb-1">Perfil do Cliente</h3>
+                  <p className="text-[10px] text-slate-400 mb-4">Faturamento distribuído entre PJ e PF</p>
+                  
+                  <div className="h-[200px] flex items-center justify-center relative">
+                    {pjPfData.length === 0 ? (
+                      <EmptyState />
+                    ) : (
+                      <>
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie
+                              data={pjPfData}
+                              dataKey="value"
+                              nameKey="name"
+                              innerRadius={45}
+                              outerRadius={70}
+                              paddingAngle={3}
+                            >
+                              <Cell fill="#6366f1" />
+                              <Cell fill="#ec4899" />
+                            </Pie>
+                            <Tooltip formatter={(v) => fmtBRL(Number(v))} />
+                          </PieChart>
+                        </ResponsiveContainer>
+                        {/* Legend aligned on the side/bottom */}
+                        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase">Total</span>
+                          <span className="text-sm font-extrabold text-slate-800">
+                            {faturamento >= 1000000 ? `R$ ${(faturamento / 1000000).toFixed(1)}M` : `R$ ${(faturamento / 1000).toFixed(0)}k`}
+                          </span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  <div className="flex justify-around items-center mt-3 pt-3 border-t border-slate-50 text-xs">
+                    {pjPfData.map((item, idx) => (
+                      <div key={idx} className="flex flex-col items-center">
+                        <div className="flex items-center gap-1.5 text-[10px] text-slate-500">
+                          <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: idx === 0 ? "#6366f1" : "#ec4899" }} />
+                          <span>{item.name.split(" ")[0]}</span>
+                        </div>
+                        <span className="font-bold text-slate-800 mt-0.5">{fmtBRL(item.value)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Donut Chart: Planos vs Hospitais Comparativo */}
+                <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-xs">
+                  <h3 className="text-xs font-bold text-slate-800 mb-1">Comparativo de Serviços Chave</h3>
+                  <p className="text-[10px] text-slate-400 mb-4">Planos de Saúde vs. Serviços Hospitalares</p>
+                  
+                  <div className="h-[200px] flex items-center justify-center relative">
+                    {comparativoServicosData.every((d) => d.value === 0) ? (
+                      <EmptyState />
+                    ) : (
+                      <>
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie
+                              data={comparativoServicosData.filter((d) => d.value > 0)}
+                              dataKey="value"
+                              nameKey="name"
+                              innerRadius={45}
+                              outerRadius={70}
+                              paddingAngle={3}
+                            >
+                              {comparativoServicosData
+                                .filter((d) => d.value > 0)
+                                .map((entry, i) => (
+                                  <Cell key={i} fill={entry.fill} />
+                                ))}
+                            </Pie>
+                            <Tooltip formatter={(v) => fmtBRL(Number(v))} />
+                          </PieChart>
+                        </ResponsiveContainer>
+                        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase">Foco BI</span>
+                          <span className="text-xs font-bold text-slate-800">Samel</span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  <div className="flex justify-around items-center mt-3 pt-3 border-t border-slate-50 text-xs">
+                    {comparativoServicosData.filter(d => d.value > 0).map((item, idx) => (
+                      <div key={idx} className="flex flex-col items-center">
+                        <div className="flex items-center gap-1.5 text-[10px] text-slate-500">
+                          <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: item.fill }} />
+                          <span className="truncate max-w-[100px]">{item.name}</span>
+                        </div>
+                        <span className="font-bold text-slate-800 mt-0.5">{fmtBRL(item.value)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Top Clients Table (ByeWind "Top Selling Products" style from Image 2) */}
+                <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-xs lg:col-span-1">
+                  <h3 className="text-xs font-bold text-slate-800 mb-1">Principais Clientes</h3>
+                  <p className="text-[10px] text-slate-400 mb-4">Top 5 tomadores por volume de faturamento</p>
+                  
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="border-b border-slate-100 text-slate-400 font-semibold">
+                          <th className="pb-2 font-medium">Nome / CNPJ</th>
+                          <th className="pb-2 text-center font-medium">Notas</th>
+                          <th className="pb-2 text-right font-medium">Faturamento</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {topClientesList.length === 0 ? (
+                          <tr>
+                            <td colSpan={3} className="text-center text-slate-400 py-12">Nenhum cliente registrado</td>
+                          </tr>
+                        ) : (
+                          topClientesList.map((client, index) => (
+                            <tr key={index} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
+                              <td className="py-2.5 max-w-[120px]">
+                                <div className="font-semibold text-slate-700 truncate" title={client.nome}>
+                                  {client.nome}
+                                </div>
+                                <div className="text-[9px] text-slate-400 font-mono mt-0.5">
+                                  {formatarCnpjCpf(client.cnpjCpf)}
+                                </div>
+                              </td>
+                              <td className="py-2.5 text-center text-slate-600 font-mono text-[10px]">{client.count}</td>
+                              <td className="py-2.5 text-right font-bold text-slate-800">{fmtBRL(client.total)}</td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              {/* NFS-e PRIMARY TABLE LIST */}
+              <div className="bg-white border border-slate-100 rounded-2xl shadow-xs overflow-hidden">
+                <div className="p-5 border-b border-slate-100 flex items-center justify-between gap-4 flex-wrap">
+                  <h3 className="text-xs font-bold text-slate-800 flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-slate-400" />
+                    Notas Fiscais Emitidas ({notasFiltradas.length.toLocaleString("pt-BR")})
+                  </h3>
+                  
+                  {/* Search and Period Filter */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <div className="relative w-48 sm:w-64">
+                      <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-slate-400" />
                       <Input
                         placeholder="Buscar por cliente..."
                         value={searchCliente}
                         onChange={(e) => setSearchCliente(e.target.value)}
-                        className="pl-8"
+                        className="pl-8 h-8 rounded-lg text-xs bg-slate-50 border-slate-100 hover:bg-slate-100/30 focus:bg-white placeholder:text-slate-400 w-full"
                       />
                     </div>
-
-                    <Select value={mesFiltro} onValueChange={setMesFiltro}>
-                      <SelectTrigger className="w-[140px] h-9">
-                        <Calendar className="h-4 w-4 mr-2 text-muted-foreground" />
-                        <SelectValue placeholder="Mês" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__all__">Todos os meses</SelectItem>
-                        {mesesOpcoes.map((m) => (
-                          <SelectItem key={m.value} value={m.value}>
-                            {m.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-
-                    <Select value={anoFiltro} onValueChange={setAnoFiltro}>
-                      <SelectTrigger className="w-[110px] h-9">
-                        <Calendar className="h-4 w-4 mr-2 text-muted-foreground" />
-                        <SelectValue placeholder="Ano" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__all__">Todos os anos</SelectItem>
-                        {anos.map((a) => (
-                          <SelectItem key={a} value={a}>
-                            {a}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
                   </div>
                 </div>
 
-                <div className="rounded-lg border max-h-[600px] overflow-auto relative">
-                  <Table className="min-w-[1600px]" wrapperClassName="overflow-visible">
-                    <TableHeader className="sticky top-0 bg-slate-50/95 backdrop-blur z-10 shadow-[0_1px_0_0_rgba(226,232,240,1)]">
-                      <TableRow>
-                        <TableHead>Nº NFS</TableHead>
-                        <TableHead>Emissão</TableHead>
-                        <TableHead>Competência</TableHead>
-                        <TableHead>CNPJ/CPF Cliente</TableHead>
-                        <TableHead>Cliente</TableHead>
-                        <TableHead className="text-right">Vlr. Serviço</TableHead>
-                        <TableHead className="text-right">Vlr. Líquido</TableHead>
-                        <TableHead className="text-right">Vlr. ISS</TableHead>
-                        <TableHead className="text-center">ISS Retido?</TableHead>
-                        <TableHead className="text-right">Vlr. PIS</TableHead>
-                        <TableHead className="text-right">Vlr. COFINS</TableHead>
-                        <TableHead className="text-right">Vlr. CSLL</TableHead>
-                        <TableHead className="text-right">Vlr. IRRF</TableHead>
-                        <TableHead className="text-right">Vlr. INSS</TableHead>
-                        <TableHead>Serviço</TableHead>
-                        <TableHead>Situação</TableHead>
+                <div className="overflow-x-auto">
+                  <Table className="min-w-[1400px]">
+                    <TableHeader className="bg-slate-50/70">
+                      <TableRow className="border-b border-slate-100">
+                        <TableHead className="font-medium text-slate-400 h-9">Nº NFS</TableHead>
+                        <TableHead className="font-medium text-slate-400 h-9">Emissão</TableHead>
+                        <TableHead className="font-medium text-slate-400 h-9">Competência</TableHead>
+                        <TableHead className="font-medium text-slate-400 h-9">CNPJ/CPF Cliente</TableHead>
+                        <TableHead className="font-medium text-slate-400 h-9">Cliente</TableHead>
+                        <TableHead className="text-right font-medium text-slate-400 h-9">Vlr. Serviço</TableHead>
+                        <TableHead className="text-right font-medium text-slate-400 h-9">Vlr. Líquido</TableHead>
+                        <TableHead className="text-right font-medium text-slate-400 h-9">Vlr. ISS</TableHead>
+                        <TableHead className="text-center font-medium text-slate-400 h-9">ISS Retido?</TableHead>
+                        <TableHead className="font-medium text-slate-400 h-9">Serviço</TableHead>
+                        <TableHead className="font-medium text-slate-400 h-9">Situação</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {paginatedNotas.length === 0 ? (
                         <TableRow>
-                          <TableCell
-                            colSpan={16}
-                            className="text-center text-muted-foreground py-8"
-                          >
-                            Nenhuma nota encontrada. Envie um .zip para começar.
+                          <TableCell colSpan={11} className="text-center text-slate-400 py-12 text-xs">
+                            Nenhuma nota fiscal encontrada no banco local. Envie um ZIP com XMLs para começar.
                           </TableCell>
                         </TableRow>
                       ) : (
                         paginatedNotas.map((n) => (
-                          <TableRow key={n.id}>
-                            <TableCell className="font-mono text-xs">{n.nNFSe}</TableCell>
-                            <TableCell className="text-xs whitespace-nowrap">
-                              {formatarData(n.dhEmi)}
-                            </TableCell>
-                            <TableCell className="text-xs whitespace-nowrap">
-                              {formatarCompetencia(n.dCompet)}
-                            </TableCell>
-                            <TableCell className="text-xs font-mono whitespace-nowrap">
-                              {formatarCnpjCpf(n.cnpjCpfCliente)}
-                            </TableCell>
-                            <TableCell className="text-xs max-w-[150px] truncate" title={n.cliente}>
-                              {n.cliente}
-                            </TableCell>
-                            <TableCell className="text-right font-mono text-xs whitespace-nowrap">
-                              {fmtBRL(n.valor)}
-                            </TableCell>
-                            <TableCell className="text-right font-mono text-xs whitespace-nowrap">
-                              {fmtBRL(n.vlrLiquido ?? n.valor)}
-                            </TableCell>
-                            <TableCell className="text-right font-mono text-xs whitespace-nowrap">
-                              {fmtBRL(n.vlrIss ?? 0)}
-                            </TableCell>
+                          <TableRow key={n.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
+                            <TableCell className="font-mono text-[10px] text-slate-600 font-semibold">{n.nNFSe}</TableCell>
+                            <TableCell className="text-xs text-slate-600 whitespace-nowrap">{formatarData(n.dhEmi)}</TableCell>
+                            <TableCell className="text-xs text-slate-500 whitespace-nowrap">{formatarCompetencia(n.dCompet)}</TableCell>
+                            <TableCell className="text-[10px] font-mono text-slate-500 whitespace-nowrap">{formatarCnpjCpf(n.cnpjCpfCliente)}</TableCell>
+                            <TableCell className="text-xs text-slate-700 max-w-[180px] truncate font-medium" title={n.cliente}>{n.cliente}</TableCell>
+                            <TableCell className="text-right font-mono text-xs font-semibold text-slate-800">{fmtBRL(n.valor)}</TableCell>
+                            <TableCell className="text-right font-mono text-xs text-slate-600">{fmtBRL(n.vlrLiquido ?? n.valor)}</TableCell>
+                            <TableCell className="text-right font-mono text-xs text-slate-500">{fmtBRL(n.vlrIss ?? 0)}</TableCell>
                             <TableCell className="text-center">
                               {n.issRetido === "Sim" ? (
-                                <Badge
-                                  variant="outline"
-                                  className="bg-amber-50 text-amber-700 border-amber-200"
-                                >
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-100">
                                   Sim
-                                </Badge>
+                                </span>
                               ) : (
-                                <Badge
-                                  variant="outline"
-                                  className="bg-slate-50 text-slate-600 border-slate-200"
-                                >
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-slate-50 text-slate-500 border border-slate-100">
                                   Não
-                                </Badge>
+                                </span>
                               )}
                             </TableCell>
-                            <TableCell className="text-right font-mono text-xs whitespace-nowrap">
-                              {fmtBRL(n.vlrPis ?? 0)}
-                            </TableCell>
-                            <TableCell className="text-right font-mono text-xs whitespace-nowrap">
-                              {fmtBRL(n.vlrCofins ?? 0)}
-                            </TableCell>
-                            <TableCell className="text-right font-mono text-xs whitespace-nowrap">
-                              {fmtBRL(n.vlrCsll ?? 0)}
-                            </TableCell>
-                            <TableCell className="text-right font-mono text-xs whitespace-nowrap">
-                              {fmtBRL(n.vlrIrrf ?? 0)}
-                            </TableCell>
-                            <TableCell className="text-right font-mono text-xs whitespace-nowrap">
-                              {fmtBRL(n.vlrInss ?? 0)}
-                            </TableCell>
-                            <TableCell
-                              className="text-xs max-w-[180px] truncate"
-                              title={
-                                n.codTribNacional
-                                  ? `${n.codTribNacional} - ${getServicoDescricao(n.codTribNacional)}`
-                                  : "—"
-                              }
-                            >
-                              {n.codTribNacional
-                                ? `${n.codTribNacional} - ${getServicoDescricao(n.codTribNacional)}`
-                                : "—"}
+                            <TableCell className="text-xs text-slate-500 max-w-[200px] truncate" title={n.codTribNacional ? `${n.codTribNacional} - ${getServicoDescricao(n.codTribNacional)}` : "—"}>
+                              {n.codTribNacional ? `${n.codTribNacional} - ${getServicoDescricao(n.codTribNacional)}` : "—"}
                             </TableCell>
                             <TableCell>
                               {n.status === "ativa" ? (
-                                <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-emerald-200">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100">
                                   Ativa
-                                </Badge>
+                                </span>
                               ) : (
-                                <Badge className="bg-rose-100 text-rose-700 hover:bg-rose-100 border-rose-200">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-50 text-rose-700 border border-rose-100">
                                   Cancelada
-                                </Badge>
+                                </span>
                               )}
                             </TableCell>
                           </TableRow>
@@ -1307,458 +1829,472 @@ function Dashboard() {
                   </Table>
                 </div>
 
+                {/* Pagination */}
                 {totalPages > 1 && (
-                  <div className="flex items-center justify-between gap-4 pt-4 border-t mt-4 flex-wrap text-sm text-muted-foreground">
+                  <div className="p-4 border-t border-slate-100 bg-slate-50/30 flex items-center justify-between gap-4 flex-wrap text-xs text-slate-500">
                     <div>
                       Exibindo {Math.min(sortedNotas.length, (currentPage - 1) * 100 + 1)} a{" "}
                       {Math.min(sortedNotas.length, currentPage * 100)} de {sortedNotas.length} notas
                     </div>
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1.5">
                       <Button
                         variant="outline"
                         size="sm"
                         disabled={currentPage === 1}
                         onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                        className="h-8 text-xs rounded-lg border-slate-200"
                       >
                         Anterior
                       </Button>
-                      {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
-                        <Button
-                          key={p}
-                          variant={currentPage === p ? "default" : "outline"}
-                          size="sm"
-                          onClick={() => setCurrentPage(p)}
-                          className={currentPage === p ? "bg-indigo-600 hover:bg-indigo-700 text-white" : ""}
-                        >
-                          {p}
-                        </Button>
-                      ))}
+                      <span className="px-3 font-semibold text-slate-700">
+                        Página {currentPage} de {totalPages}
+                      </span>
                       <Button
                         variant="outline"
                         size="sm"
                         disabled={currentPage === totalPages}
                         onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                        className="h-8 text-xs rounded-lg border-slate-200"
                       >
                         Próximo
                       </Button>
                     </div>
                   </div>
                 )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="conciliation" className="space-y-6 outline-none">
-            {/* Dropzone planilha */}
-            <div
-              onDragOver={(e) => {
-                e.preventDefault();
-                setXlsxDragOver(true);
-              }}
-              onDragLeave={() => setXlsxDragOver(false)}
-              onDrop={onXlsxDrop}
-              onClick={() => xlsxRef.current?.click()}
-              className={`rounded-2xl border-2 border-dashed p-8 text-center cursor-pointer transition-all ${
-                xlsxDragOver
-                  ? "border-indigo-500 bg-indigo-50/60 scale-[1.01]"
-                  : "border-slate-300 bg-white hover:border-indigo-400 hover:bg-slate-50"
-              }`}
-            >
-              <input
-                ref={xlsxRef}
-                type="file"
-                accept=".xlsx,.xls"
-                className="hidden"
-                onChange={(e) => e.target.files?.[0] && processXlsxFile(e.target.files[0])}
-              />
-              <div className="flex flex-col items-center gap-2">
-                {isXlsxProcessing ? (
-                  <>
-                    <Loader2 className="h-10 w-10 text-indigo-600 animate-spin" />
-                    <p className="font-semibold">Processando Planilha…</p>
-                  </>
-                ) : (
-                  <>
-                    <div className="h-12 w-12 rounded-full bg-indigo-100 flex items-center justify-center">
-                      <FileSpreadsheet className="h-6 w-6 text-indigo-600" />
-                    </div>
-                    {xlsxFile ? (
-                      <>
-                        <p className="font-semibold text-indigo-600">{xlsxFile.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          Clique ou arraste outro arquivo para substituir
-                        </p>
-                      </>
-                    ) : (
-                      <>
-                        <p className="font-semibold">
-                          Arraste a planilha de relatório (.xlsx) aqui ou clique para selecionar
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          O arquivo Excel deve conter as colunas de "Chave de Acesso" e
-                          "Situação/Status"
-                        </p>
-                      </>
-                    )}
-                  </>
-                )}
               </div>
-            </div>
+            </TabsContent>
 
-            {/* Resultado da conciliação */}
-            {xlsxRows.length > 0 && (
-              <div className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  {/* Configuração de Colunas */}
-                  <Card className="md:col-span-1">
-                    <CardHeader>
-                      <CardTitle className="text-base flex items-center gap-2">
-                        Mapeamento de Colunas
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div>
-                        <label className="text-xs font-semibold text-muted-foreground uppercase block mb-1">
-                          Coluna da Chave de Acesso
-                        </label>
-                        <Select value={keyCol} onValueChange={(val) => setKeyCol(val)}>
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Selecione..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {xlsxHeaders.map((h) => (
-                              <SelectItem key={h} value={h}>
-                                {h}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+            <TabsContent value="conciliation" className="space-y-6 mt-0 outline-none">
+              
+              {/* XLSX DROP ZONE */}
+              <div
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setXlsxDragOver(true);
+                }}
+                onDragLeave={() => setXlsxDragOver(false)}
+                onDrop={onXlsxDrop}
+                onClick={() => xlsxRef.current?.click()}
+                className={`rounded-2xl border border-dashed p-6 text-center cursor-pointer transition-all duration-200 ${
+                  xlsxDragOver
+                    ? "border-indigo-500 bg-indigo-50/50 scale-[1.005]"
+                    : "border-slate-200 bg-white hover:border-indigo-400 hover:bg-slate-50/30"
+                }`}
+              >
+                <input
+                  ref={xlsxRef}
+                  type="file"
+                  accept=".xlsx,.xls"
+                  className="hidden"
+                  onChange={(e) => e.target.files?.[0] && processXlsxFile(e.target.files[0])}
+                />
+                <div className="flex flex-col items-center gap-2">
+                  {isXlsxProcessing ? (
+                    <>
+                      <Loader2 className="h-8 w-8 text-indigo-600 animate-spin" />
+                      <p className="font-semibold text-xs text-slate-700">Conciliando Planilha de Faturamento...</p>
+                    </>
+                  ) : (
+                    <>
+                      <div className="h-10 w-10 rounded-xl bg-indigo-50 flex items-center justify-center">
+                        <FileSpreadsheet className="h-5 w-5 text-indigo-600" />
                       </div>
-
-                      <div>
-                        <label className="text-xs font-semibold text-muted-foreground uppercase block mb-1">
-                          Coluna da Situação/Status
-                        </label>
-                        <Select value={statusCol} onValueChange={(val) => setStatusCol(val)}>
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Selecione..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {xlsxHeaders.map((h) => (
-                              <SelectItem key={h} value={h}>
-                                {h}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div>
-                        <label className="text-xs font-semibold text-muted-foreground uppercase block mb-1">
-                          Coluna de Operação (ISS Retido)
-                        </label>
-                        <Select value={operacaoCol} onValueChange={(val) => setOperacaoCol(val)}>
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Selecione..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {xlsxHeaders.map((h) => (
-                              <SelectItem key={h} value={h}>
-                                {h}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* Estatísticas de Conciliação */}
-                  <div className="md:col-span-2 grid grid-cols-2 gap-4">
-                    <Card className="bg-slate-50/50">
-                      <CardContent className="p-5 flex items-center justify-between">
-                        <div>
-                          <p className="text-xs font-semibold text-muted-foreground uppercase">
-                            Divergentes / Atualizáveis
+                      {xlsxFile ? (
+                        <>
+                          <p className="font-semibold text-xs text-indigo-600">{xlsxFile.name}</p>
+                          <p className="text-[10px] text-slate-400">
+                            Clique ou arraste outro arquivo para substituir
                           </p>
-                          <p className="text-3xl font-extrabold mt-2 text-indigo-600">
-                            {conciliatedStats.updated}
+                        </>
+                      ) : (
+                        <>
+                          <p className="font-semibold text-xs text-slate-700">
+                            Arraste a planilha de fechamento fiscal (.xlsx) aqui ou clique para selecionar
                           </p>
-                        </div>
-                        <div className="h-10 w-10 rounded-full bg-indigo-100 flex items-center justify-center">
-                          <AlertTriangle className="h-5 w-5 text-indigo-600" />
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    <Card className="bg-slate-50/50">
-                      <CardContent className="p-5 flex items-center justify-between">
-                        <div>
-                          <p className="text-xs font-semibold text-muted-foreground uppercase">
-                            Já Conciliadas
+                          <p className="text-[10px] text-slate-400">
+                            O arquivo deve conter as colunas de "Chave de Acesso" e "Situação/Status"
                           </p>
-                          <p className="text-3xl font-extrabold mt-2 text-emerald-600">
-                            {conciliatedStats.alreadyCorrect}
-                          </p>
-                        </div>
-                        <div className="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center">
-                          <Check className="h-5 w-5 text-emerald-600" />
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    <Card className="bg-slate-50/50">
-                      <CardContent className="p-5 flex items-center justify-between">
-                        <div>
-                          <p className="text-xs font-semibold text-muted-foreground uppercase">
-                            Não Encontradas localmente
-                          </p>
-                          <p className="text-3xl font-extrabold mt-2 text-rose-500">
-                            {conciliatedStats.notFound}
-                          </p>
-                        </div>
-                        <div className="h-10 w-10 rounded-full bg-rose-100 flex items-center justify-center">
-                          <XCircle className="h-5 w-5 text-rose-500" />
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    <Card className="bg-slate-50/50">
-                      <CardContent className="p-5 flex items-center justify-between">
-                        <div>
-                          <p className="text-xs font-semibold text-muted-foreground uppercase">
-                            Total Processado
-                          </p>
-                          <p className="text-3xl font-extrabold mt-2">{conciliatedStats.total}</p>
-                        </div>
-                        <div className="h-10 w-10 rounded-full bg-slate-200 flex items-center justify-center">
-                          <FileSpreadsheet className="h-5 w-5 text-slate-600" />
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </div>
+                        </>
+                      )}
+                    </>
+                  )}
                 </div>
+              </div>
 
-                {/* Tabela de Resultados */}
-                <Card>
-                  <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap">
-                    <CardTitle className="text-base flex items-center gap-2">
-                      Resultados da Validação
-                    </CardTitle>
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        onClick={applyUpdates}
-                        disabled={conciliatedStats.updated === 0}
-                        className="bg-indigo-600 text-white hover:bg-indigo-700 font-semibold rounded-lg"
-                      >
-                        <Check className="h-4 w-4 mr-2" /> Aplicar Atualizações no Banco
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={exportValidationCsv}
-                        disabled={conciliatedItems.length === 0}
-                      >
-                        <Download className="h-4 w-4 mr-2" /> Exportar Divergências (CSV)
-                      </Button>
+              {/* CONCILIATION RESULT VIEW */}
+              {xlsxRows.length > 0 && (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    
+                    {/* Columns Mappings Panel */}
+                    <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-xs lg:col-span-4 flex flex-col gap-4">
+                      <div>
+                        <h3 className="text-xs font-bold text-slate-800">Mapeamento de Planilha</h3>
+                        <p className="text-[10px] text-slate-400 mt-0.5">Identifique as colunas de referência do seu relatório Excel</p>
+                      </div>
+
+                      <div className="space-y-3 mt-2">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Coluna Chave de Acesso</label>
+                          <Select value={keyCol} onValueChange={(val) => setKeyCol(val)}>
+                            <SelectTrigger className="w-full h-8 text-xs rounded-lg border-slate-100 bg-slate-50">
+                              <SelectValue placeholder="Selecione..." />
+                            </SelectTrigger>
+                            <SelectContent className="rounded-xl shadow-lg border-slate-100">
+                              {xlsxHeaders.map((h) => (
+                                <SelectItem key={h} value={h}>{h}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Coluna Status / Situação</label>
+                          <Select value={statusCol} onValueChange={(val) => setStatusCol(val)}>
+                            <SelectTrigger className="w-full h-8 text-xs rounded-lg border-slate-100 bg-slate-50">
+                              <SelectValue placeholder="Selecione..." />
+                            </SelectTrigger>
+                            <SelectContent className="rounded-xl shadow-lg border-slate-100">
+                              {xlsxHeaders.map((h) => (
+                                <SelectItem key={h} value={h}>{h}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Coluna Operação (ISS Retido)</label>
+                          <Select value={operacaoCol} onValueChange={(val) => setOperacaoCol(val)}>
+                            <SelectTrigger className="w-full h-8 text-xs rounded-lg border-slate-100 bg-slate-50">
+                              <SelectValue placeholder="Selecione..." />
+                            </SelectTrigger>
+                            <SelectContent className="rounded-xl shadow-lg border-slate-100">
+                              {xlsxHeaders.map((h) => (
+                                <SelectItem key={h} value={h}>{h}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
                     </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="rounded-lg border overflow-x-auto">
+
+                    {/* Stats Dashboard Grid */}
+                    <div className="lg:col-span-8 grid grid-cols-2 gap-4">
+                      
+                      {/* Divergent Notes Card */}
+                      <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-xs flex items-center justify-between bg-white">
+                        <div>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Divergentes / Retificáveis</p>
+                          <p className="text-2xl font-extrabold text-indigo-600 mt-1">{conciliatedStats.updated}</p>
+                          <p className="text-[9px] text-slate-400 mt-0.5">Diferem das notas no banco local</p>
+                        </div>
+                        <div className="h-9 w-9 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600">
+                          <AlertTriangle className="h-4.5 w-4.5" />
+                        </div>
+                      </div>
+
+                      {/* Correct / Conciliated Card */}
+                      <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-xs flex items-center justify-between bg-white">
+                        <div>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Já Conciliadas</p>
+                          <p className="text-2xl font-extrabold text-emerald-600 mt-1">{conciliatedStats.alreadyCorrect}</p>
+                          <p className="text-[9px] text-slate-400 mt-0.5">Alinhadas com banco local</p>
+                        </div>
+                        <div className="h-9 w-9 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600">
+                          <Check className="h-4.5 w-4.5" />
+                        </div>
+                      </div>
+
+                      {/* Missing Card */}
+                      <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-xs flex items-center justify-between bg-white">
+                        <div>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Não Encontradas</p>
+                          <p className="text-2xl font-extrabold text-rose-500 mt-1">{conciliatedStats.notFound}</p>
+                          <p className="text-[9px] text-slate-400 mt-0.5">Inexistentes no banco de dados</p>
+                        </div>
+                        <div className="h-9 w-9 rounded-xl bg-rose-50 flex items-center justify-center text-rose-500">
+                          <XCircle className="h-4.5 w-4.5" />
+                        </div>
+                      </div>
+
+                      {/* Total Processed Card */}
+                      <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-xs flex items-center justify-between bg-white">
+                        <div>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Processado</p>
+                          <p className="text-2xl font-extrabold text-slate-700 mt-1">{conciliatedStats.total}</p>
+                          <p className="text-[9px] text-slate-400 mt-0.5">Linhas identificadas na planilha</p>
+                        </div>
+                        <div className="h-9 w-9 rounded-xl bg-slate-100 flex items-center justify-center text-slate-500">
+                          <FileSpreadsheet className="h-4.5 w-4.5" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* RESULTS TABLE */}
+                  <div className="bg-white border border-slate-100 rounded-2xl shadow-xs overflow-hidden">
+                    <div className="p-5 border-b border-slate-100 flex items-center justify-between gap-4 flex-wrap">
+                      <div>
+                        <h3 className="text-xs font-bold text-slate-800">Resultados da Validação Sintética</h3>
+                        <p className="text-[10px] text-slate-400 mt-0.5">Auditoria linha a linha entre planilha (.xlsx) e XMLs locais</p>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          onClick={applyUpdates}
+                          disabled={conciliatedStats.updated === 0}
+                          className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg text-xs h-8"
+                        >
+                          <Check className="h-3.5 w-3.5 mr-1.5" /> Retificar Status no Banco
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={exportValidationCsv}
+                          disabled={conciliatedItems.length === 0}
+                          className="border-slate-200 hover:bg-slate-50 text-slate-600 text-xs h-8"
+                        >
+                          <Download className="h-3.5 w-3.5 mr-1.5" /> Exportar Relatório de Divergências
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="overflow-x-auto">
                       <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Linha</TableHead>
-                            <TableHead>Chave de Acesso</TableHead>
-                            <TableHead>Nº NFS-e</TableHead>
-                            <TableHead>Prestador</TableHead>
-                            <TableHead>Status (Planilha | Local)</TableHead>
-                            <TableHead>ISS Retido (Planilha | Local)</TableHead>
-                            <TableHead>Resultado</TableHead>
+                        <TableHeader className="bg-slate-50/70">
+                          <TableRow className="border-b border-slate-100">
+                            <TableHead className="font-medium text-slate-400 h-9">Linha</TableHead>
+                            <TableHead className="font-medium text-slate-400 h-9">Chave de Acesso</TableHead>
+                            <TableHead className="font-medium text-slate-400 h-9">Nº NFS-e</TableHead>
+                            <TableHead className="font-medium text-slate-400 h-9">Prestador</TableHead>
+                            <TableHead className="font-medium text-slate-400 h-9">Status (Planilha | Local)</TableHead>
+                            <TableHead className="font-medium text-slate-400 h-9">ISS Retido (Planilha | Local)</TableHead>
+                            <TableHead className="font-medium text-slate-400 h-9">Auditoria</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {conciliatedItems.length === 0 ? (
-                            <TableRow>
-                              <TableCell
-                                colSpan={7}
-                                className="text-center py-8 text-muted-foreground"
-                              >
-                                Mapeie as colunas de Chave e Status acima para visualizar os dados.
+                          {conciliatedItems.map((item, idx) => (
+                            <TableRow
+                              key={idx}
+                              className={`border-b border-slate-50 hover:bg-slate-50/30 transition-colors ${
+                                item.statusChanged || item.issRetidoDivergent ? "bg-amber-50/20 hover:bg-amber-50/40" : ""
+                              }`}
+                            >
+                              <TableCell className="font-mono text-[10px] text-slate-400">{item.rowNumber}</TableCell>
+                              <TableCell className="font-mono text-[10px] text-slate-500 max-w-[220px] truncate" title={item.rawKey}>
+                                {item.rawKey}
                               </TableCell>
-                            </TableRow>
-                          ) : (
-                            conciliatedItems.map((item, idx) => (
-                              <TableRow
-                                key={idx}
-                                className={
-                                  item.statusChanged || item.issRetidoDivergent
-                                    ? "bg-amber-50/40 hover:bg-amber-50/60"
-                                    : ""
-                                }
-                              >
-                                <TableCell className="text-xs font-mono">
-                                  {item.rowNumber}
-                                </TableCell>
-                                <TableCell
-                                  className="text-xs font-mono max-w-[220px] truncate"
-                                  title={item.rawKey}
-                                >
-                                  {item.rawKey}
-                                </TableCell>
-                                <TableCell className="text-xs font-mono">{item.nNFSe}</TableCell>
-                                <TableCell
-                                  className="text-xs max-w-[150px] truncate"
-                                  title={item.prestador}
-                                >
-                                  {item.prestador}
-                                </TableCell>
-                                <TableCell className="text-xs">
-                                  <div className="flex items-center gap-1">
-                                    <Badge
-                                      className={
-                                        item.statusExcel === "ativa"
-                                          ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-emerald-200"
-                                          : "bg-rose-100 text-rose-700 hover:bg-rose-100 border-rose-200"
-                                      }
-                                    >
-                                      {item.statusExcel === "ativa" ? "Ativa" : "Cancelada"}
-                                    </Badge>
-                                    <span className="text-muted-foreground">|</span>
-                                    {item.statusLocal === "nao_encontrado" ? (
-                                      <span className="text-slate-400 text-xs">Inexistente</span>
-                                    ) : (
-                                      <Badge
-                                        className={
-                                          item.statusLocal === "ativa"
-                                            ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-emerald-200"
-                                            : "bg-rose-100 text-rose-700 hover:bg-rose-100 border-rose-200"
-                                        }
-                                      >
-                                        {item.statusLocal === "ativa" ? "Ativa" : "Cancelada"}
-                                      </Badge>
-                                    )}
-                                  </div>
-                                </TableCell>
-                                <TableCell className="text-xs">
-                                  <div className="flex items-center gap-1">
-                                    {item.issRetidoExcel ? (
-                                      <Badge
-                                        variant="outline"
-                                        className={
-                                          item.issRetidoExcel === "Sim"
-                                            ? "bg-amber-50 text-amber-700 border-amber-200"
-                                            : "bg-slate-50 text-slate-600 border-slate-200"
-                                        }
-                                      >
-                                        {item.issRetidoExcel}
-                                      </Badge>
-                                    ) : (
-                                      <span className="text-slate-400">—</span>
-                                    )}
-                                    <span className="text-muted-foreground">|</span>
-                                    {item.statusLocal === "nao_encontrado" ? (
-                                      <span className="text-slate-400 text-xs">Inexistente</span>
-                                    ) : item.issRetidoLocal ? (
-                                      <Badge
-                                        variant="outline"
-                                        className={
-                                          item.issRetidoLocal === "Sim"
-                                            ? "bg-amber-50 text-amber-700 border-amber-200"
-                                            : "bg-slate-50 text-slate-600 border-slate-200"
-                                        }
-                                      >
-                                        {item.issRetidoLocal}
-                                      </Badge>
-                                    ) : (
-                                      <span className="text-slate-400">—</span>
-                                    )}
-                                  </div>
-                                </TableCell>
-                                <TableCell className="text-xs font-semibold">
+                              <TableCell className="font-mono text-[10px] text-slate-600 font-semibold">{item.nNFSe}</TableCell>
+                              <TableCell className="text-xs text-slate-600 max-w-[150px] truncate" title={item.prestador}>
+                                {item.prestador}
+                              </TableCell>
+                              <TableCell className="text-xs">
+                                <div className="flex items-center gap-1.5">
+                                  <span className={`px-1.5 py-0.5 rounded text-[9px] font-semibold ${item.statusExcel === "ativa" ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>
+                                    {item.statusExcel === "ativa" ? "Ativa" : "Canc."}
+                                  </span>
+                                  <span className="text-slate-300">|</span>
                                   {item.statusLocal === "nao_encontrado" ? (
-                                    <span className="text-rose-500">Inexistente no Banco</span>
-                                  ) : item.statusChanged || item.issRetidoDivergent ? (
-                                    <span className="text-amber-600 flex items-center gap-1">
-                                      <AlertTriangle className="h-3.5 w-3.5" />
-                                      {item.statusChanged && item.issRetidoDivergent
-                                        ? "Status e ISS divergentes"
-                                        : item.statusChanged
-                                          ? "Status divergente"
-                                          : "ISS Retido divergente"}
-                                    </span>
+                                    <span className="text-slate-400 text-[9px] font-medium">Inexistente</span>
                                   ) : (
-                                    <span className="text-emerald-600 flex items-center gap-1">
-                                      <Check className="h-3.5 w-3.5" /> Conciliado
+                                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-semibold ${item.statusLocal === "ativa" ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>
+                                      {item.statusLocal === "ativa" ? "Ativa" : "Canc."}
                                     </span>
                                   )}
-                                </TableCell>
-                              </TableRow>
-                            ))
-                          )}
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-xs">
+                                <div className="flex items-center gap-1.5">
+                                  {item.issRetidoExcel ? (
+                                    <span className={`px-1.5 py-0.5 rounded border text-[9px] font-medium ${item.issRetidoExcel === "Sim" ? "bg-amber-50 text-amber-700 border-amber-100" : "bg-slate-50 text-slate-500 border-slate-100"}`}>
+                                      {item.issRetidoExcel}
+                                    </span>
+                                  ) : (
+                                    <span className="text-slate-300">—</span>
+                                  )}
+                                  <span className="text-slate-300">|</span>
+                                  {item.statusLocal === "nao_encontrado" ? (
+                                    <span className="text-slate-400 text-[9px] font-medium">Inexistente</span>
+                                  ) : item.issRetidoLocal ? (
+                                    <span className={`px-1.5 py-0.5 rounded border text-[9px] font-medium ${item.issRetidoLocal === "Sim" ? "bg-amber-50 text-amber-700 border-amber-100" : "bg-slate-50 text-slate-500 border-slate-100"}`}>
+                                      {item.issRetidoLocal}
+                                    </span>
+                                  ) : (
+                                    <span className="text-slate-300">—</span>
+                                  )}
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-xs font-semibold">
+                                {item.statusLocal === "nao_encontrado" ? (
+                                  <span className="text-rose-500 text-[10px] font-semibold flex items-center gap-1">
+                                    <XCircle className="h-3 w-3" /> Inexistente no Banco
+                                  </span>
+                                ) : item.statusChanged || item.issRetidoDivergent ? (
+                                  <span className="text-amber-600 text-[10px] font-semibold flex items-center gap-1">
+                                    <AlertTriangle className="h-3.5 w-3.5" />
+                                    {item.statusChanged && item.issRetidoDivergent
+                                      ? "Status e ISS divergentes"
+                                      : item.statusChanged
+                                        ? "Status divergente"
+                                        : "ISS Retido divergente"}
+                                  </span>
+                                ) : (
+                                  <span className="text-emerald-600 text-[10px] font-semibold flex items-center gap-1">
+                                    <Check className="h-3.5 w-3.5" /> Conciliado
+                                  </span>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          ))}
                         </TableBody>
                       </Table>
                     </div>
-                  </CardContent>
-                </Card>
-              </div>
-            )}
-          </TabsContent>
-        </Tabs>
+                  </div>
+                </div>
+              )}
+            </TabsContent>
+          </Tabs>
 
-        <p className="text-center text-xs text-muted-foreground py-6 mt-6 border-t">
-          🔒 Processamento 100% local — seus XMLs e planilhas nunca saem do seu navegador.
-        </p>
-      </main>
+          <footer className="text-center text-[10px] text-slate-400 pt-8 mt-12 border-t border-slate-100">
+            🔒 Processamento 100% Client-Side local — Seus XMLs NFS-e e planilhas financeiras nunca saem do seu navegador.
+          </footer>
+        </main>
+      </div>
+
+      {/* RIGHT PANEL: ALERTS & ACTIVITIES (ByeWind style: clean drawer sliding from right) */}
+      <aside
+        className={`fixed inset-y-0 right-0 z-40 bg-white border-l border-slate-100 w-80 flex flex-col justify-between transition-transform duration-300 ease-in-out transform shadow-xl md:shadow-none flex-shrink-0 ${
+          rightPanelOpen ? "translate-x-0 animate-in slide-in-from-right duration-300" : "translate-x-full"
+        }`}
+      >
+        <div className="flex flex-col flex-1 overflow-y-auto px-5 py-6 gap-6">
+          <div className="flex items-center justify-between border-b border-slate-50 pb-3">
+            <div>
+              <h3 className="text-xs font-bold text-slate-800">Alertas & Atividades</h3>
+              <p className="text-[10px] text-slate-400 mt-0.5">Linha do tempo de auditorias e importações</p>
+            </div>
+            <button
+              onClick={() => setRightPanelOpen(false)}
+              className="h-6 w-6 rounded-lg hover:bg-slate-50 flex items-center justify-center text-slate-400 hover:text-slate-700 transition-colors"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+
+          {/* Activity Timeline */}
+          <div className="flex flex-col gap-4">
+            <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Histórico Recente</h4>
+            
+            <div className="relative pl-4 border-l border-slate-100 flex flex-col gap-5">
+              {activities.map((act) => {
+                const colors = {
+                  upload: "bg-blue-500",
+                  conciliation: "bg-purple-500",
+                  clear: "bg-rose-500",
+                  update: "bg-emerald-500",
+                };
+                return (
+                  <div key={act.id} className="relative group">
+                    {/* Timeline node */}
+                    <span className={`absolute -left-[20px] top-1.5 h-2 w-2 rounded-full ring-4 ring-white ${colors[act.type] || "bg-slate-400"}`} />
+                    
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-xs font-bold text-slate-800 leading-tight">{act.title}</span>
+                      <p className="text-[10px] text-slate-500 leading-relaxed">{act.description}</p>
+                      <span className="text-[9px] text-slate-400 font-mono mt-1">
+                        {act.time.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Quick Team Contacts (ByeWind style: Contacts section at the bottom) */}
+          <div className="flex flex-col gap-3 mt-6 pt-6 border-t border-slate-50">
+            <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Equipe Financeira</h4>
+            
+            <div className="flex flex-col gap-3">
+              <ContactItem name="Natali Craig" role="Contadora Líder Samel" avatarText="NC" />
+              <ContactItem name="Drew Cano" role="Diretor Financeiro" avatarText="DC" />
+              <ContactItem name="Orlando Diggs" role="Analista Fiscal" avatarText="OD" />
+              <ContactItem name="Andi Lane" role="Auditor Externo" avatarText="AL" />
+            </div>
+          </div>
+        </div>
+
+        <div className="p-4 border-t border-slate-100 text-center text-[10px] text-slate-400 font-medium bg-slate-50/50">
+          Auditoria de Fechamento Executivo
+        </div>
+      </aside>
     </div>
   );
 }
 
-function KpiCard({
+// Sub-components helper for Contacts
+function ContactItem({ name, role, avatarText }: { name: string; role: string; avatarText: string }) {
+  return (
+    <div className="flex items-center gap-2.5 p-1 hover:bg-slate-50 rounded-lg transition-colors cursor-pointer">
+      <div className="h-7 w-7 rounded-full bg-slate-100 text-[10px] font-bold text-slate-600 flex items-center justify-center flex-shrink-0">
+        {avatarText}
+      </div>
+      <div className="overflow-hidden">
+        <p className="text-[11px] font-bold text-slate-700 leading-tight truncate">{name}</p>
+        <p className="text-[9px] text-slate-400 truncate mt-0.5">{role}</p>
+      </div>
+    </div>
+  );
+}
+
+// Redesigned KpiCard for ByeWind theme
+function KpiCardNew({
   label,
   value,
-  icon,
-  tone,
+  trendText,
+  isPositive,
   subtext,
+  tone,
 }: {
   label: string;
   value: string;
-  icon: React.ReactNode;
-  tone: "indigo" | "purple" | "emerald" | "rose";
-  subtext?: string;
+  trendText: string;
+  isPositive: boolean;
+  subtext: string;
+  tone: "blue" | "purple" | "green" | "rose";
 }) {
-  const tones: Record<string, string> = {
-    indigo: "from-indigo-500 to-indigo-600 shadow-indigo-500/30",
-    purple: "from-purple-500 to-fuchsia-600 shadow-purple-500/30",
-    emerald: "from-emerald-500 to-teal-600 shadow-emerald-500/30",
-    rose: "from-rose-500 to-red-600 shadow-rose-500/30",
+  const bgColors = {
+    blue: "bg-blue-50/70 border-blue-100/70 text-blue-800",
+    purple: "bg-purple-50/70 border-purple-100/70 text-purple-800",
+    green: "bg-emerald-50/70 border-emerald-100/70 text-emerald-800",
+    rose: "bg-rose-50/70 border-rose-100/70 text-rose-800",
   };
+
   return (
-    <Card className="overflow-hidden">
-      <CardContent className="p-5">
-        <div className="flex items-start justify-between">
-          <div>
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              {label}
-            </p>
-            <p className="text-2xl font-bold tracking-tight mt-2">{value}</p>
-            {subtext && <p className="text-[10px] text-muted-foreground mt-1.5 leading-relaxed">{subtext}</p>}
-          </div>
-          <div
-            className={`h-10 w-10 rounded-xl bg-gradient-to-br ${tones[tone]} text-white flex items-center justify-center shadow-lg`}
-          >
-            {icon}
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+    <div className={`p-5 rounded-2xl border ${bgColors[tone]} flex flex-col justify-between shadow-xs hover:shadow-sm transition-all duration-200 bg-white`}>
+      <div className="space-y-1">
+        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{label}</p>
+        <p className="text-2xl font-extrabold text-slate-900 tracking-tight">{value}</p>
+      </div>
+
+      <div className="flex items-center gap-2 mt-4 pt-2 border-t border-slate-100/30">
+        <span
+          className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[9px] font-bold ${
+            isPositive ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"
+          }`}
+        >
+          {trendText} {isPositive ? "↗" : "↘"}
+        </span>
+        <span className="text-[9px] text-slate-400 font-medium truncate">{subtext}</span>
+      </div>
+    </div>
   );
 }
 
 function EmptyState() {
   return (
-    <div className="h-full flex items-center justify-center text-sm text-muted-foreground">
+    <div className="h-full flex items-center justify-center text-sm text-slate-400">
       Sem dados para os filtros atuais.
     </div>
   );
