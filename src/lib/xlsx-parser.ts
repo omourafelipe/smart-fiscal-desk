@@ -112,11 +112,18 @@ export function parseExcelFile(arrayBuffer: ArrayBuffer): {
   return { headers, rows };
 }
 
-/**
- * Normaliza os valores de status da planilha para os padrões ("ativa" ou "cancelada") do IndexedDB
- */
 export function parseExcelStatus(rawStatus: string): "ativa" | "cancelada" {
   const norm = normalizeString(rawStatus);
+
+  // Se contiver negações de cancelamento, a nota é ativa
+  if (
+    norm.includes("naocancel") ||
+    norm.includes("semcancel") ||
+    norm.includes("naosubst") ||
+    norm.includes("semsubst")
+  ) {
+    return "ativa";
+  }
 
   const cancelTerms = [
     "cancelada",
