@@ -403,8 +403,8 @@ function Dashboard() {
   const faturamento = notasAtivas.reduce((sum, n) => sum + n.valor, 0);
   const ticketMedio = notasAtivas.length ? faturamento / notasAtivas.length : 0;
 
-  // Comparative period trend calculations
-  const prevNotasAtivas = useMemo(() => {
+  // Comparative period trend calculations (unfiltered by status)
+  const prevNotasFiltradas = useMemo(() => {
     if (!todasNotas) return [];
     
     let prevAno = anoFiltro;
@@ -439,7 +439,6 @@ function Dashboard() {
     }
 
     return todasNotas.filter((n) => {
-      if (n.status !== "ativa") return false;
       if (empresaFiltro !== "__all__" && n.cnpjPrestador !== empresaFiltro) return false;
       const dateStr = getDateField(n);
       if (prevAno !== "__all__" && dateStr.slice(0, 4) !== prevAno) return false;
@@ -457,6 +456,14 @@ function Dashboard() {
       return true;
     });
   }, [todasNotas, empresaFiltro, mesFiltro, anoFiltro, cServFiltro, searchCliente, anos, getDateField]);
+
+  const prevNotasAtivas = useMemo(() => {
+    return prevNotasFiltradas.filter((n) => n.status === "ativa");
+  }, [prevNotasFiltradas]);
+
+  const prevNotasCanceladas = useMemo(() => {
+    return prevNotasFiltradas.filter((n) => n.status === "cancelada");
+  }, [prevNotasFiltradas]);
 
   const prevFaturamento = useMemo(() => {
     return prevNotasAtivas.reduce((sum, n) => sum + n.valor, 0);
@@ -477,6 +484,27 @@ function Dashboard() {
 
   const faturamentoTrend = useMemo(() => getTrend(faturamento, prevFaturamento), [faturamento, prevFaturamento]);
   const notasAtivasTrend = useMemo(() => getTrend(notasAtivas.length, prevNotasCount), [notasAtivas.length, prevNotasCount]);
+
+  // Cancelamento & Substituição Rates & Trends
+  const valorCancelado = useMemo(() => {
+    return notasCanceladas.reduce((sum, n) => sum + n.valor, 0);
+  }, [notasCanceladas]);
+
+  const cancelRate = useMemo(() => {
+    const totalCount = notasFiltradas.length;
+    return totalCount ? (notasCanceladas.length / totalCount) * 100 : 0;
+  }, [notasCanceladas, notasFiltradas]);
+
+  const prevValorCancelado = useMemo(() => {
+    return prevNotasCanceladas.reduce((sum, n) => sum + n.valor, 0);
+  }, [prevNotasCanceladas]);
+
+  const prevCancelRate = useMemo(() => {
+    const totalCount = prevNotasFiltradas.length;
+    return totalCount ? (prevNotasCanceladas.length / totalCount) * 100 : 0;
+  }, [prevNotasCanceladas, prevNotasFiltradas]);
+
+  const cancelRateTrend = useMemo(() => getTrend(cancelRate, prevCancelRate), [cancelRate, prevCancelRate]);
 
   // Plano de Saúde (042201) Faturamento and Trend
   const plansFaturamento = useMemo(() => {
@@ -661,8 +689,9 @@ function Dashboard() {
     const byKey = new Map<string, number>();
     const useDay = anoFiltro !== "__all__" && mesFiltro !== "__all__";
     notasAtivas.forEach((n) => {
-      if (!n.dhEmi) return;
-      const key = useDay ? n.dhEmi.slice(0, 10) : n.dhEmi.slice(0, 7);
+      const dateStr = getDateField(n);
+      if (!dateStr) return;
+      const key = useDay ? dateStr.slice(0, 10) : dateStr.slice(0, 7);
       byKey.set(key, (byKey.get(key) ?? 0) + n.valor);
     });
     return Array.from(byKey.entries())
@@ -671,7 +700,7 @@ function Dashboard() {
         label: useDay ? formatarDiaMes(k) : formatarMesAnoCurto(k),
         valor: v,
       }));
-  }, [notasAtivas, mesFiltro, anoFiltro]);
+  }, [notasAtivas, mesFiltro, anoFiltro, getDateField]);
 
   // Pie chart
   const pieData = useMemo(() => {
@@ -696,31 +725,48 @@ function Dashboard() {
   const pjPfData = useMemo(() => {
     let pjTotal = 0;
     let pfTotal = 0;
+    let pjCount = 0;
+    let pfCount = 0;
 
     notasAtivas.forEach((n) => {
       const cleanKey = String(n.cnpjCpfCliente ?? "").replace(/\D/g, "");
       if (cleanKey.length === 14) {
         pjTotal += n.valor;
+        pjCount++;
       } else if (cleanKey.length === 11) {
         pfTotal += n.valor;
+        pfCount++;
       } else {
         // Fallback: se tiver mais que 11 caracteres, assume PJ
         if (cleanKey.length > 11) {
           pjTotal += n.valor;
+          pjCount++;
         } else if (cleanKey.length > 0) {
           pfTotal += n.valor;
+          pfCount++;
         } else {
           pjTotal += n.valor;
+          pjCount++;
         }
       }
     });
 
     const data = [];
-    if (pjTotal > 0) {
-      data.push({ name: "Pessoa Jurídica (PJ)", value: pjTotal });
+    if (pjTotal > 0 || pjCount > 0) {
+      data.push({
+        name: "Pessoa Jurídica (Corporate/PME)",
+        value: pjTotal,
+        count: pjCount,
+        ticketMedio: pjCount ? pjTotal / pjCount : 0
+      });
     }
-    if (pfTotal > 0) {
-      data.push({ name: "Pessoa Física (PF)", value: pfTotal });
+    if (pfTotal > 0 || pfCount > 0) {
+      data.push({
+        name: "Pessoa Física (Individual/Familiar)",
+        value: pfTotal,
+        count: pfCount,
+        ticketMedio: pfCount ? pfTotal / pfCount : 0
+      });
     }
     return data;
   }, [notasAtivas]);
@@ -745,8 +791,8 @@ function Dashboard() {
 
   // Ordenação de notas filtradas
   const sortedNotas = useMemo(() => {
-    return [...notasFiltradas].sort((a, b) => (b.dhEmi || "").localeCompare(a.dhEmi || ""));
-  }, [notasFiltradas]);
+    return [...notasFiltradas].sort((a, b) => (getDateField(b) || "").localeCompare(getDateField(a) || ""));
+  }, [notasFiltradas, getDateField]);
 
   // Paginação
   const paginatedNotas = useMemo(() => {
@@ -1509,7 +1555,7 @@ function Dashboard() {
               </div>
 
               {/* METRICS / KPI GRID (ByeWind style: clean card layout, light pastel colors, trend arrows) */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-5">
                 <KpiCardNew
                   label="Faturamento Válido"
                   value={fmtBRL(faturamento)}
@@ -1540,6 +1586,14 @@ function Dashboard() {
                   trendText={notasAtivasTrend.text}
                   isPositive={notasAtivasTrend.isPositive}
                   subtext="notas fiscais com status ativo"
+                  tone="amber"
+                />
+                <KpiCardNew
+                  label="Cancelamento / Substituição"
+                  value={`${cancelRate.toFixed(1)}%`}
+                  trendText={cancelRateTrend.text}
+                  isPositive={!cancelRateTrend.isPositive}
+                  subtext={`${fmtBRL(valorCancelado)} estornados`}
                   tone="rose"
                 />
               </div>
@@ -1775,14 +1829,17 @@ function Dashboard() {
                     )}
                   </div>
 
-                  <div className="flex justify-around items-center mt-3 pt-3 border-t border-slate-50 text-xs">
+                  <div className="flex flex-col gap-2.5 mt-3 pt-3 border-t border-slate-50 text-xs">
                     {pjPfData.map((item, idx) => (
-                      <div key={idx} className="flex flex-col items-center">
+                      <div key={idx} className="flex items-center justify-between">
                         <div className="flex items-center gap-1.5 text-[10px] text-slate-500">
                           <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: idx === 0 ? "#6366f1" : "#ec4899" }} />
-                          <span>{item.name.split(" ")[0]}</span>
+                          <span className="font-semibold text-slate-700 truncate max-w-[150px]">{item.name}</span>
                         </div>
-                        <span className="font-bold text-slate-800 mt-0.5">{fmtBRL(item.value)}</span>
+                        <div className="text-right flex flex-col items-end">
+                          <span className="font-bold text-slate-800">{fmtBRL(item.value)}</span>
+                          <span className="text-[9px] text-slate-400 font-mono">T. Médio: {fmtBRL(item.ticketMedio)} ({item.count} notas)</span>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -1850,28 +1907,46 @@ function Dashboard() {
                           <th className="pb-2 font-medium">Nome / CNPJ</th>
                           <th className="pb-2 text-center font-medium">Notas</th>
                           <th className="pb-2 text-right font-medium">Faturamento</th>
+                          <th className="pb-2 text-right font-medium">Share</th>
                         </tr>
                       </thead>
                       <tbody>
                         {topClientesList.length === 0 ? (
                           <tr>
-                            <td colSpan={3} className="text-center text-slate-400 py-12">Nenhum cliente registrado</td>
+                            <td colSpan={4} className="text-center text-slate-400 py-12">Nenhum cliente registrado</td>
                           </tr>
                         ) : (
-                          topClientesList.map((client, index) => (
-                            <tr key={index} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
-                              <td className="py-2.5 max-w-[120px]">
-                                <div className="font-semibold text-slate-700 truncate" title={client.nome}>
-                                  {client.nome}
-                                </div>
-                                <div className="text-[9px] text-slate-400 font-mono mt-0.5">
-                                  {formatarCnpjCpf(client.cnpjCpf)}
-                                </div>
-                              </td>
-                              <td className="py-2.5 text-center text-slate-600 font-mono text-[10px]">{client.count}</td>
-                              <td className="py-2.5 text-right font-bold text-slate-800">{fmtBRL(client.total)}</td>
-                            </tr>
-                          ))
+                          topClientesList.map((client, index) => {
+                            const share = faturamento > 0 ? (client.total / faturamento) * 100 : 0;
+                            const isHighConcentration = share > 10;
+                            return (
+                              <tr key={index} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
+                                <td className="py-2.5 max-w-[120px]">
+                                  <div className="font-semibold text-slate-700 truncate" title={client.nome}>
+                                    {client.nome}
+                                  </div>
+                                  <div className="text-[9px] text-slate-400 font-mono mt-0.5">
+                                    {formatarCnpjCpf(client.cnpjCpf)}
+                                  </div>
+                                </td>
+                                <td className="py-2.5 text-center text-slate-600 font-mono text-[10px]">{client.count}</td>
+                                <td className="py-2.5 text-right font-bold text-slate-800">{fmtBRL(client.total)}</td>
+                                <td className="py-2.5 text-right font-medium">
+                                  <div className={`flex items-center justify-end gap-1 font-mono text-[10px] ${
+                                    isHighConcentration ? "text-rose-600 font-bold" : "text-slate-500"
+                                  }`}>
+                                    {isHighConcentration && <AlertTriangle className="h-3 w-3 text-rose-500 animate-pulse" />}
+                                    {share.toFixed(1)}%
+                                  </div>
+                                  {isHighConcentration && (
+                                    <span className="text-[7px] text-rose-500 font-bold uppercase tracking-wider block">
+                                      Alta Conc.
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })
                         )}
                       </tbody>
                     </table>
@@ -2401,13 +2476,14 @@ function KpiCardNew({
   trendText: string;
   isPositive: boolean;
   subtext: string;
-  tone: "blue" | "purple" | "green" | "rose";
+  tone: "blue" | "purple" | "green" | "rose" | "amber";
 }) {
   const bgColors = {
     blue: "bg-blue-50/70 border-blue-100/70 text-blue-800",
     purple: "bg-purple-50/70 border-purple-100/70 text-purple-800",
     green: "bg-emerald-50/70 border-emerald-100/70 text-emerald-800",
     rose: "bg-rose-50/70 border-rose-100/70 text-rose-800",
+    amber: "bg-amber-50/70 border-amber-100/70 text-amber-800",
   };
 
   return (

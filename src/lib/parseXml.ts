@@ -189,13 +189,52 @@ export function parseNfseXml(xml: string): NotaFiscal | null {
         pick(inf, ["DPS", "infDPS", "serv", "cServ"]) ??
         "",
     ).trim();
-    const dCompet =
-      String(pick(inf, ["DPS", "infDPS", "dCompet"]) ?? "").trim() ||
-      (dhEmi ? dhEmi.slice(0, 10) : "");
 
+    let dCompet = String(
+      pick(inf, ["DPS", "infDPS", "dCompet"]) ??
+      pick(inf, ["dCompet"]) ??
+      pick(inf, ["Competencia"]) ??
+      pick(inf, ["competencia"]) ??
+      ""
+    ).trim();
+
+    // If it is just YYYY-MM (7 chars), append -01 to make it YYYY-MM-DD
+    if (dCompet.length === 7 && dCompet.includes("-")) {
+      dCompet = `${dCompet}-01`;
+    } else if (dCompet.length === 6 && !dCompet.includes("-")) {
+      // YYYYMM format
+      dCompet = `${dCompet.slice(0, 4)}-${dCompet.slice(4, 6)}-01`;
+    } else if (dCompet && isNaN(Date.parse(dCompet))) {
+      dCompet = "";
+    }
+
+    if (!dCompet) {
+      dCompet = dhEmi ? dhEmi.slice(0, 10) : "";
+    }
+
+    // Advanced cancellation & substitution logic
     // Active statuses: 100 (autorizada). Cancelled: 101, 102, 135, 155 etc.
     const cancelCodes = new Set(["101", "102", "135", "155"]);
-    const isCancelled = hasSubst || cancelCodes.has(cStat);
+    
+    // Check for cancellation/substitution events or tags
+    const jsonStr = JSON.stringify(json).toLowerCase();
+    const hasCancellationKeywords =
+      jsonStr.includes("pedidocancelamento") ||
+      jsonStr.includes("infpedcanc") ||
+      jsonStr.includes("cannfse") ||
+      jsonStr.includes("cancelamento") ||
+      jsonStr.includes("substituicao") ||
+      jsonStr.includes("substnfse") ||
+      jsonStr.includes("substituida") ||
+      jsonStr.includes("dsubst");
+
+    const situacao = pick(inf, ["situacao"]) ?? pick(inf, ["DPS", "infDPS", "situacao"]);
+    const isCancelled =
+      hasSubst ||
+      cancelCodes.has(cStat) ||
+      situacao === "2" || situacao === 2 || // 2 = Cancelada
+      situacao === "3" || situacao === 3 || // 3 = Substituída
+      hasCancellationKeywords;
 
     if (!nNFSe || !cnpjPrestador) return null;
 
