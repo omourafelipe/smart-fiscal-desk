@@ -3491,7 +3491,7 @@ function Dashboard() {
                             <TableHead className="font-medium text-muted-foreground h-9">Situação</TableHead>
                             <TableHead className="font-medium text-muted-foreground h-9">Nº NFS-e</TableHead>
                             <TableHead className="font-medium text-muted-foreground h-9">Competência</TableHead>
-                            <TableHead className="font-medium text-muted-foreground h-9">Tomador</TableHead>
+                            <TableHead className="text-right font-medium text-muted-foreground h-9">Vlr. ISS</TableHead>
                             <TableHead className="font-medium text-muted-foreground h-9">CNPJ Prestador</TableHead>
                             <TableHead className="font-medium text-muted-foreground h-9">Fornecedor</TableHead>
                             <TableHead className="text-right font-medium text-muted-foreground h-9">Vlr. Bruto</TableHead>
