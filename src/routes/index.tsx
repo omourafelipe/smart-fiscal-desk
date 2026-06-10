@@ -1016,9 +1016,6 @@ function Dashboard() {
         let statusExcel = parseExcelStatus(rawStatus);
 
         const local = localMap.get(key);
-        if (local && local.status === "válida" && statusExcel === "cancelada") {
-          statusExcel = "válida";
-        }
 
         const rawOperacao = opCol ? String(row[opCol] ?? "").trim() : "";
         const issRetidoExcel = parseExcelOperacao(rawOperacao);
@@ -2129,7 +2126,7 @@ function Dashboard() {
                         paginatedNotas.map((n) => (
                           <TableRow key={n.id} className="border-b border-border/50 hover:bg-muted/40 transition-colors">
                             <TableCell>
-                              {getNoteStatus(n) === "ativa" ? (
+                              {getNoteStatus(n) === "válida" ? (
                                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/25">
                                   Válida
                                 </span>

@@ -115,7 +115,7 @@ export function parseExcelFile(arrayBuffer: ArrayBuffer): {
 export function parseExcelStatus(rawStatus: string): "válida" | "cancelada" {
   const norm = normalizeString(rawStatus);
 
-  // Se contiver negações de cancelamento, a nota é ativa
+  // Se contiver negações de cancelamento, a nota é válida
   if (
     norm.includes("naocancel") ||
     norm.includes("semcancel") ||
@@ -126,7 +126,7 @@ export function parseExcelStatus(rawStatus: string): "válida" | "cancelada" {
   }
 
   if (norm.includes("emitida") || norm.includes("paga")) {
-    return "ativa";
+    return "válida";
   }
 
   const cancelTerms = [
