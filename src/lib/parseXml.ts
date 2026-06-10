@@ -267,3 +267,160 @@ export function parseNfseXml(xml: string): NotaFiscal | null {
     return null;
   }
 }
+
+/**
+ * Parseia um XML de NFS-e Nacional na perspectiva do TOMADOR.
+ * Retorna null se o CNPJ do tomador não estiver na lista de CNPJs do grupo.
+ *
+ * @param xml      Conteúdo do arquivo XML
+ * @param cnpjsGrupo  Set de CNPJs (apenas dígitos) das empresas do grupo
+ */
+export function parseNfseXmlTomada(
+  xml: string,
+  cnpjsGrupo: Set<string>,
+): import("./db").NotaFiscalTomada | null {
+  try {
+    const json = parser.parse(xml);
+    const NFSe = findNFSe(json) as Record<string, unknown> | null;
+    if (!NFSe) return null;
+    const inf = NFSe.infNFSe as Record<string, unknown> | null;
+    if (!inf) return null;
+
+    // Tomador: empresa do grupo que contratou o serviço
+    const cnpjTomador = String(pick(inf, ["DPS", "infDPS", "toma", "CNPJ"]) ?? "").trim().replace(/\D/g, "");
+    const nomeTomador = String(pick(inf, ["DPS", "infDPS", "toma", "xNome"]) ?? "").trim();
+
+    // Valida se o tomador é uma empresa do grupo
+    if (!cnpjTomador || !cnpjsGrupo.has(cnpjTomador)) return null;
+
+    // Prestador: fornecedor externo que emitiu a nota
+    const cnpjPrestador = String(pick(inf, ["emit", "CNPJ"]) ?? "").trim();
+    const nomePrestador = String(pick(inf, ["emit", "xNome"]) ?? "").trim();
+
+    if (!cnpjPrestador) return null;
+
+    const nNFSe = String(inf.nNFSe ?? "").trim();
+    if (!nNFSe) return null;
+
+    let dhEmi = String(pick(inf, ["DPS", "infDPS", "dhEmi"]) ?? "").trim();
+    if (dhEmi && isNaN(Date.parse(dhEmi))) dhEmi = "";
+
+    const valor = getNumberFallback(inf, [
+      ["vServPrest", "vServ"],
+      ["vServ"],
+    ]);
+
+    const vlrLiquido = getNumberFallback(inf, [
+      ["vLiq"],
+      ["vLiquido"],
+    ]) || valor;
+
+    const servico = String(pick(inf, ["DPS", "infDPS", "serv", "cServ", "xDescServ"]) ?? "").trim();
+
+    const cStat = String(inf.cStat ?? "").trim();
+
+    const chave = String(inf["@_Id"] ?? "")
+      .replace(/\D/g, "")
+      .trim();
+
+    const codTribNacional = String(
+      pick(inf, ["DPS", "infDPS", "serv", "cServ", "cTribNac"]) ??
+        pick(inf, ["DPS", "infDPS", "serv", "cTribNac"]) ??
+        pick(inf, ["DPS", "infDPS", "serv", "cServ"]) ??
+        "",
+    ).trim();
+
+    // ISS — responsabilidade do tomador de reter quando aplicável
+    const issRetidoFlag = getIssRetido(inf);
+    const vlrIssRetRaw = getNumberFallback(inf, [
+      ["vISSRet"],
+      ["trib", "tribMun", "vISSRet"],
+    ]);
+    const vlrIssQN = getNumberFallback(inf, [
+      ["vISSQN"],
+      ["vISS"],
+      ["trib", "tribMun", "vISSQN"],
+      ["trib", "tribMun", "vISS"],
+    ]);
+    const vlrIssRet = vlrIssRetRaw > 0
+      ? vlrIssRetRaw
+      : issRetidoFlag === "Sim"
+        ? vlrIssQN
+        : 0;
+
+    // Retenções federais
+    const vlrCsll = getNumberFallback(inf, [
+      ["trib", "tribFed", "vRetCSLL"],
+      ["trib", "tribFed", "vCSLL"],
+      ["vRetCSLL"],
+    ]);
+    const vlrIrrf = getNumberFallback(inf, [
+      ["trib", "tribFed", "vRetIRRF"],
+      ["trib", "tribFed", "vIRRF"],
+      ["vRetIRRF"],
+    ]);
+    const vlrPis = getNumberFallback(inf, [
+      ["trib", "tribFed", "piscofins", "vPis"],
+      ["trib", "tribFed", "vRetPIS"],
+      ["trib", "tribFed", "vPIS"],
+      ["vRetPIS"],
+      ["vPis"],
+    ]);
+    const vlrCofins = getNumberFallback(inf, [
+      ["trib", "tribFed", "piscofins", "vCofins"],
+      ["trib", "tribFed", "vRetCOFINS"],
+      ["trib", "tribFed", "vCOFINS"],
+      ["vRetCOFINS"],
+      ["vCofins"],
+    ]);
+    const vlrInss = getNumberFallback(inf, [
+      ["trib", "tribFed", "vRetCP"],
+      ["trib", "tribFed", "vRetINSS"],
+      ["vRetCP"],
+      ["vRetINSS"],
+    ]);
+
+    // Competência
+    let dCompet = String(
+      pick(inf, ["DPS", "infDPS", "dCompet"]) ??
+        pick(inf, ["dCompet"]) ??
+        "",
+    ).trim();
+    if (dCompet.length === 7 && dCompet.includes("-")) {
+      dCompet = `${dCompet}-01`;
+    } else if (dCompet.length === 6 && !dCompet.includes("-")) {
+      dCompet = `${dCompet.slice(0, 4)}-${dCompet.slice(4, 6)}-01`;
+    } else if (dCompet && isNaN(Date.parse(dCompet))) {
+      dCompet = "";
+    }
+    if (!dCompet) dCompet = dhEmi ? dhEmi.slice(0, 10) : "";
+
+    return {
+      id: `tomada_${nNFSe}_${cnpjPrestador}`,
+      nNFSe,
+      cnpjTomador,
+      nomeTomador,
+      cnpjPrestador,
+      nomePrestador,
+      dhEmi,
+      dCompet,
+      valor,
+      vlrLiquido,
+      servico,
+      codTribNacional,
+      cStat,
+      status: "válida",
+      chave,
+      issRetido: issRetidoFlag,
+      vlrIssRet,
+      vlrIrrf,
+      vlrCsll,
+      vlrPis,
+      vlrCofins,
+      vlrInss,
+    };
+  } catch (e) {
+    console.error("parseNfseXmlTomada error", e);
+    return null;
+  }
+}

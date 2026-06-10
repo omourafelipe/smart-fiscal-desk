@@ -28,8 +28,41 @@ export interface NotaFiscal {
   raw?: string;
 }
 
+/** Nota fiscal onde a empresa do grupo é a TOMADORA do serviço. */
+export interface NotaFiscalTomada {
+  id: string;               // nNFSe + CNPJ prestador
+  nNFSe: string;
+  /** CNPJ da empresa do grupo que contratou o serviço */
+  cnpjTomador: string;
+  nomeTomador: string;
+  /** CNPJ do fornecedor/prestador externo */
+  cnpjPrestador: string;
+  nomePrestador: string;
+  dhEmi: string;
+  dCompet: string;
+  valor: number;
+  vlrLiquido: number;
+  servico: string;
+  codTribNacional: string;
+  cStat: string;
+  status: "válida" | "cancelada";
+  chave: string;
+  // ISS — responsabilidade de retenção do tomador
+  issRetido: string;        // "Sim" | "Não"
+  vlrIssRet: number;        // ISS retido pelo tomador (obrigação da Samel)
+  // Retenções federais obrigatórias (IN 1.234/2012)
+  vlrIrrf: number;
+  vlrCsll: number;
+  vlrPis: number;
+  vlrCofins: number;
+  vlrInss: number;
+  raw?: string;
+}
+
 class NfseDB extends Dexie {
   notas!: Table<NotaFiscal, string>;
+  notasTomadas!: Table<NotaFiscalTomada, string>;
+
   constructor() {
     super("nfse-dashboard");
     this.version(1).stores({
@@ -45,7 +78,14 @@ class NfseDB extends Dexie {
       notas:
         "id, cnpjPrestador, nomePrestador, dhEmi, status, chave, cnpjCpfCliente, codTribNacional",
     });
+    this.version(5).stores({
+      notas:
+        "id, cnpjPrestador, nomePrestador, dhEmi, status, chave, cnpjCpfCliente, codTribNacional",
+      notasTomadas:
+        "id, cnpjTomador, cnpjPrestador, nomePrestador, dhEmi, status, chave, codTribNacional",
+    });
   }
 }
 
 export const db = new NfseDB();
+

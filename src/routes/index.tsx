@@ -28,6 +28,7 @@ import {
   TrendingUp,
   Receipt,
   Loader2,
+  ShoppingBag,
   FileSpreadsheet,
   AlertTriangle,
   Check,
@@ -54,7 +55,8 @@ import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 import { db, type NotaFiscal } from "@/lib/db";
-import { parseNfseXml } from "@/lib/parseXml";
+import { parseNfseXml, parseNfseXmlTomada } from "@/lib/parseXml";
+import type { NotaFiscalTomada } from "@/lib/db";
 import {
   parseExcelFile,
   detectColumns,
@@ -313,7 +315,59 @@ function Dashboard() {
   };
 
   const [rightPanelOpen, setRightPanelOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<"dashboard" | "conciliation" | "grupo">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "conciliation" | "grupo" | "tomados">("dashboard");
+
+  // ── Serviços Tomados state ──────────────────────────────────────────────
+  const todasNotasTomadas = useLiveQuery(() => db.notasTomadas.toArray(), [], [] as NotaFiscalTomada[]);
+  const [importingTomadas, setImportingTomadas] = useState(false);
+  const [progressTomadas, setProgressTomadas] = useState<{ done: number; total: number } | null>(null);
+  const [dragOverTomadas, setDragOverTomadas] = useState(false);
+  const [mesFiltroTomadas, setMesFiltroTomadas] = useState("__all__");
+  const [anoFiltroTomadas, setAnoFiltroTomadas] = useState("__all__");
+  const [empresaFiltroTomadas, setEmpresaFiltroTomadas] = useState("__all__");
+  const [pageTomadas, setPageTomadas] = useState(1);
+  const fileRefTomadas = useRef<HTMLInputElement>(null);
+  const PAGE_SIZE_TOMADAS = 20;
+
+  const processFilesTomadas = useCallback(async (files: FileList) => {
+    setImportingTomadas(true);
+    setProgressTomadas(null);
+    // Build set of group CNPJs from existing notas
+    const cnpjsGrupo = new Set(
+      (todasNotas ?? []).map((n) => n.cnpjPrestador.replace(/\D/g, "")).filter(Boolean)
+    );
+    const zipFiles = Array.from(files).filter((f) => f.name.endsWith(".zip"));
+    let totalXmls = 0;
+    let doneXmls = 0;
+    const batch: NotaFiscalTomada[] = [];
+    for (const zipFile of zipFiles) {
+      const buf = await zipFile.arrayBuffer();
+      const zip = await JSZip.loadAsync(buf);
+      const xmlEntries = Object.values(zip.files).filter((f) => !f.dir && f.name.endsWith(".xml"));
+      totalXmls += xmlEntries.length;
+      for (const entry of xmlEntries) {
+        const xml = await entry.async("string");
+        const nota = parseNfseXmlTomada(xml, cnpjsGrupo);
+        if (nota) batch.push(nota);
+        doneXmls++;
+        setProgressTomadas({ done: doneXmls, total: totalXmls });
+      }
+    }
+    if (batch.length > 0) {
+      await db.notasTomadas.bulkPut(batch);
+      toast.success(`${batch.length} nota(s) de serviço tomado importada(s).`);
+    } else {
+      toast.warning("Nenhuma nota com CNPJ do grupo como tomador foi encontrada.");
+    }
+    setImportingTomadas(false);
+    setProgressTomadas(null);
+  }, [todasNotas]);
+
+  const onDropTomadas = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOverTomadas(false);
+    if (e.dataTransfer.files?.length) processFilesTomadas(e.dataTransfer.files);
+  };
 
   // Activity Log Type & State
   interface ActivityLogItem {
@@ -1545,6 +1599,21 @@ function Dashboard() {
                 {conciliatedStats.updated > 0 && (
                   <span className="text-[9px] bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 px-1.5 py-0.5 rounded-md font-mono">
                     {conciliatedStats.updated}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => setActiveTab("tomados")}
+                className={`flex items-center justify-between px-3 py-2 text-xs font-medium rounded-xl transition-all w-full text-left ${
+                  activeTab === "tomados" ? "text-foreground font-semibold" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <ShoppingBag className="h-4 w-4" /> Serviços Tomados
+                </div>
+                {(todasNotasTomadas?.length ?? 0) > 0 && (
+                  <span className="text-[9px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-md font-mono border border-border/40">
+                    {todasNotasTomadas!.length}
                   </span>
                 )}
               </button>
@@ -3090,6 +3159,410 @@ function Dashboard() {
                 </div>
               )}
             </TabsContent>
+
+            {/* ═══════════════════════════════════════════════════════════ */}
+            {/* ABA: SERVIÇOS TOMADOS                                       */}
+            {/* ═══════════════════════════════════════════════════════════ */}
+            {activeTab === "tomados" && (() => {
+              // ── Derived data ─────────────────────────────────────────
+              const notasTomValidas = (todasNotasTomadas ?? []).filter((n) => {
+                if (n.status !== "válida") return false;
+                const ds = (n.dCompet || n.dhEmi || "").slice(0, 10);
+                if (mesFiltroTomadas !== "__all__" && ds.slice(5, 7) !== mesFiltroTomadas) return false;
+                if (anoFiltroTomadas !== "__all__" && ds.slice(0, 4) !== anoFiltroTomadas) return false;
+                if (empresaFiltroTomadas !== "__all__" && n.cnpjTomador !== empresaFiltroTomadas) return false;
+                return true;
+              });
+
+              const totalTomados = notasTomValidas.reduce((s, n) => s + n.valor, 0);
+              const fornecedoresAtivos = new Set(notasTomValidas.map((n) => n.cnpjPrestador)).size;
+              const ticketMedioFornecedor = fornecedoresAtivos > 0 ? totalTomados / fornecedoresAtivos : 0;
+              const issRetidoTomadaTotal = notasTomValidas.reduce((s, n) => n.issRetido === "Sim" ? s + n.vlrIssRet : s, 0);
+              const irrfTotal = notasTomValidas.reduce((s, n) => s + (n.vlrIrrf ?? 0), 0);
+              const csllTotal = notasTomValidas.reduce((s, n) => s + (n.vlrCsll ?? 0), 0);
+              const pisTotal  = notasTomValidas.reduce((s, n) => s + (n.vlrPis  ?? 0), 0);
+              const cofinsTotal = notasTomValidas.reduce((s, n) => s + (n.vlrCofins ?? 0), 0);
+              const inssTotal = notasTomValidas.reduce((s, n) => s + (n.vlrInss ?? 0), 0);
+              const totalRetencoes = issRetidoTomadaTotal + irrfTotal + csllTotal + pisTotal + cofinsTotal + inssTotal;
+
+              // Anos/meses disponíveis para filtros
+              const anosDisp = Array.from(new Set((todasNotasTomadas ?? []).map((n) => (n.dCompet || n.dhEmi || "").slice(0, 4)).filter(Boolean))).sort().reverse();
+              const tomadoresDist = Array.from(new Set((todasNotasTomadas ?? []).map((n) => n.cnpjTomador).filter(Boolean)));
+
+              // Gráfico A — evolução mensal
+              const evolucaoMap = new Map<string, number>();
+              notasTomValidas.forEach((n) => {
+                const key = (n.dCompet || n.dhEmi || "").slice(0, 7);
+                if (key) evolucaoMap.set(key, (evolucaoMap.get(key) ?? 0) + n.valor);
+              });
+              const evolucaoData = Array.from(evolucaoMap.entries()).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => ({
+                label: ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"][parseInt(k.slice(5,7))-1] + "/" + k.slice(2,4),
+                valor: v,
+              }));
+
+              // Gráfico B — distribuição por tipo de serviço
+              const servicoMap = new Map<string, number>();
+              notasTomValidas.forEach((n) => {
+                const key = n.codTribNacional || n.servico || "Outros";
+                servicoMap.set(key, (servicoMap.get(key) ?? 0) + n.valor);
+              });
+              const SERV_COLORS = ["#6366f1","#14b8a6","#f59e0b","#ec4899","#8b5cf6","#ef4444"];
+              const servicoEntries = Array.from(servicoMap.entries()).sort(([,a],[,b]) => b-a);
+              const topServicos = servicoEntries.slice(0, 5);
+              const outrosServ = servicoEntries.slice(5).reduce((s,[,v]) => s+v, 0);
+              const servicoData = [...topServicos.map(([k,v],i)=>({name:k,value:v,fill:SERV_COLORS[i]})), ...(outrosServ > 0 ? [{name:"Outros",value:outrosServ,fill:SERV_COLORS[5]}] : [])];
+
+              // Gráfico C — top 8 fornecedores
+              const fornMap = new Map<string, { nome: string; total: number }>();
+              notasTomValidas.forEach((n) => {
+                const entry = fornMap.get(n.cnpjPrestador) ?? { nome: n.nomePrestador, total: 0 };
+                fornMap.set(n.cnpjPrestador, { ...entry, total: entry.total + n.valor });
+              });
+              const topFornecedores = Array.from(fornMap.values()).sort((a,b)=>b.total-a.total).slice(0,8);
+
+              // Gráfico D — retenções mensais empilhadas
+              const retMap = new Map<string, { ISS: number; IRRF: number; CSPN: number; INSS: number }>();
+              notasTomValidas.forEach((n) => {
+                const key = (n.dCompet || n.dhEmi || "").slice(0, 7);
+                if (!key) return;
+                const e = retMap.get(key) ?? { ISS: 0, IRRF: 0, CSPN: 0, INSS: 0 };
+                retMap.set(key, {
+                  ISS:  e.ISS  + (n.issRetido === "Sim" ? n.vlrIssRet : 0),
+                  IRRF: e.IRRF + (n.vlrIrrf ?? 0),
+                  CSPN: e.CSPN + (n.vlrCsll ?? 0) + (n.vlrPis ?? 0) + (n.vlrCofins ?? 0),
+                  INSS: e.INSS + (n.vlrInss ?? 0),
+                });
+              });
+              const retData = Array.from(retMap.entries()).sort(([a],[b])=>a.localeCompare(b)).map(([k,v]) => ({
+                label: ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"][parseInt(k.slice(5,7))-1] + "/" + k.slice(2,4),
+                ...v,
+              }));
+
+              // Paginação tabela
+              const totalPagesTomadas = Math.ceil(notasTomValidas.length / PAGE_SIZE_TOMADAS);
+              const paginatedTomadas = notasTomValidas.slice((pageTomadas-1)*PAGE_SIZE_TOMADAS, pageTomadas*PAGE_SIZE_TOMADAS);
+
+              const nomeTomadorLabel = (cnpj: string) => {
+                const n = (todasNotasTomadas ?? []).find((x) => x.cnpjTomador === cnpj);
+                return n?.nomeTomador || cnpj;
+              };
+
+              return (
+                <div className="space-y-6 mt-0">
+
+                  {/* Header + Filtros */}
+                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 flex-wrap bg-card p-5 rounded-2xl border border-border shadow-xs">
+                    <div>
+                      <h1 className="text-xl font-bold tracking-tight text-foreground">Serviços Tomados</h1>
+                      <p className="text-xs text-muted-foreground mt-1">NFS-e recebidas de fornecedores onde o grupo Samel é tomador · Obrigações de retenção na fonte</p>
+                    </div>
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      <Select value={empresaFiltroTomadas} onValueChange={(v) => { setEmpresaFiltroTomadas(v); setPageTomadas(1); }}>
+                        <SelectTrigger className="w-[200px] h-9 text-xs rounded-xl bg-muted border-border">
+                          <Building2 className="h-3.5 w-3.5 mr-2 text-muted-foreground flex-shrink-0" />
+                          <SelectValue placeholder="Empresa Tomadora" />
+                        </SelectTrigger>
+                        <SelectContent className="rounded-xl">
+                          <SelectItem value="__all__">Todas as Tomadoras</SelectItem>
+                          {tomadoresDist.map((cnpj) => (
+                            <SelectItem key={cnpj} value={cnpj}>{nomeTomadorLabel(cnpj)}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Select value={mesFiltroTomadas} onValueChange={(v) => { setMesFiltroTomadas(v); setPageTomadas(1); }}>
+                        <SelectTrigger className="w-[130px] h-9 text-xs rounded-xl bg-muted border-border">
+                          <Calendar className="h-3.5 w-3.5 mr-2 text-muted-foreground flex-shrink-0" />
+                          <SelectValue placeholder="Mês" />
+                        </SelectTrigger>
+                        <SelectContent className="rounded-xl">
+                          <SelectItem value="__all__">Todos os Meses</SelectItem>
+                          {["01","02","03","04","05","06","07","08","09","10","11","12"].map((m,i)=>(
+                            <SelectItem key={m} value={m}>{["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"][i]}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Select value={anoFiltroTomadas} onValueChange={(v) => { setAnoFiltroTomadas(v); setPageTomadas(1); }}>
+                        <SelectTrigger className="w-[105px] h-9 text-xs rounded-xl bg-muted border-border">
+                          <Calendar className="h-3.5 w-3.5 mr-2 text-muted-foreground flex-shrink-0" />
+                          <SelectValue placeholder="Ano" />
+                        </SelectTrigger>
+                        <SelectContent className="rounded-xl">
+                          <SelectItem value="__all__">Todos os Anos</SelectItem>
+                          {anosDisp.map((a) => <SelectItem key={a} value={a}>{a}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  {/* Upload ZIP */}
+                  <div
+                    onDragOver={(e) => { e.preventDefault(); setDragOverTomadas(true); }}
+                    onDragLeave={() => setDragOverTomadas(false)}
+                    onDrop={onDropTomadas}
+                    onClick={() => fileRefTomadas.current?.click()}
+                    className={`rounded-2xl border border-dashed p-6 text-center cursor-pointer transition-all duration-300 ${
+                      dragOverTomadas ? "border-teal-500 bg-teal-500/5 scale-[1.005] shadow-sm" : "border-border bg-card hover:border-teal-500/50 hover:bg-slate-50/30 dark:hover:bg-slate-800/10"
+                    }`}
+                  >
+                    <input ref={fileRefTomadas} type="file" accept=".zip" multiple className="hidden" onChange={(e) => e.target.files && processFilesTomadas(e.target.files)} />
+                    <div className="flex flex-col items-center gap-2">
+                      {importingTomadas ? (
+                        <>
+                          <Loader2 className="h-8 w-8 text-teal-600 animate-spin" />
+                          <p className="font-semibold text-xs text-foreground">Processando XMLs de Serviços Tomados...</p>
+                          {progressTomadas && <p className="text-[10px] text-muted-foreground">{progressTomadas.done} / {progressTomadas.total} XMLs</p>}
+                        </>
+                      ) : (
+                        <>
+                          <div className="h-10 w-10 rounded-xl bg-teal-500/10 flex items-center justify-center">
+                            <ShoppingBag className="h-5 w-5 text-teal-600 dark:text-teal-400" />
+                          </div>
+                          <p className="font-semibold text-xs text-foreground">Arraste ZIPs com NFS-e recebidas de fornecedores</p>
+                          <p className="text-[10px] text-muted-foreground">O sistema identificará automaticamente as notas onde o CNPJ do grupo aparece como tomador</p>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* KPI Cards */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-5">
+                    {([
+                      { label: "Total de Serviços Tomados", value: fmtBRL(totalTomados), sub: "valor bruto consolidado", color: "text-teal-600 dark:text-teal-400", bg: "bg-teal-500/10" },
+                      { label: "Fornecedores Ativos", value: fornecedoresAtivos.toLocaleString("pt-BR"), sub: "prestadores distintos no período", color: "text-indigo-600 dark:text-indigo-400", bg: "bg-indigo-500/10" },
+                      { label: "Notas Recebidas", value: notasTomValidas.length.toLocaleString("pt-BR"), sub: "NFS-e válidas do período", color: "text-purple-600 dark:text-purple-400", bg: "bg-purple-500/10" },
+                      { label: "Ticket Médio / Fornecedor", value: fmtBRL(ticketMedioFornecedor), sub: "valor médio contratado por fornecedor", color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-500/10" },
+                      { label: "Total de Retenções", value: fmtBRL(totalRetencoes), sub: "obrigações de retenção na fonte", color: "text-rose-600 dark:text-rose-400", bg: "bg-rose-500/10" },
+                    ] as const).map((kpi, i) => (
+                      <div key={i} className="p-4 sm:p-5 rounded-2xl border bg-card flex flex-col justify-between shadow-xs border-border transition-all hover:-translate-y-0.5">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">{kpi.label}</p>
+                            <p className="text-lg sm:text-xl font-extrabold text-foreground mt-1.5">{kpi.value}</p>
+                          </div>
+                          <div className={`h-8 w-8 rounded-lg ${kpi.bg} ${kpi.color} flex items-center justify-center flex-shrink-0`}>
+                            <ShoppingBag className="h-4 w-4" />
+                          </div>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground mt-3">{kpi.sub}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Painel de Retenções */}
+                  <div className="bg-card border border-border rounded-2xl p-5 shadow-xs">
+                    <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-4">Obrigações de Retenção na Fonte</h3>
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                      {([
+                        { label: "ISS Retido", value: issRetidoTomadaTotal, hint: "Retido pelo tomador (Samel)", color: "text-indigo-600 dark:text-indigo-400", bg: "bg-indigo-500/10" },
+                        { label: "IRRF", value: irrfTotal, hint: "Imposto de Renda Retido na Fonte", color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-500/10" },
+                        { label: "CSLL", value: csllTotal, hint: "Contrib. Social s/ Lucro Líquido", color: "text-purple-600 dark:text-purple-400", bg: "bg-purple-500/10" },
+                        { label: "PIS", value: pisTotal, hint: "Prog. de Integração Social", color: "text-teal-600 dark:text-teal-400", bg: "bg-teal-500/10" },
+                        { label: "COFINS", value: cofinsTotal, hint: "Contrib. p/ Financiamento Seguridade", color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-500/10" },
+                        { label: "INSS/CPRB", value: inssTotal, hint: "Retenção previdenciária", color: "text-rose-600 dark:text-rose-400", bg: "bg-rose-500/10" },
+                      ] as const).map((item, i) => (
+                        <div key={i} className={`p-3 rounded-xl border border-border/50 ${item.bg} flex flex-col gap-1`}>
+                          <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-wide">{item.label}</p>
+                          <p className={`text-sm font-bold ${item.color}`}>{fmtBRL(item.value)}</p>
+                          <p className="text-[9px] text-muted-foreground leading-tight">{item.hint}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Gráficos: Evolução + Distribuição */}
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* Gráfico A — Evolução mensal */}
+                    <div className="bg-card border border-border rounded-2xl p-5 shadow-xs lg:col-span-2">
+                      <h3 className="text-xs font-bold text-foreground mb-1">Evolução dos Serviços Tomados</h3>
+                      <p className="text-[10px] text-muted-foreground mb-4">Valor total mensal de NFS-e recebidas</p>
+                      <div className="h-[240px]">
+                        {evolucaoData.length === 0 ? <EmptyState /> : (
+                          <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={evolucaoData}>
+                              <defs>
+                                <linearGradient id="colorTomadas" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="5%" stopColor="#14b8a6" stopOpacity={0.25}/>
+                                  <stop offset="95%" stopColor="#14b8a6" stopOpacity={0}/>
+                                </linearGradient>
+                              </defs>
+                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-border)" opacity={0.4} />
+                              <XAxis dataKey="label" stroke="var(--color-muted-foreground)" fontSize={10} axisLine={false} tickLine={false} />
+                              <YAxis stroke="var(--color-muted-foreground)" fontSize={10} axisLine={false} tickLine={false} tickFormatter={(v) => v >= 1000000 ? `R$ ${(v/1000000).toFixed(1)}M` : `R$ ${(v/1000).toFixed(0)}k`} />
+                              <Tooltip formatter={(v) => fmtBRL(Number(v))} contentStyle={{ backgroundColor: "var(--color-popover)", borderColor: "var(--color-border)", borderRadius: 12, color: "var(--color-foreground)" }} />
+                              <Area type="monotone" dataKey="valor" stroke="#14b8a6" strokeWidth={2.5} fillOpacity={1} fill="url(#colorTomadas)" name="Serviços Tomados" />
+                            </AreaChart>
+                          </ResponsiveContainer>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Gráfico B — Distribuição por tipo de serviço */}
+                    <div className="bg-card border border-border rounded-2xl p-5 shadow-xs">
+                      <h3 className="text-xs font-bold text-foreground mb-1">Por Tipo de Serviço</h3>
+                      <p className="text-[10px] text-muted-foreground mb-4">Distribuição por código tributário</p>
+                      <div className="h-[180px] relative flex items-center justify-center">
+                        {servicoData.length === 0 ? <EmptyState /> : (
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <Pie data={servicoData} dataKey="value" nameKey="name" innerRadius={45} outerRadius={70} paddingAngle={3} stroke="var(--color-card)" strokeWidth={3}>
+                                {servicoData.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
+                              </Pie>
+                              <Tooltip formatter={(v) => fmtBRL(Number(v))} contentStyle={{ backgroundColor: "var(--color-popover)", borderColor: "var(--color-border)", borderRadius: 12, color: "var(--color-foreground)" }} />
+                            </PieChart>
+                          </ResponsiveContainer>
+                        )}
+                      </div>
+                      <div className="flex flex-col gap-1.5 mt-2 pt-2 border-t border-border/50">
+                        {servicoData.slice(0,4).map((d,i) => (
+                          <div key={i} className="flex items-center justify-between text-[10px]">
+                            <span className="flex items-center gap-1.5 text-muted-foreground"><span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: d.fill }} />{d.name.slice(0,20)}</span>
+                            <span className="font-bold text-foreground">{fmtBRL(d.value)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Gráficos: Top Fornecedores + Retenções Mensais */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Gráfico C — Top Fornecedores */}
+                    <div className="bg-card border border-border rounded-2xl p-5 shadow-xs">
+                      <h3 className="text-xs font-bold text-foreground mb-1">Top Fornecedores</h3>
+                      <p className="text-[10px] text-muted-foreground mb-4">Maiores prestadores por volume contratado</p>
+                      <div className="h-[260px]">
+                        {topFornecedores.length === 0 ? <EmptyState /> : (
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={topFornecedores} layout="vertical" margin={{ left: 8, right: 16, top: 4, bottom: 4 }}>
+                              <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--color-border)" opacity={0.4} />
+                              <XAxis type="number" stroke="var(--color-muted-foreground)" fontSize={9} axisLine={false} tickLine={false} tickFormatter={(v) => v >= 1000000 ? `${(v/1000000).toFixed(1)}M` : `${(v/1000).toFixed(0)}k`} />
+                              <YAxis type="category" dataKey="nome" stroke="var(--color-muted-foreground)" fontSize={9} axisLine={false} tickLine={false} width={110} tickFormatter={(v: string) => v.length > 18 ? v.slice(0,18)+"…" : v} />
+                              <Tooltip formatter={(v) => fmtBRL(Number(v))} contentStyle={{ backgroundColor: "var(--color-popover)", borderColor: "var(--color-border)", borderRadius: 12, color: "var(--color-foreground)" }} />
+                              <Bar dataKey="total" fill="#6366f1" radius={[0, 4, 4, 0]} name="Valor" />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Gráfico D — Retenções mensais empilhadas */}
+                    <div className="bg-card border border-border rounded-2xl p-5 shadow-xs">
+                      <h3 className="text-xs font-bold text-foreground mb-1">Retenções por Competência</h3>
+                      <p className="text-[10px] text-muted-foreground mb-4">ISS, IRRF, CSLL/PIS/COFINS e INSS empilhados</p>
+                      <div className="h-[260px]">
+                        {retData.length === 0 ? <EmptyState /> : (
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={retData}>
+                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-border)" opacity={0.4} />
+                              <XAxis dataKey="label" stroke="var(--color-muted-foreground)" fontSize={10} axisLine={false} tickLine={false} />
+                              <YAxis stroke="var(--color-muted-foreground)" fontSize={10} axisLine={false} tickLine={false} tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(0)}k` : String(v)} />
+                              <Tooltip formatter={(v) => fmtBRL(Number(v))} contentStyle={{ backgroundColor: "var(--color-popover)", borderColor: "var(--color-border)", borderRadius: 12, color: "var(--color-foreground)" }} />
+                              <Legend wrapperStyle={{ fontSize: 10 }} />
+                              <Bar dataKey="ISS"  stackId="ret" fill="#6366f1" name="ISS" />
+                              <Bar dataKey="IRRF" stackId="ret" fill="#f59e0b" name="IRRF" />
+                              <Bar dataKey="CSPN" stackId="ret" fill="#14b8a6" name="CSLL/PIS/COFINS" />
+                              <Bar dataKey="INSS" stackId="ret" fill="#ec4899" name="INSS" radius={[4,4,0,0]} />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Tabela de Notas Tomadas */}
+                  <div className="bg-card border border-border rounded-2xl shadow-xs overflow-hidden">
+                    <div className="p-5 border-b border-border flex items-center justify-between gap-4 flex-wrap">
+                      <h3 className="text-xs font-bold text-foreground flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-muted-foreground" />
+                        NFS-e Recebidas de Fornecedores ({notasTomValidas.length.toLocaleString("pt-BR")})
+                      </h3>
+                      {(todasNotasTomadas?.length ?? 0) > 0 && (
+                        <button
+                          onClick={async () => { await db.notasTomadas.clear(); toast.success("Base de serviços tomados limpa."); }}
+                          className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" /> Limpar Base
+                        </button>
+                      )}
+                    </div>
+                    <div className="overflow-x-auto">
+                      <Table className="min-w-[1200px]">
+                        <TableHeader className="bg-muted/30">
+                          <TableRow className="border-b border-border">
+                            <TableHead className="font-medium text-muted-foreground h-9">Situação</TableHead>
+                            <TableHead className="font-medium text-muted-foreground h-9">Nº NFS-e</TableHead>
+                            <TableHead className="font-medium text-muted-foreground h-9">Competência</TableHead>
+                            <TableHead className="font-medium text-muted-foreground h-9">Tomador</TableHead>
+                            <TableHead className="font-medium text-muted-foreground h-9">CNPJ Prestador</TableHead>
+                            <TableHead className="font-medium text-muted-foreground h-9">Fornecedor</TableHead>
+                            <TableHead className="text-right font-medium text-muted-foreground h-9">Vlr. Bruto</TableHead>
+                            <TableHead className="text-right font-medium text-muted-foreground h-9">Vlr. Líquido</TableHead>
+                            <TableHead className="text-center font-medium text-muted-foreground h-9">ISS Retido?</TableHead>
+                            <TableHead className="text-right font-medium text-muted-foreground h-9">IRRF</TableHead>
+                            <TableHead className="text-right font-medium text-muted-foreground h-9">CSLL</TableHead>
+                            <TableHead className="text-right font-medium text-muted-foreground h-9">PIS</TableHead>
+                            <TableHead className="text-right font-medium text-muted-foreground h-9">COFINS</TableHead>
+                            <TableHead className="text-right font-medium text-muted-foreground h-9">INSS</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {paginatedTomadas.length === 0 ? (
+                            <TableRow>
+                              <TableCell colSpan={14} className="text-center text-muted-foreground py-12 text-xs">
+                                {(todasNotasTomadas?.length ?? 0) === 0
+                                  ? "Nenhum serviço tomado importado. Arraste um ZIP acima para começar."
+                                  : "Nenhum resultado para os filtros selecionados."}
+                              </TableCell>
+                            </TableRow>
+                          ) : paginatedTomadas.map((n, i) => (
+                            <TableRow key={n.id} className={`border-b border-border/40 text-xs hover:bg-muted/30 transition-colors ${i % 2 === 0 ? "" : "bg-muted/10"}`}>
+                              <TableCell>
+                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold ${n.status === "válida" ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "bg-rose-500/10 text-rose-700 dark:text-rose-400"}`}>
+                                  {n.status === "válida" ? <CheckCircle2 className="h-2.5 w-2.5" /> : <XCircle className="h-2.5 w-2.5" />}
+                                  {n.status === "válida" ? "Válida" : "Cancelada"}
+                                </span>
+                              </TableCell>
+                              <TableCell className="font-mono text-[10px]">{n.nNFSe}</TableCell>
+                              <TableCell className="text-muted-foreground">{n.dCompet ? n.dCompet.slice(0,7) : "—"}</TableCell>
+                              <TableCell className="max-w-[120px] truncate" title={n.nomeTomador}>{n.nomeTomador || n.cnpjTomador}</TableCell>
+                              <TableCell className="font-mono text-[10px] text-muted-foreground">{n.cnpjPrestador}</TableCell>
+                              <TableCell className="max-w-[140px] truncate font-medium" title={n.nomePrestador}>{n.nomePrestador}</TableCell>
+                              <TableCell className="text-right font-bold">{fmtBRL(n.valor)}</TableCell>
+                              <TableCell className="text-right text-muted-foreground">{fmtBRL(n.vlrLiquido)}</TableCell>
+                              <TableCell className="text-center">
+                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${n.issRetido === "Sim" ? "bg-indigo-500/10 text-indigo-700 dark:text-indigo-400" : "bg-muted text-muted-foreground"}`}>
+                                  {n.issRetido}
+                                </span>
+                              </TableCell>
+                              <TableCell className="text-right text-muted-foreground">{n.vlrIrrf > 0 ? fmtBRL(n.vlrIrrf) : "—"}</TableCell>
+                              <TableCell className="text-right text-muted-foreground">{n.vlrCsll > 0 ? fmtBRL(n.vlrCsll) : "—"}</TableCell>
+                              <TableCell className="text-right text-muted-foreground">{n.vlrPis > 0 ? fmtBRL(n.vlrPis) : "—"}</TableCell>
+                              <TableCell className="text-right text-muted-foreground">{n.vlrCofins > 0 ? fmtBRL(n.vlrCofins) : "—"}</TableCell>
+                              <TableCell className="text-right text-muted-foreground">{n.vlrInss > 0 ? fmtBRL(n.vlrInss) : "—"}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                    {/* Paginação */}
+                    {totalPagesTomadas > 1 && (
+                      <div className="flex items-center justify-between px-5 py-3 border-t border-border text-xs text-muted-foreground">
+                        <span>{notasTomValidas.length.toLocaleString("pt-BR")} registros · Página {pageTomadas} de {totalPagesTomadas}</span>
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => setPageTomadas((p) => Math.max(1, p-1))} disabled={pageTomadas === 1} className="h-7 w-7 rounded-lg border border-border flex items-center justify-center hover:bg-muted/80 disabled:opacity-40">
+                            <ChevronLeft className="h-3.5 w-3.5" />
+                          </button>
+                          <button onClick={() => setPageTomadas((p) => Math.min(totalPagesTomadas, p+1))} disabled={pageTomadas === totalPagesTomadas} className="h-7 w-7 rounded-lg border border-border flex items-center justify-center hover:bg-muted/80 disabled:opacity-40">
+                            <ChevronRight className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                </div>
+              );
+            })()}
+
           </Tabs>
 
           <footer className="text-center text-[10px] text-muted-foreground pt-8 mt-12 border-t border-border/80">
