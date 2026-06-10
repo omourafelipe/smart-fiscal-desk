@@ -1013,12 +1013,16 @@ function Dashboard() {
         if (!key) continue;
 
         const rawStatus = String(row[sCol] ?? "").trim();
-        const statusExcel = parseExcelStatus(rawStatus);
+        let statusExcel = parseExcelStatus(rawStatus);
+
+        const local = localMap.get(key);
+        if (local && local.status === "ativa" && statusExcel === "cancelada") {
+          statusExcel = "ativa";
+        }
 
         const rawOperacao = opCol ? String(row[opCol] ?? "").trim() : "";
         const issRetidoExcel = parseExcelOperacao(rawOperacao);
 
-        const local = localMap.get(key);
         const issRetidoLocal = local ? (local.issRetido as "Sim" | "Não") : undefined;
 
         const statusChanged = local ? local.status !== statusExcel : false;
