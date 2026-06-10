@@ -3426,7 +3426,7 @@ function Dashboard() {
                     {/* Gráfico B — Distribuição por tipo de serviço */}
                     <div className="bg-card border border-border rounded-2xl p-5 shadow-xs">
                       <h3 className="text-xs font-bold text-foreground mb-1">Por Tipo de Serviço</h3>
-                      <p className="text-[10px] text-muted-foreground mb-4">Distribuição por código tributário</p>
+                      <p className="text-[10px] text-muted-foreground mb-4">Distribuição por categoria de serviço</p>
                       <div className="h-[180px] relative flex items-center justify-center">
                         {servicoData.length === 0 ? <EmptyState /> : (
                           <ResponsiveContainer width="100%" height="100%">
