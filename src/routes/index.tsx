@@ -3523,11 +3523,11 @@ function Dashboard() {
                               </TableCell>
                               <TableCell className="font-mono text-[10px]">{n.nNFSe}</TableCell>
                               <TableCell className="text-muted-foreground">{n.dCompet ? n.dCompet.slice(0,7) : "—"}</TableCell>
-                              <TableCell className="max-w-[120px] truncate" title={n.nomeTomador}>{n.nomeTomador || n.cnpjTomador}</TableCell>
                               <TableCell className="font-mono text-[10px] text-muted-foreground">{n.cnpjPrestador}</TableCell>
                               <TableCell className="max-w-[140px] truncate font-medium" title={n.nomePrestador}>{n.nomePrestador}</TableCell>
                               <TableCell className="text-right font-bold">{fmtBRL(n.valor)}</TableCell>
                               <TableCell className="text-right text-muted-foreground">{fmtBRL(n.vlrLiquido)}</TableCell>
+                              <TableCell className="text-right text-muted-foreground">{n.issRetido === "Sim" && n.vlrIssRet > 0 ? fmtBRL(n.vlrIssRet) : "—"}</TableCell>
                               <TableCell className="text-center">
                                 <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${n.issRetido === "Sim" ? "bg-indigo-500/10 text-indigo-700 dark:text-indigo-400" : "bg-muted text-muted-foreground"}`}>
                                   {n.issRetido}
