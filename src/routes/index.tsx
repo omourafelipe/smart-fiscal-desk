@@ -914,24 +914,22 @@ function Dashboard() {
   }, [notasPrincipaisClientes]);
 
   // Cálculos de tributos
-  // Notas já importadas podem ter vlrIssRet/vlrIssRecolher com a lógica antiga.
-  // Para máxima compatibilidade, usamos vlrIss + issRetido como fallback.
+  // Regra definitiva (fonte da verdade = planilha):
+  //   issRetido === "Sim" → ISS Retido na fonte (tomador recolhe)
+  //   issRetido === "Não" → ISS a Recolher (prestador recolhe)
+  // Usamos vlrIss como valor do ISS da nota.
   const issRetidoTotal = useMemo(() => {
-    return notasAtivas.reduce((sum, n) => {
-      if ((n.vlrIssRet ?? 0) > 0) return sum + n.vlrIssRet!;
-      // fallback para notas antigas no banco: se issRetido === "Sim", usa vlrIss
-      if (n.issRetido === "Sim") return sum + (n.vlrIss ?? 0);
-      return sum;
-    }, 0);
+    return notasAtivas.reduce(
+      (sum, n) => (n.issRetido === "Sim" ? sum + (n.vlrIss ?? 0) : sum),
+      0,
+    );
   }, [notasAtivas]);
 
   const issARecolherTotal = useMemo(() => {
-    return notasAtivas.reduce((sum, n) => {
-      if ((n.vlrIssRecolher ?? 0) > 0) return sum + n.vlrIssRecolher!;
-      // fallback para notas antigas no banco: se issRetido === "Não", usa vlrIss
-      if (n.issRetido === "Não") return sum + (n.vlrIss ?? 0);
-      return sum;
-    }, 0);
+    return notasAtivas.reduce(
+      (sum, n) => (n.issRetido === "Não" ? sum + (n.vlrIss ?? 0) : sum),
+      0,
+    );
   }, [notasAtivas]);
 
   const pisTotal = useMemo(() => notasAtivas.reduce((sum, n) => sum + (n.vlrPis ?? 0), 0), [notasAtivas]);
@@ -1318,6 +1316,17 @@ function Dashboard() {
             if (item.statusChanged) updates.status = item.statusExcel;
             if (item.issRetidoChanged && item.issRetidoExcel) {
               updates.issRetido = item.issRetidoExcel;
+              // Recalcula vlrIssRet e vlrIssRecolher com base no novo issRetido
+              // vlrIss já contém o valor correto do ISS da nota
+              const nota = todasNotas?.find((n) => n.id === item.notaId);
+              const vlrIss = nota?.vlrIss ?? 0;
+              if (item.issRetidoExcel === "Sim") {
+                updates.vlrIssRet = vlrIss;
+                updates.vlrIssRecolher = 0;
+              } else {
+                updates.vlrIssRet = 0;
+                updates.vlrIssRecolher = vlrIss;
+              }
             }
 
             if (Object.keys(updates).length > 0) {
