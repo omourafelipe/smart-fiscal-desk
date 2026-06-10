@@ -3200,10 +3200,10 @@ function Dashboard() {
                 valor: v,
               }));
 
-              // Gráfico B — distribuição por tipo de serviço
+              // Gráfico B — distribuição por categoria de serviço (derivada da descrição)
               const servicoMap = new Map<string, number>();
               notasTomValidas.forEach((n) => {
-                const key = n.codTribNacional || n.servico || "Outros";
+                const key = categorizarServico(n.servico);
                 servicoMap.set(key, (servicoMap.get(key) ?? 0) + n.valor);
               });
               const SERV_COLORS = ["#6366f1","#14b8a6","#f59e0b","#ec4899","#8b5cf6","#ef4444"];
