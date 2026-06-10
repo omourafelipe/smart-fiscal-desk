@@ -224,7 +224,7 @@ export function parseNfseXml(xml: string): NotaFiscal | null {
       cliente,
       servico,
       cStat,
-      status: "ativa",
+      status: "válida", // placeholder – final status comes from Excel
       chave,
       cnpjCpfCliente,
       vlrLiquido,

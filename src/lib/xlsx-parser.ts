@@ -8,7 +8,7 @@ export interface ConciliationItem {
   rawKey: string;
   key: string; // normalizado (apenas números)
   rawStatus: string;
-  status: "ativa" | "cancelada";
+  status: "válida" | "cancelada";
   rowNumber: number;
 }
 
@@ -112,7 +112,7 @@ export function parseExcelFile(arrayBuffer: ArrayBuffer): {
   return { headers, rows };
 }
 
-export function parseExcelStatus(rawStatus: string): "ativa" | "cancelada" {
+export function parseExcelStatus(rawStatus: string): "válida" | "cancelada" {
   const norm = normalizeString(rawStatus);
 
   // Se contiver negações de cancelamento, a nota é ativa
@@ -122,7 +122,7 @@ export function parseExcelStatus(rawStatus: string): "ativa" | "cancelada" {
     norm.includes("naosubst") ||
     norm.includes("semsubst")
   ) {
-    return "ativa";
+    return "válida";
   }
 
   if (norm.includes("emitida") || norm.includes("paga")) {
@@ -146,7 +146,7 @@ export function parseExcelStatus(rawStatus: string): "ativa" | "cancelada" {
     if (norm.includes(term)) return "cancelada";
   }
 
-  return "ativa"; // Padrão ativa
+  return "válida"; // Padrão válida
 }
 
 /**

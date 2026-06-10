@@ -10,7 +10,7 @@ export interface NotaFiscal {
   cliente: string;
   servico: string;
   cStat: string;
-  status: "ativa" | "cancelada";
+  status: "válida" | "cancelada";
   chave: string;
   cnpjCpfCliente: string;
   vlrLiquido: number;

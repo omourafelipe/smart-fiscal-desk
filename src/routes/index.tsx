@@ -235,8 +235,8 @@ interface ConciliationResult {
   nNFSe: string;
   prestador: string;
   rawStatus: string;
-  statusExcel: "ativa" | "cancelada";
-  statusLocal: "ativa" | "cancelada" | "nao_encontrado";
+  statusExcel: "válida" | "cancelada";
+  statusLocal: "válida" | "cancelada" | "nao_encontrado";
   statusChanged: boolean;
   notaId?: string;
   rawOperacao?: string;
@@ -401,7 +401,7 @@ function Dashboard() {
 
   // Mapa fast das chaves da planilha e seu status correspondente
   const xlsxStatusMap = useMemo(() => {
-    const map = new Map<string, "ativa" | "cancelada" | "nao_encontrado">();
+    const map = new Map<string, "válida" | "cancelada" | "nao_encontrado">();
     if (xlsxRows.length > 0 && keyCol && statusCol) {
       xlsxRows.forEach((row) => {
         const rawKey = String(row[keyCol] ?? "").trim();
@@ -418,9 +418,9 @@ function Dashboard() {
   // Função para determinar o status com base puramente na planilha se ela estiver carregada
   const getNoteStatus = useCallback((n: NotaFiscal) => {
     if (xlsxRows.length > 0 && n.chave && xlsxStatusMap.has(n.chave)) {
-      return xlsxStatusMap.get(n.chave) || "ativa";
+      return xlsxStatusMap.get(n.chave) || "válida";
     }
-    return n.status || "ativa";
+    return n.status || "válida";
   }, [xlsxStatusMap, xlsxRows]);
 
   const anos = useMemo(() => {
@@ -456,7 +456,7 @@ function Dashboard() {
     });
   }, [todasNotas, empresaFiltro, mesFiltro, anoFiltro, cServFiltro, searchCliente, getDateField]);
 
-  const notasAtivas = notasFiltradas.filter((n) => getNoteStatus(n) === "ativa");
+  const notasAtivas = notasFiltradas.filter((n) => getNoteStatus(n) === "válida");
   const notasCanceladas = notasFiltradas.filter((n) => getNoteStatus(n) === "cancelada");
   const faturamento = notasAtivas.reduce((sum, n) => sum + n.valor, 0);
   const ticketMedio = notasAtivas.length ? faturamento / notasAtivas.length : 0;
@@ -516,7 +516,7 @@ function Dashboard() {
   }, [todasNotas, empresaFiltro, mesFiltro, anoFiltro, cServFiltro, searchCliente, anos, getDateField]);
 
   const prevNotasAtivas = useMemo(() => {
-    return prevNotasFiltradas.filter((n) => getNoteStatus(n) === "ativa");
+    return prevNotasFiltradas.filter((n) => getNoteStatus(n) === "válida");
   }, [prevNotasFiltradas, getNoteStatus]);
 
   const prevNotasCanceladas = useMemo(() => {
@@ -604,7 +604,7 @@ function Dashboard() {
   const notasParaGrafico = useMemo(() => {
     if (!todasNotas) return [];
     return todasNotas.filter((n) => {
-      if (getNoteStatus(n) !== "ativa") return false;
+      if (getNoteStatus(n) !== "válida") return false;
       if (empresaFiltro !== "__all__" && n.cnpjPrestador !== empresaFiltro) return false;
       const dateStr = getDateField(n);
       if (anoFiltro !== "__all__" && dateStr.slice(0, 4) !== anoFiltro) return false;
@@ -635,7 +635,7 @@ function Dashboard() {
     }
 
     return todasNotas.filter((n) => {
-      if (getNoteStatus(n) !== "ativa") return false;
+      if (getNoteStatus(n) !== "válida") return false;
       if (empresaFiltro !== "__all__" && n.cnpjPrestador !== empresaFiltro) return false;
       const dateStr = getDateField(n);
       if (prevAno !== "__all__" && dateStr.slice(0, 4) !== prevAno) return false;
@@ -711,7 +711,7 @@ function Dashboard() {
   const notasPrincipaisClientes = useMemo(() => {
     if (!todasNotas) return [];
     return todasNotas.filter((n) => {
-      if (getNoteStatus(n) !== "ativa") return false;
+      if (getNoteStatus(n) !== "válida") return false;
       if (empresaFiltro !== "__all__" && n.cnpjPrestador !== empresaFiltro) return false;
       return true;
     });
@@ -969,7 +969,7 @@ function Dashboard() {
       (n.vlrIrrf ?? 0).toFixed(2),
       (n.vlrInss ?? 0).toFixed(2),
       n.codTribNacional ? `${n.codTribNacional} - ${getServicoDescricao(n.codTribNacional)}` : "—",
-      getNoteStatus(n) === "ativa" ? "Ativa" : "Cancelada",
+      getNoteStatus(n) === "válida" ? "Válida" : "Cancelada",
     ]);
     const csv = [headers, ...rows]
       .map((r) => r.map((c) => `"${String(c ?? "").replace(/"/g, '""')}"`).join(";"))
@@ -1016,8 +1016,8 @@ function Dashboard() {
         let statusExcel = parseExcelStatus(rawStatus);
 
         const local = localMap.get(key);
-        if (local && local.status === "ativa" && statusExcel === "cancelada") {
-          statusExcel = "ativa";
+        if (local && local.status === "válida" && statusExcel === "cancelada") {
+          statusExcel = "válida";
         }
 
         const rawOperacao = opCol ? String(row[opCol] ?? "").trim() : "";
@@ -2131,7 +2131,7 @@ function Dashboard() {
                             <TableCell>
                               {getNoteStatus(n) === "ativa" ? (
                                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/25">
-                                  Ativa
+                                  Válida
                                 </span>
                               ) : (
                                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/25">
@@ -2430,20 +2430,20 @@ function Dashboard() {
                                 {item.rawKey}
                               </TableCell>
                               <TableCell className="font-mono text-[10px] text-foreground font-semibold">{item.nNFSe}</TableCell>
-                              <TableCell className="text-xs text-foreground/90 max-w-[150px] truncate" title={item.prestador}>
+                      <TableCell className="text-xs text-foreground/90 max-w-[150px] truncate" title={item.prestador}>
                                 {item.prestador}
                               </TableCell>
                               <TableCell className="text-xs">
                                 <div className="flex items-center gap-1.5">
-                                  <span className={`px-1.5 py-0.5 rounded text-[9px] font-semibold ${item.statusExcel === "ativa" ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "bg-rose-500/10 text-rose-700 dark:text-rose-400"}`}>
-                                    {item.statusExcel === "ativa" ? "Ativa" : "Canc."}
+                                  <span className={`px-1.5 py-0.5 rounded text-[9px] font-semibold            ${item.statusExcel === "válida" ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "bg-rose-500/10 text-rose-700 dark:text-rose-400"}`}>
+                                    {item.statusExcel === "válida" ? "Válida" : "Canc."}
                                   </span>
                                   <span className="text-border">|</span>
                                   {item.statusLocal === "nao_encontrado" ? (
                                     <span className="text-muted-foreground text-[9px] font-medium">Inexistente</span>
                                   ) : (
-                                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-semibold ${item.statusLocal === "ativa" ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "bg-rose-500/10 text-rose-700 dark:text-rose-400"}`}>
-                                      {item.statusLocal === "ativa" ? "Ativa" : "Canc."}
+                                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-semibold ${item.statusLocal === "válida" ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "bg-rose-500/10 text-rose-700 dark:text-rose-400"}`}>
+                                      {item.statusLocal === "válida" ? "Válida" : "Canc."}
                                     </span>
                                   )}
                                 </div>
