@@ -125,6 +125,10 @@ export function parseExcelStatus(rawStatus: string): "ativa" | "cancelada" {
     return "ativa";
   }
 
+  if (norm.includes("emitida") || norm.includes("paga")) {
+    return "ativa";
+  }
+
   const cancelTerms = [
     "cancelada",
     "cancelado",
