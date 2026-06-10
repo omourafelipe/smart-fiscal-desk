@@ -361,7 +361,7 @@ function Dashboard() {
     }
     setImportingTomadas(false);
     setProgressTomadas(null);
-  }, [todasNotas]);
+  }, []);
 
   const onDropTomadas = (e: React.DragEvent) => {
     e.preventDefault();
