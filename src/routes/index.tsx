@@ -914,12 +914,24 @@ function Dashboard() {
   }, [notasPrincipaisClientes]);
 
   // Cálculos de tributos
+  // Notas já importadas podem ter vlrIssRet/vlrIssRecolher com a lógica antiga.
+  // Para máxima compatibilidade, usamos vlrIss + issRetido como fallback.
   const issRetidoTotal = useMemo(() => {
-    return notasAtivas.reduce((sum, n) => sum + (n.vlrIssRet ?? 0), 0);
+    return notasAtivas.reduce((sum, n) => {
+      if ((n.vlrIssRet ?? 0) > 0) return sum + n.vlrIssRet!;
+      // fallback para notas antigas no banco: se issRetido === "Sim", usa vlrIss
+      if (n.issRetido === "Sim") return sum + (n.vlrIss ?? 0);
+      return sum;
+    }, 0);
   }, [notasAtivas]);
 
   const issARecolherTotal = useMemo(() => {
-    return notasAtivas.reduce((sum, n) => sum + (n.vlrIssRecolher ?? 0), 0);
+    return notasAtivas.reduce((sum, n) => {
+      if ((n.vlrIssRecolher ?? 0) > 0) return sum + n.vlrIssRecolher!;
+      // fallback para notas antigas no banco: se issRetido === "Não", usa vlrIss
+      if (n.issRetido === "Não") return sum + (n.vlrIss ?? 0);
+      return sum;
+    }, 0);
   }, [notasAtivas]);
 
   const pisTotal = useMemo(() => notasAtivas.reduce((sum, n) => sum + (n.vlrPis ?? 0), 0), [notasAtivas]);

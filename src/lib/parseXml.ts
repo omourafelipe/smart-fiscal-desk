@@ -130,23 +130,37 @@ export function parseNfseXml(xml: string): NotaFiscal | null {
     ]) || valor;
 
     // ISS retido na fonte (retido pelo tomador)
-    const vlrIssRet = getNumberFallback(inf, [
+    // vISSRet é preenchido somente quando há retenção na fonte
+    const vlrIssRetRaw = getNumberFallback(inf, [
       ["vISSRet"],
       ["trib", "tribMun", "vISSRet"]
     ]);
 
-    // ISS a recolher pelo próprio prestador
-    const vlrIssRecolher = getNumberFallback(inf, [
+    // Valor genérico do ISS da nota (vISSQN / vISS — presente em todos os casos)
+    const vlrIssQN = getNumberFallback(inf, [
       ["vISSQN"],
       ["vISS"],
       ["trib", "tribMun", "vISSQN"],
       ["trib", "tribMun", "vISS"]
     ]);
 
+    // issRetido é calculado abaixo, mas precisamos saber antes para separar os valores
+    const issRetidoFlag = getIssRetido(inf);
+
+    // ISS retido: usa vISSRet quando disponível; caso contrário usa vISSQN quando a nota é retida
+    const vlrIssRet = vlrIssRetRaw > 0
+      ? vlrIssRetRaw
+      : issRetidoFlag === "Sim"
+        ? vlrIssQN
+        : 0;
+
+    // ISS a recolher: apenas quando a nota NÃO é retida na fonte
+    const vlrIssRecolher = issRetidoFlag === "Não" ? vlrIssQN : 0;
+
     // vlrIss: valor total de ISS da nota (para exibição na tabela)
     const vlrIss = vlrIssRet > 0 ? vlrIssRet : vlrIssRecolher;
 
-    const issRetido = getIssRetido(inf);
+    const issRetido = issRetidoFlag;
 
     const vlrCsll = getNumberFallback(inf, [
       ["trib", "tribFed", "vRetCSLL"],
