@@ -297,7 +297,7 @@ function Dashboard() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   // Layout & Navigation States
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [rightPanelOpen, setRightPanelOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"dashboard" | "conciliation">("dashboard");
 
