@@ -332,8 +332,9 @@ function Dashboard() {
     setImportingTomadas(true);
     setProgressTomadas(null);
     // Build set of group CNPJs from existing notas
+    const existingNotas = await db.notas.toArray();
     const cnpjsGrupo = new Set(
-      (todasNotas ?? []).map((n) => n.cnpjPrestador.replace(/\D/g, "")).filter(Boolean)
+      existingNotas.map((n) => n.cnpjPrestador.replace(/\D/g, "")).filter(Boolean)
     );
     const zipFiles = Array.from(files).filter((f) => f.name.endsWith(".zip"));
     let totalXmls = 0;
@@ -360,7 +361,7 @@ function Dashboard() {
     }
     setImportingTomadas(false);
     setProgressTomadas(null);
-  }, [todasNotas]);
+  }, []);
 
   const onDropTomadas = (e: React.DragEvent) => {
     e.preventDefault();
