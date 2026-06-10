@@ -180,12 +180,44 @@ export function parseExcelIssRetido(value: unknown): "Sim" | "Não" {
   if (value === undefined || value === null) return "Não";
   const norm = normalizeString(String(value));
   if (!norm) return "Não";
-  
-  // Terms that clearly indicate yes
-  const yesTerms = ["sim", "yes", "s", "y", "true", "1", "retido", "retencao", "retençao", "ret"];
-  for (const term of yesTerms) {
-    if (norm.includes(term)) return "Sim";
+
+  // Termos que indicam explicitamente NÃO retido (verificar primeiro para evitar falsos positivos)
+  // Ex: "ISSQN a Recolher", "Não Retido", "Não Ret."
+  const noTerms = [
+    "arecolher",   // "ISSQN a Recolher" → Não Retido
+    "naoretido",   // "Não Retido"
+    "naoret",      // "Não Ret."
+    "nret",        // "N.Ret"
+    "naorecolhido",
+    "no",
+    "false",
+    "0",
+    "nao",
+  ];
+  for (const term of noTerms) {
+    if (norm === term || norm.startsWith(term)) return "Não";
   }
+
+  // Termos que indicam SIM (retido na fonte)
+  // Ex: "Retenção do ISSQN", "Retido", "Sim"
+  const yesTerms = [
+    "retencaodoissqn", // "Retenção do ISSQN"
+    "retencaoissqn",   // "Retenção ISSQN"
+    "retenção",
+    "retencao",
+    "retido",
+    "ret",
+    "sim",
+    "yes",
+    "true",
+    "1",
+    "s",
+    "y",
+  ];
+  for (const term of yesTerms) {
+    if (norm.includes(normalizeString(term))) return "Sim";
+  }
+
   return "Não";
 }
 
