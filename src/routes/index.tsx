@@ -58,8 +58,6 @@ import { parseNfseXml } from "@/lib/parseXml";
 import {
   parseExcelFile,
   detectColumns,
-  mapExcelRows,
-  parseExcelOperacao,
   parseExcelStatus,
   normalizeString,
   type ExcelRowData,
@@ -239,10 +237,6 @@ interface ConciliationResult {
   statusLocal: "válida" | "cancelada" | "nao_encontrado";
   statusChanged: boolean;
   notaId?: string;
-  rawOperacao?: string;
-  issRetidoExcel?: "Sim" | "Não";
-  issRetidoLocal?: "Sim" | "Não";
-  issRetidoDivergent: boolean;
 }
 
 const mesesOpcoes = [
@@ -341,7 +335,6 @@ function Dashboard() {
   const [xlsxHeaders, setXlsxHeaders] = useState<string[]>([]);
   const [keyCol, setKeyCol] = useState<string>("");
   const [statusCol, setStatusCol] = useState<string>("");
-  const [operacaoCol, setOperacaoCol] = useState<string>("");
   const [conciliatedItems, setConciliatedItems] = useState<ConciliationResult[]>([]);
   const [isXlsxProcessing, setIsXlsxProcessing] = useState(false);
   const [conciliatedStats, setConciliatedStats] = useState({
@@ -988,7 +981,6 @@ function Dashboard() {
       rows: ExcelRowData[],
       kCol: string,
       sCol: string,
-      opCol: string,
       localNotas: NotaFiscal[],
     ) => {
       setIsXlsxProcessing(true);
@@ -1017,14 +1009,7 @@ function Dashboard() {
 
         const local = localMap.get(key);
 
-        const rawOperacao = opCol ? String(row[opCol] ?? "").trim() : "";
-        const issRetidoExcel = parseExcelOperacao(rawOperacao);
-
-        const issRetidoLocal = local ? (local.issRetido as "Sim" | "Não") : undefined;
-
         const statusChanged = local ? local.status !== statusExcel : false;
-        const issRetidoDivergent =
-          local && issRetidoExcel !== undefined ? issRetidoLocal !== issRetidoExcel : false;
 
         const res: ConciliationResult = {
           rowNumber: idx + 2,
@@ -1037,15 +1022,11 @@ function Dashboard() {
           statusLocal: local ? local.status : "nao_encontrado",
           statusChanged,
           notaId: local?.id,
-          rawOperacao,
-          issRetidoExcel,
-          issRetidoLocal,
-          issRetidoDivergent,
         };
 
         if (!local) {
           notFound++;
-        } else if (res.statusChanged || res.issRetidoDivergent) {
+        } else if (res.statusChanged) {
           updated++;
         } else {
           alreadyCorrect++;
@@ -1082,19 +1063,8 @@ function Dashboard() {
       setKeyCol(kCol);
       setStatusCol(sCol);
 
-      // Auto-detect "Operação" column
-      const opCol =
-        headers.find(
-          (h) =>
-            normalizeString(h).includes("operacao") ||
-            normalizeString(h).includes("operação") ||
-            normalizeString(h).includes("colunag") ||
-            normalizeString(h).includes("operac"),
-        ) || (headers.length >= 7 ? headers[6] : "");
-      setOperacaoCol(opCol);
-
       if (kCol && sCol && todasNotas) {
-        runConciliation(rows, kCol, sCol, opCol, todasNotas);
+        runConciliation(rows, kCol, sCol, todasNotas);
       }
       addActivity("conciliation", "Planilha Carregada", `Relatório "${file.name}" carregado com ${rows.length} linhas.`);
       setRightPanelOpen(true);
@@ -1117,7 +1087,7 @@ function Dashboard() {
 
   const applyUpdates = async () => {
     const changes = conciliatedItems.filter(
-      (item) => (item.statusChanged || item.issRetidoDivergent) && item.notaId,
+      (item) => item.statusChanged && item.notaId,
     );
     if (changes.length === 0) {
       toast.info("Nenhuma divergência encontrada para atualizar.");
@@ -1130,8 +1100,6 @@ function Dashboard() {
           if (item.notaId) {
             const updates: Partial<NotaFiscal> = {};
             if (item.statusChanged) updates.status = item.statusExcel;
-            if (item.issRetidoDivergent && item.issRetidoExcel)
-              updates.issRetido = item.issRetidoExcel;
 
             if (Object.keys(updates).length > 0) {
               await db.notas.update(item.notaId, updates);
@@ -1141,7 +1109,7 @@ function Dashboard() {
       });
       addActivity("update", "Divergências Aplicadas", `${changes.length} nota(s) retificada(s) no banco local.`);
       setRightPanelOpen(true);
-      toast.success("Divergências de Status e/ou ISS retificadas no banco de dados local!");
+      toast.success("Divergências de Status retificadas no banco de dados local!");
     } catch (e) {
       console.error(e);
       toast.error("Erro ao salvar as atualizações.");
@@ -1157,9 +1125,6 @@ function Dashboard() {
       "Prestador",
       "Status Planilha",
       "Status Local",
-      "Operação Planilha",
-      "ISS Retido Planilha",
-      "ISS Retido Local",
       "Divergente",
     ];
     const rows = conciliatedItems.map((item) => [
@@ -1170,10 +1135,7 @@ function Dashboard() {
       item.prestador,
       item.statusExcel,
       item.statusLocal === "nao_encontrado" ? "Não Encontrado" : item.statusLocal,
-      item.rawOperacao || "—",
-      item.issRetidoExcel || "—",
-      item.issRetidoLocal || "—",
-      item.statusChanged || item.issRetidoDivergent ? "Sim" : "Não",
+      item.statusChanged ? "Sim" : "Não",
     ]);
     const csv = [headers, ...rows]
       .map((r) => r.map((c) => `"${String(c ?? "").replace(/"/g, '""')}"`).join(";"))
@@ -1189,9 +1151,9 @@ function Dashboard() {
 
   useEffect(() => {
     if (xlsxRows.length > 0 && keyCol && statusCol && todasNotas) {
-      runConciliation(xlsxRows, keyCol, statusCol, operacaoCol, todasNotas);
+      runConciliation(xlsxRows, keyCol, statusCol, todasNotas);
     }
-  }, [todasNotas, xlsxRows, keyCol, statusCol, operacaoCol, runConciliation]);
+  }, [todasNotas, xlsxRows, keyCol, statusCol, runConciliation]);
 
   return (
     <div className="min-h-screen bg-background flex font-sans antialiased text-foreground w-full overflow-hidden transition-colors duration-300">
@@ -2302,21 +2264,7 @@ function Dashboard() {
                             </SelectContent>
                           </Select>
                         </div>
-
-                        <div className="space-y-1">
-                          <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">Coluna Operação (ISS Retido)</label>
-                          <Select value={operacaoCol} onValueChange={(val) => setOperacaoCol(val)}>
-                            <SelectTrigger className="w-full h-8 text-xs rounded-lg border-border bg-muted hover:bg-muted/80 text-foreground transition-colors">
-                              <SelectValue placeholder="Selecione..." />
-                            </SelectTrigger>
-                            <SelectContent className="rounded-xl shadow-lg border-border bg-popover text-popover-foreground">
-                              {xlsxHeaders.map((h) => (
-                                <SelectItem key={h} value={h}>{h}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
+                       </div>
                     </div>
 
                     {/* Stats Dashboard Grid */}
@@ -2410,7 +2358,6 @@ function Dashboard() {
                             <TableHead className="font-medium text-muted-foreground h-9">Nº NFS-e</TableHead>
                             <TableHead className="font-medium text-muted-foreground h-9">Prestador</TableHead>
                             <TableHead className="font-medium text-muted-foreground h-9">Status (Planilha | Local)</TableHead>
-                            <TableHead className="font-medium text-muted-foreground h-9">ISS Retido (Planilha | Local)</TableHead>
                             <TableHead className="font-medium text-muted-foreground h-9">Auditoria</TableHead>
                           </TableRow>
                         </TableHeader>
@@ -2419,7 +2366,7 @@ function Dashboard() {
                             <TableRow
                               key={idx}
                               className={`border-b border-border/50 hover:bg-muted/40 transition-colors ${
-                                item.statusChanged || item.issRetidoDivergent ? "bg-amber-500/5 hover:bg-amber-500/10" : ""
+                                item.statusChanged ? "bg-amber-500/5 hover:bg-amber-500/10" : ""
                               }`}
                             >
                               <TableCell className="font-mono text-[10px] text-muted-foreground">{item.rowNumber}</TableCell>
@@ -2427,12 +2374,12 @@ function Dashboard() {
                                 {item.rawKey}
                               </TableCell>
                               <TableCell className="font-mono text-[10px] text-foreground font-semibold">{item.nNFSe}</TableCell>
-                      <TableCell className="text-xs text-foreground/90 max-w-[150px] truncate" title={item.prestador}>
+                              <TableCell className="text-xs text-foreground/90 max-w-[150px] truncate" title={item.prestador}>
                                 {item.prestador}
                               </TableCell>
                               <TableCell className="text-xs">
                                 <div className="flex items-center gap-1.5">
-                                  <span className={`px-1.5 py-0.5 rounded text-[9px] font-semibold            ${item.statusExcel === "válida" ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "bg-rose-500/10 text-rose-700 dark:text-rose-400"}`}>
+                                  <span className={`px-1.5 py-0.5 rounded text-[9px] font-semibold ${item.statusExcel === "válida" ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "bg-rose-500/10 text-rose-700 dark:text-rose-400"}`}>
                                     {item.statusExcel === "válida" ? "Válida" : "Canc."}
                                   </span>
                                   <span className="text-border">|</span>
@@ -2445,40 +2392,14 @@ function Dashboard() {
                                   )}
                                 </div>
                               </TableCell>
-                              <TableCell className="text-xs">
-                                <div className="flex items-center gap-1.5">
-                                  {item.issRetidoExcel ? (
-                                    <span className={`px-1.5 py-0.5 rounded border text-[9px] font-medium ${item.issRetidoExcel === "Sim" ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/25" : "bg-muted text-muted-foreground border-border"}`}>
-                                      {item.issRetidoExcel}
-                                    </span>
-                                  ) : (
-                                    <span className="text-border">—</span>
-                                  )}
-                                  <span className="text-border">|</span>
-                                  {item.statusLocal === "nao_encontrado" ? (
-                                    <span className="text-muted-foreground text-[9px] font-medium">Inexistente</span>
-                                  ) : item.issRetidoLocal ? (
-                                    <span className={`px-1.5 py-0.5 rounded border text-[9px] font-medium ${item.issRetidoLocal === "Sim" ? "bg-amber-50 text-amber-700 border-amber-100" : "bg-slate-50 text-slate-500 border-slate-100"}`}>
-                                      {item.issRetidoLocal}
-                                    </span>
-                                  ) : (
-                                    <span className="text-slate-300">—</span>
-                                  )}
-                                </div>
-                              </TableCell>
                               <TableCell className="text-xs font-semibold">
                                 {item.statusLocal === "nao_encontrado" ? (
                                   <span className="text-rose-500 text-[10px] font-semibold flex items-center gap-1">
                                     <XCircle className="h-3 w-3" /> Inexistente no Banco
                                   </span>
-                                ) : item.statusChanged || item.issRetidoDivergent ? (
+                                ) : item.statusChanged ? (
                                   <span className="text-amber-600 text-[10px] font-semibold flex items-center gap-1">
-                                    <AlertTriangle className="h-3.5 w-3.5" />
-                                    {item.statusChanged && item.issRetidoDivergent
-                                      ? "Status e ISS divergentes"
-                                      : item.statusChanged
-                                        ? "Status divergente"
-                                        : "ISS Retido divergente"}
+                                    <AlertTriangle className="h-3.5 w-3.5" /> Status divergente
                                   </span>
                                 ) : (
                                   <span className="text-emerald-600 text-[10px] font-semibold flex items-center gap-1">

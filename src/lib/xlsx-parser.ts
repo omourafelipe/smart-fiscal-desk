@@ -150,20 +150,6 @@ export function parseExcelStatus(rawStatus: string): "válida" | "cancelada" {
 }
 
 /**
- * Normaliza os valores da coluna Operação para determinar a retenção do ISSQN (Sim ou Não)
- */
-export function parseExcelOperacao(rawOperacao: string): "Sim" | "Não" | undefined {
-  const norm = normalizeString(rawOperacao);
-  if (norm.includes("issqnarecolher") || norm.includes("arecolher")) {
-    return "Não";
-  }
-  if (norm.includes("retencaodoissqn") || norm.includes("retencao")) {
-    return "Sim";
-  }
-  return undefined;
-}
-
-/**
  * Processa as linhas do Excel mapeando para os campos comuns
  */
 export function mapExcelRows(
