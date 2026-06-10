@@ -1,5 +1,5 @@
 import { XMLParser } from "fast-xml-parser";
-import type { NotaFiscal } from "./db";
+import type { NotaFiscal, NotaFiscalTomada } from "./db";
 
 const parser = new XMLParser({
   ignoreAttributes: false,
@@ -278,7 +278,7 @@ export function parseNfseXml(xml: string): NotaFiscal | null {
 export function parseNfseXmlTomada(
   xml: string,
   cnpjsGrupo: Set<string>,
-): import("./db").NotaFiscalTomada | null {
+): NotaFiscalTomada | null {
   try {
     const json = parser.parse(xml);
     const NFSe = findNFSe(json) as Record<string, unknown> | null;

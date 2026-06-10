@@ -83,6 +83,8 @@ class NfseDB extends Dexie {
         "id, cnpjPrestador, nomePrestador, dhEmi, status, chave, cnpjCpfCliente, codTribNacional",
       notasTomadas:
         "id, cnpjTomador, cnpjPrestador, nomePrestador, dhEmi, status, chave, codTribNacional",
+    }).upgrade(() => {
+      // Criação da tabela notasTomadas — nenhuma migração de dados necessária
     });
   }
 }

@@ -54,9 +54,8 @@ import {
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
-import { db, type NotaFiscal } from "@/lib/db";
+import { db, type NotaFiscal, type NotaFiscalTomada } from "@/lib/db";
 import { parseNfseXml, parseNfseXmlTomada } from "@/lib/parseXml";
-import type { NotaFiscalTomada } from "@/lib/db";
 import {
   parseExcelFile,
   detectColumns,
