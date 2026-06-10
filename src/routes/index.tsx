@@ -707,10 +707,20 @@ function Dashboard() {
     }));
   }, [notasAtivas, faturamento]);
 
+  // Base de principais clientes (ignora filtros de período e serviço)
+  const notasPrincipaisClientes = useMemo(() => {
+    if (!todasNotas) return [];
+    return todasNotas.filter((n) => {
+      if (getNoteStatus(n) !== "ativa") return false;
+      if (empresaFiltro !== "__all__" && n.cnpjPrestador !== empresaFiltro) return false;
+      return true;
+    });
+  }, [todasNotas, empresaFiltro, getNoteStatus]);
+
   // Top clients by faturamento (matches Top Selling Products table style)
   const topClientesList = useMemo(() => {
     const map = new Map<string, { cnpjCpf: string; nome: string; total: number; count: number }>();
-    notasAtivas.forEach((n) => {
+    notasPrincipaisClientes.forEach((n) => {
       const key = n.cnpjCpfCliente || "Desconhecido";
       const curr = map.get(key) || { cnpjCpf: key, nome: n.cliente || "Desconhecido", total: 0, count: 0 };
       curr.total += n.valor;
@@ -721,7 +731,7 @@ function Dashboard() {
     return Array.from(map.values())
       .sort((a, b) => b.total - a.total)
       .slice(0, 5);
-  }, [notasAtivas]);
+  }, [notasPrincipaisClientes]);
 
   // Cálculos de tributos
   const issRetidoTotal = useMemo(() => {
@@ -779,52 +789,40 @@ function Dashboard() {
   const pieTitle =
     empresaFiltro === "__all__" ? "Faturamento por Empresa" : "Top Serviços por Faturamento";
 
-  // Faturamento PJ vs PF
+  // Faturamento PJ vs PF (Categorizado: Empresarial, Adesão, Individual/Familiar)
   const pjPfData = useMemo(() => {
-    let pjTotal = 0;
-    let pfTotal = 0;
-    let pjCount = 0;
-    let pfCount = 0;
+    let empresarialTotal = 0;
+    let adesaoTotal = 0;
+    let individualTotal = 0;
+    let empresarialCount = 0;
+    let adesaoCount = 0;
+    let individualCount = 0;
 
     notasAtivas.forEach((n) => {
       const cleanKey = String(n.cnpjCpfCliente ?? "").replace(/\D/g, "");
-      if (cleanKey.length === 14) {
-        pjTotal += n.valor;
-        pjCount++;
+      const isPlural = (n.cliente || "").toUpperCase().includes("PLURAL GESTAO");
+
+      if (isPlural) {
+        adesaoTotal += n.valor;
+        adesaoCount++;
       } else if (cleanKey.length === 11) {
-        pfTotal += n.valor;
-        pfCount++;
+        individualTotal += n.valor;
+        individualCount++;
       } else {
-        // Fallback: se tiver mais que 11 caracteres, assume PJ
-        if (cleanKey.length > 11) {
-          pjTotal += n.valor;
-          pjCount++;
-        } else if (cleanKey.length > 0) {
-          pfTotal += n.valor;
-          pfCount++;
-        } else {
-          pjTotal += n.valor;
-          pjCount++;
-        }
+        empresarialTotal += n.valor;
+        empresarialCount++;
       }
     });
 
     const data = [];
-    if (pjTotal > 0 || pjCount > 0) {
-      data.push({
-        name: "Pessoa Jurídica (Corporate/PME)",
-        value: pjTotal,
-        count: pjCount,
-        ticketMedio: pjCount ? pjTotal / pjCount : 0
-      });
+    if (empresarialTotal > 0 || empresarialCount > 0) {
+      data.push({ name: "Empresarial", value: empresarialTotal, count: empresarialCount });
     }
-    if (pfTotal > 0 || pfCount > 0) {
-      data.push({
-        name: "Pessoa Física (Individual/Familiar)",
-        value: pfTotal,
-        count: pfCount,
-        ticketMedio: pfCount ? pfTotal / pfCount : 0
-      });
+    if (adesaoTotal > 0 || adesaoCount > 0) {
+      data.push({ name: "Adesão", value: adesaoTotal, count: adesaoCount });
+    }
+    if (individualTotal > 0 || individualCount > 0) {
+      data.push({ name: "Individual/Familiar", value: individualTotal, count: individualCount });
     }
     return data;
   }, [notasAtivas]);
@@ -1899,8 +1897,10 @@ function Dashboard() {
                               stroke="var(--color-card)"
                               strokeWidth={3}
                             >
-                              <Cell fill="#6366f1" />
-                              <Cell fill="#ec4899" />
+                              {pjPfData.map((entry, index) => {
+                                const colors = ["#6366f1", "#14b8a6", "#ec4899"];
+                                return <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />;
+                              })}
                             </Pie>
                             <Tooltip
                               formatter={(v) => fmtBRL(Number(v))}
@@ -1926,24 +1926,33 @@ function Dashboard() {
                   </div>
 
                   <div className="flex flex-col gap-2.5 mt-3 pt-3 border-t border-border/50 text-xs">
-                    {pjPfData.map((item, idx) => (
-                      <div key={idx} className="flex items-center justify-between">
-                        <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                          <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: idx === 0 ? "#6366f1" : "#ec4899" }} />
-                          <span className="font-semibold text-foreground/90 truncate max-w-[150px]">{item.name}</span>
+                    {pjPfData.map((item, idx) => {
+                      const colors = ["#6366f1", "#14b8a6", "#ec4899"];
+                      return (
+                        <div key={idx} className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                            <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: colors[idx % colors.length] }} />
+                            <span className="font-semibold text-foreground/90 truncate max-w-[150px]">{item.name}</span>
+                          </div>
+                          <div className="text-right flex flex-col items-end">
+                            <span className="font-bold text-foreground">
+                              {item.value >= 1000000 
+                                ? `${(item.value / 1000000).toFixed(1).replace('.', ',')} mi`
+                                : item.value >= 1000 
+                                  ? `${(item.value / 1000).toFixed(1).replace('.', ',')} k`
+                                  : fmtBRL(item.value)}
+                            </span>
+                            <span className="text-[9px] text-muted-foreground font-mono">{item.count} notas</span>
+                          </div>
                         </div>
-                        <div className="text-right flex flex-col items-end">
-                          <span className="font-bold text-foreground">{fmtBRL(item.value)}</span>
-                          <span className="text-[9px] text-muted-foreground font-mono">T. Médio: {fmtBRL(item.ticketMedio)} ({item.count} notas)</span>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
 
                 {/* Donut Chart: Planos vs Hospitais Comparativo */}
                 <div className="bg-card border border-border rounded-2xl p-5 shadow-xs transition-colors duration-300">
-                  <h3 className="text-xs font-bold text-foreground mb-1">Comparativo de Serviços Chave</h3>
+                  <h3 className="text-xs font-bold text-foreground mb-1">Comparativo por Tipo de Serviço</h3>
                   <p className="text-[10px] text-muted-foreground mb-4">Planos de Saúde vs. Serviços Hospitalares</p>
                   
                   <div className="h-[200px] flex items-center justify-center relative">
@@ -2087,29 +2096,45 @@ function Dashboard() {
                   <Table className="min-w-[1400px]">
                     <TableHeader className="bg-muted/30">
                       <TableRow className="border-b border-border">
+                        <TableHead className="font-medium text-muted-foreground h-9">Situação</TableHead>
                         <TableHead className="font-medium text-muted-foreground h-9">Nº NFS</TableHead>
                         <TableHead className="font-medium text-muted-foreground h-9">Emissão</TableHead>
                         <TableHead className="font-medium text-muted-foreground h-9">Competência</TableHead>
-                        <TableHead className="font-medium text-muted-foreground h-9">CNPJ/CPF Cliente</TableHead>
+                        <TableHead className="font-medium text-muted-foreground h-9">CNPJ/CPF</TableHead>
                         <TableHead className="font-medium text-muted-foreground h-9">Cliente</TableHead>
                         <TableHead className="text-right font-medium text-muted-foreground h-9">Vlr. Serviço</TableHead>
                         <TableHead className="text-right font-medium text-muted-foreground h-9">Vlr. Líquido</TableHead>
                         <TableHead className="text-right font-medium text-muted-foreground h-9">Vlr. ISS</TableHead>
                         <TableHead className="text-center font-medium text-muted-foreground h-9">ISS Retido?</TableHead>
+                        <TableHead className="text-right font-medium text-muted-foreground h-9">IRRF</TableHead>
+                        <TableHead className="text-right font-medium text-muted-foreground h-9">CSLL</TableHead>
+                        <TableHead className="text-right font-medium text-muted-foreground h-9">PIS</TableHead>
+                        <TableHead className="text-right font-medium text-muted-foreground h-9">COFINS</TableHead>
+                        <TableHead className="text-right font-medium text-muted-foreground h-9">INSS</TableHead>
                         <TableHead className="font-medium text-muted-foreground h-9">Serviço</TableHead>
-                        <TableHead className="font-medium text-muted-foreground h-9">Situação</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {paginatedNotas.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={11} className="text-center text-muted-foreground py-12 text-xs">
+                          <TableCell colSpan={16} className="text-center text-muted-foreground py-12 text-xs">
                             Nenhuma nota fiscal encontrada no banco local. Envie um ZIP com XMLs para começar.
                           </TableCell>
                         </TableRow>
                       ) : (
                         paginatedNotas.map((n) => (
                           <TableRow key={n.id} className="border-b border-border/50 hover:bg-muted/40 transition-colors">
+                            <TableCell>
+                              {getNoteStatus(n) === "ativa" ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/25">
+                                  Ativa
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/25">
+                                  Cancelada
+                                </span>
+                              )}
+                            </TableCell>
                             <TableCell className="font-mono text-[10px] text-foreground/95 font-semibold">{n.nNFSe}</TableCell>
                             <TableCell className="text-xs text-foreground/90 whitespace-nowrap">{formatarData(n.dhEmi)}</TableCell>
                             <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{formatarCompetencia(n.dCompet)}</TableCell>
@@ -2129,19 +2154,13 @@ function Dashboard() {
                                 </span>
                               )}
                             </TableCell>
+                            <TableCell className="text-right font-mono text-[10px] text-muted-foreground">{fmtBRL(n.vlrIrrf ?? 0)}</TableCell>
+                            <TableCell className="text-right font-mono text-[10px] text-muted-foreground">{fmtBRL(n.vlrCsll ?? 0)}</TableCell>
+                            <TableCell className="text-right font-mono text-[10px] text-muted-foreground">{fmtBRL(n.vlrPis ?? 0)}</TableCell>
+                            <TableCell className="text-right font-mono text-[10px] text-muted-foreground">{fmtBRL(n.vlrCofins ?? 0)}</TableCell>
+                            <TableCell className="text-right font-mono text-[10px] text-muted-foreground">{fmtBRL(n.vlrInss ?? 0)}</TableCell>
                             <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate" title={n.codTribNacional ? `${n.codTribNacional} - ${getServicoDescricao(n.codTribNacional)}` : "—"}>
                               {n.codTribNacional ? `${n.codTribNacional} - ${getServicoDescricao(n.codTribNacional)}` : "—"}
-                            </TableCell>
-                            <TableCell>
-                              {getNoteStatus(n) === "ativa" ? (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/25">
-                                  Ativa
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/25">
-                                  Cancelada
-                                </span>
-                              )}
                             </TableCell>
                           </TableRow>
                         ))
