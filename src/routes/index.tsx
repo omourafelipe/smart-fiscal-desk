@@ -260,6 +260,33 @@ const mesesOpcoes = [
   { value: "12", label: "Dezembro" },
 ];
 
+/**
+ * Classifica uma descrição de serviço (xDescServ) em uma categoria geral.
+ * Match case-insensitive; primeira regra a casar vence.
+ */
+function categorizarServico(desc: string): string {
+  const s = (desc || "").toLowerCase();
+  if (!s.trim()) return "Outros";
+  const rules: Array<[string, string[]]> = [
+    ["Saúde / Hospitalar", ["hospital", "médic", "medic", "clínic", "clinic", "laboratóri", "laboratori", "exame", "enfermag", "fisioterap", "saúde", "saude"]],
+    ["Locação / Aluguel", ["locaç", "locac", "aluguel"]],
+    ["Manutenção e Reparos", ["manutenç", "manutenc", "reparo", "conserto", "assistência técnica", "assistencia tecnica"]],
+    ["Limpeza e Conservação", ["limpeza", "conservaç", "conservac", "higieniz"]],
+    ["Segurança e Vigilância", ["seguranç", "seguranc", "vigilânc", "vigilanc", "portaria"]],
+    ["Transporte e Logística", ["transporte", "frete", "logístic", "logistic", "entrega"]],
+    ["Consultoria e Assessoria", ["consultor", "assessor", "advoc", "jurídic", "juridic", "contábil", "contabil", "auditoria"]],
+    ["Tecnologia / TI", ["software", "sistema", "informátic", "informatic", "licença", "licenca", "hospedagem", "cloud", "suporte técnic", "suporte tecnic"]],
+    ["Treinamento e Educação", ["treinamento", "curso", "capacitaç", "capacitac", "ensino", "educação", "educacao"]],
+    ["Publicidade e Marketing", ["publicidade", "marketing", "propaganda", "mídia", "midia"]],
+    ["Engenharia e Construção", ["engenhar", "obra", "construç", "construc", "projeto"]],
+    ["Alimentação", ["alimentaç", "alimentac", "refeiç", "refeic", "restaurante", "lanche"]],
+  ];
+  for (const [cat, keys] of rules) {
+    if (keys.some((k) => s.includes(k))) return cat;
+  }
+  return "Outros";
+}
+
 function Dashboard() {
   const [theme, setTheme] = useState<"light" | "dark">("light");
 
