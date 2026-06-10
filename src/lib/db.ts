@@ -15,6 +15,8 @@ export interface NotaFiscal {
   cnpjCpfCliente: string;
   vlrLiquido: number;
   vlrIss: number;
+  vlrIssRet?: number;       // ISS retido na fonte (vISSRet)
+  vlrIssRecolher?: number; // ISS a recolher pelo prestador (vISSQN quando não retido)
   issRetido: string;
   vlrCsll: number;
   vlrIrrf: number;

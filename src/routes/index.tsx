@@ -915,11 +915,11 @@ function Dashboard() {
 
   // Cálculos de tributos
   const issRetidoTotal = useMemo(() => {
-    return notasAtivas.reduce((sum, n) => sum + (n.issRetido === "Sim" ? n.vlrIss : 0), 0);
+    return notasAtivas.reduce((sum, n) => sum + (n.vlrIssRet ?? 0), 0);
   }, [notasAtivas]);
 
   const issARecolherTotal = useMemo(() => {
-    return notasAtivas.reduce((sum, n) => sum + (n.issRetido !== "Sim" ? n.vlrIss : 0), 0);
+    return notasAtivas.reduce((sum, n) => sum + (n.vlrIssRecolher ?? 0), 0);
   }, [notasAtivas]);
 
   const pisTotal = useMemo(() => notasAtivas.reduce((sum, n) => sum + (n.vlrPis ?? 0), 0), [notasAtivas]);

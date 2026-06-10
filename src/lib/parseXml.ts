@@ -129,14 +129,22 @@ export function parseNfseXml(xml: string): NotaFiscal | null {
       ["vLiquido"]
     ]) || valor;
 
-    const vlrIss = getNumberFallback(inf, [
+    // ISS retido na fonte (retido pelo tomador)
+    const vlrIssRet = getNumberFallback(inf, [
       ["vISSRet"],
+      ["trib", "tribMun", "vISSRet"]
+    ]);
+
+    // ISS a recolher pelo próprio prestador
+    const vlrIssRecolher = getNumberFallback(inf, [
       ["vISSQN"],
       ["vISS"],
       ["trib", "tribMun", "vISSQN"],
-      ["trib", "tribMun", "vISSRet"],
       ["trib", "tribMun", "vISS"]
     ]);
+
+    // vlrIss: valor total de ISS da nota (para exibição na tabela)
+    const vlrIss = vlrIssRet > 0 ? vlrIssRet : vlrIssRecolher;
 
     const issRetido = getIssRetido(inf);
 
@@ -229,6 +237,8 @@ export function parseNfseXml(xml: string): NotaFiscal | null {
       cnpjCpfCliente,
       vlrLiquido,
       vlrIss,
+      vlrIssRet,
+      vlrIssRecolher,
       issRetido,
       vlrCsll,
       vlrIrrf,
