@@ -1,33 +1,46 @@
-## Problem
+# Ajustes no Dashboard de NFS-e Recebidas
 
-In the production build the page crashes with:
+## 1. Tabela "NFS-e Recebidas de Fornecedores"
+- **Remover** a coluna **Tomador** (cabeçalho ~linha 3494 + célula ~linha 3526).
+- **Adicionar** a coluna **Vlr. ISS** entre "Vlr. Líquido" e "ISS Retido?", exibindo `n.vlrIssRet` quando `issRetido === "Sim"`, `—` caso contrário (mesmo padrão das demais retenções).
+- `colSpan` da linha vazia continua 14 (uma removida, uma adicionada).
 
-```
-ReferenceError: Cannot access 'Tt' before initialization
-  at ode (index-BY0KqMDm.js:119:70434)   ← recharts vendor chunk
-  at Hr (...)                            ← React renderWithHooks
-```
+## 2. Regra de "ISS Retido"
+Em `src/lib/parseXml.ts`, função `getIssRetido()`:
+- Retornar `"Sim"` **apenas** quando `tpRetISSQN ∈ {"1", "3"}`:
+  - `1` → Retenção do ISSQN
+  - `3` → Retenção Simples (Simples Nacional)
+- Remover o fallback heurístico atual (`vISSRet > 0 → "Sim"`) e a checagem por `RT`. Sem `tpRetISSQN` explícito = "Não".
+- A regra vale tanto para `parseNfseXml` (emitidas) quanto para `parseNfseXmlTomada` (recebidas).
 
-`index-BY0KqMDm.js` is the vendor chunk containing **recharts**. The "Cannot access X before initialization" error in a minified vendor chunk is the textbook signature of a **circular ES module import** inside that library — the module graph is split into chunks by Vite/Rollup and one of recharts' internal `const`s is read before its declaration runs.
+Consequência: notas já gravadas no IndexedDB mantêm a marcação antiga até serem reimportadas — o usuário pode usar o botão "Limpar Base" e reprocessar os ZIPs.
 
-The project is on `recharts@^3.8.1`. Recharts 3.x has multiple open issues with exactly this symptom under Vite/Rollup production builds (the v3 rewrite introduced circular re-exports between its `state`, `chart`, and `component` barrels). Our own `src/components/ui/chart.tsx` already needs `// @ts-nocheck` to compile against v3, which is another sign we're paying the cost of v3 without using any v3-only features — the dashboard uses only the standard primitives (`BarChart`, `AreaChart`, `Bar`, `Area`, `XAxis`, `YAxis`, `Tooltip`, `ResponsiveContainer`, `CartesianGrid`, `PieChart`, `Pie`, `Cell`, `Legend`), all of which work identically in v2.
+## 3. Gráfico "Por Tipo de Serviço" (aba Recebidas)
+Substituir o agrupamento por `codTribNacional` por **categorias gerais derivadas da descrição do serviço** (`n.servico` = `xDescServ`).
 
-## Fix
+Helper `categorizarServico(desc)` — match case-insensitive, primeira regra vence:
 
-Pin recharts to the last stable v2 line, which does not have this circular-init bug:
+| Categoria | Palavras-chave |
+|---|---|
+| Saúde / Hospitalar | hospital, médic, clínic, laboratóri, exame, enfermag, fisioterap, saúde |
+| Locação / Aluguel | locaç, aluguel |
+| Manutenção e Reparos | manutenç, reparo, conserto, assistência técnica |
+| Limpeza e Conservação | limpeza, conservaç, higieniz |
+| Segurança e Vigilância | seguranç, vigilânc, portaria |
+| Transporte e Logística | transporte, frete, logístic, entrega |
+| Consultoria e Assessoria | consultor, assessor, advoc, jurídic, contábil, auditoria |
+| Tecnologia / TI | software, sistema, informátic, licença, hospedagem, cloud, suporte técnic |
+| Treinamento e Educação | treinamento, curso, capacitaç, ensino, educação |
+| Publicidade e Marketing | publicidade, marketing, propaganda, mídia |
+| Engenharia e Construção | engenhar, obra, construç, projeto |
+| Alimentação | alimentaç, refeiç, restaurante, lanche |
+| Outros | (fallback) |
 
-1. `bun remove recharts && bun add recharts@^2.15.0`
-2. Remove the `// @ts-nocheck` from `src/components/ui/chart.tsx` (v2 ships correct types) — keep it only if a v2 type mismatch actually appears after the swap.
-3. No source changes are needed in `src/routes/index.tsx` — all imported recharts symbols exist in v2 with the same API.
-4. Verify in preview: hard-reload the `/` route, confirm the dashboard renders, KPI cards + bar chart + pie chart all display, and the console is clean.
+Aplicar como chave em `servicoMap` (linhas ~3204-3213). Atualizar subtítulo do card para "Distribuição por categoria de serviço".
 
-## Why not other options
+## Arquivos afetados
+- `src/lib/parseXml.ts` — endurecer `getIssRetido()`.
+- `src/routes/index.tsx` — tabela tomadas (cabeçalho + célula) e cálculo do gráfico de serviços.
 
-- **"Just retry / clear cache"** — the error is deterministic in the production bundle, not a stale-asset issue.
-- **Mark recharts as `ssr.noExternal` / tweak `optimizeDeps`** — does not help; the failure is in the client production chunk, not SSR or dev pre-bundling, and the underlying circular import inside recharts v3 remains.
-- **Lazy-load the charts with `React.lazy`** — would only delay the crash until the chart mounts; the broken module graph is still loaded.
-- **Wait for an upstream recharts v3 fix** — unbounded; downgrading is a one-line, fully reversible change.
-
-## Risk
-
-Very low. v2 → v3 was mostly an internal rewrite; the public component API used in this project is unchanged. If a v2-specific type warning appears in `chart.tsx`, we keep the existing `@ts-nocheck` line.
+## Fora do escopo
+- Recalcular `issRetido` retroativamente nas notas já persistidas. Se quiser um botão "Recalcular ISS" que reprocessa o `raw` salvo, me diga e incluo.

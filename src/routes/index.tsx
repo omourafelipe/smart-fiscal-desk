@@ -260,6 +260,33 @@ const mesesOpcoes = [
   { value: "12", label: "Dezembro" },
 ];
 
+/**
+ * Classifica uma descrição de serviço (xDescServ) em uma categoria geral.
+ * Match case-insensitive; primeira regra a casar vence.
+ */
+function categorizarServico(desc: string): string {
+  const s = (desc || "").toLowerCase();
+  if (!s.trim()) return "Outros";
+  const rules: Array<[string, string[]]> = [
+    ["Saúde / Hospitalar", ["hospital", "médic", "medic", "clínic", "clinic", "laboratóri", "laboratori", "exame", "enfermag", "fisioterap", "saúde", "saude"]],
+    ["Locação / Aluguel", ["locaç", "locac", "aluguel"]],
+    ["Manutenção e Reparos", ["manutenç", "manutenc", "reparo", "conserto", "assistência técnica", "assistencia tecnica"]],
+    ["Limpeza e Conservação", ["limpeza", "conservaç", "conservac", "higieniz"]],
+    ["Segurança e Vigilância", ["seguranç", "seguranc", "vigilânc", "vigilanc", "portaria"]],
+    ["Transporte e Logística", ["transporte", "frete", "logístic", "logistic", "entrega"]],
+    ["Consultoria e Assessoria", ["consultor", "assessor", "advoc", "jurídic", "juridic", "contábil", "contabil", "auditoria"]],
+    ["Tecnologia / TI", ["software", "sistema", "informátic", "informatic", "licença", "licenca", "hospedagem", "cloud", "suporte técnic", "suporte tecnic"]],
+    ["Treinamento e Educação", ["treinamento", "curso", "capacitaç", "capacitac", "ensino", "educação", "educacao"]],
+    ["Publicidade e Marketing", ["publicidade", "marketing", "propaganda", "mídia", "midia"]],
+    ["Engenharia e Construção", ["engenhar", "obra", "construç", "construc", "projeto"]],
+    ["Alimentação", ["alimentaç", "alimentac", "refeiç", "refeic", "restaurante", "lanche"]],
+  ];
+  for (const [cat, keys] of rules) {
+    if (keys.some((k) => s.includes(k))) return cat;
+  }
+  return "Outros";
+}
+
 function Dashboard() {
   const [theme, setTheme] = useState<"light" | "dark">("light");
 
@@ -3200,10 +3227,10 @@ function Dashboard() {
                 valor: v,
               }));
 
-              // Gráfico B — distribuição por tipo de serviço
+              // Gráfico B — distribuição por categoria de serviço (derivada da descrição)
               const servicoMap = new Map<string, number>();
               notasTomValidas.forEach((n) => {
-                const key = n.codTribNacional || n.servico || "Outros";
+                const key = categorizarServico(n.servico);
                 servicoMap.set(key, (servicoMap.get(key) ?? 0) + n.valor);
               });
               const SERV_COLORS = ["#6366f1","#14b8a6","#f59e0b","#ec4899","#8b5cf6","#ef4444"];
@@ -3399,7 +3426,7 @@ function Dashboard() {
                     {/* Gráfico B — Distribuição por tipo de serviço */}
                     <div className="bg-card border border-border rounded-2xl p-5 shadow-xs">
                       <h3 className="text-xs font-bold text-foreground mb-1">Por Tipo de Serviço</h3>
-                      <p className="text-[10px] text-muted-foreground mb-4">Distribuição por código tributário</p>
+                      <p className="text-[10px] text-muted-foreground mb-4">Distribuição por categoria de serviço</p>
                       <div className="h-[180px] relative flex items-center justify-center">
                         {servicoData.length === 0 ? <EmptyState /> : (
                           <ResponsiveContainer width="100%" height="100%">
@@ -3491,11 +3518,11 @@ function Dashboard() {
                             <TableHead className="font-medium text-muted-foreground h-9">Situação</TableHead>
                             <TableHead className="font-medium text-muted-foreground h-9">Nº NFS-e</TableHead>
                             <TableHead className="font-medium text-muted-foreground h-9">Competência</TableHead>
-                            <TableHead className="font-medium text-muted-foreground h-9">Tomador</TableHead>
                             <TableHead className="font-medium text-muted-foreground h-9">CNPJ Prestador</TableHead>
                             <TableHead className="font-medium text-muted-foreground h-9">Fornecedor</TableHead>
                             <TableHead className="text-right font-medium text-muted-foreground h-9">Vlr. Bruto</TableHead>
                             <TableHead className="text-right font-medium text-muted-foreground h-9">Vlr. Líquido</TableHead>
+                            <TableHead className="text-right font-medium text-muted-foreground h-9">Vlr. ISS</TableHead>
                             <TableHead className="text-center font-medium text-muted-foreground h-9">ISS Retido?</TableHead>
                             <TableHead className="text-right font-medium text-muted-foreground h-9">IRRF</TableHead>
                             <TableHead className="text-right font-medium text-muted-foreground h-9">CSLL</TableHead>
@@ -3523,11 +3550,11 @@ function Dashboard() {
                               </TableCell>
                               <TableCell className="font-mono text-[10px]">{n.nNFSe}</TableCell>
                               <TableCell className="text-muted-foreground">{n.dCompet ? n.dCompet.slice(0,7) : "—"}</TableCell>
-                              <TableCell className="max-w-[120px] truncate" title={n.nomeTomador}>{n.nomeTomador || n.cnpjTomador}</TableCell>
                               <TableCell className="font-mono text-[10px] text-muted-foreground">{n.cnpjPrestador}</TableCell>
                               <TableCell className="max-w-[140px] truncate font-medium" title={n.nomePrestador}>{n.nomePrestador}</TableCell>
                               <TableCell className="text-right font-bold">{fmtBRL(n.valor)}</TableCell>
                               <TableCell className="text-right text-muted-foreground">{fmtBRL(n.vlrLiquido)}</TableCell>
+                              <TableCell className="text-right text-muted-foreground">{n.issRetido === "Sim" && n.vlrIssRet > 0 ? fmtBRL(n.vlrIssRet) : "—"}</TableCell>
                               <TableCell className="text-center">
                                 <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${n.issRetido === "Sim" ? "bg-indigo-500/10 text-indigo-700 dark:text-indigo-400" : "bg-muted text-muted-foreground"}`}>
                                   {n.issRetido}
