@@ -63,32 +63,15 @@ function getNumberFallback(root: unknown, relativePaths: string[][]): number {
 }
 
 function getIssRetido(root: unknown): "Sim" | "Não" {
-  // Try to find tpRetISSQN under tribMun: 1 = Retido, 2 = Não Retido
+  // tpRetISSQN: 1 = Retenção do ISSQN, 3 = Retenção Simples (Simples Nacional).
+  // Qualquer outro valor (2 = Não Retido, ausente, ou apenas vISSRet > 0 sem
+  // identificação explícita) é tratado como "Não".
   const tpRetISSQN = pick(root, ["DPS", "infDPS", "valores", "trib", "tribMun", "tpRetISSQN"]) ??
                      pick(root, ["valores", "trib", "tribMun", "tpRetISSQN"]) ??
                      pick(root, ["DPS", "infDPS", "valores", "tpRetISSQN"]) ??
                      pick(root, ["valores", "tpRetISSQN"]);
   if (tpRetISSQN === 1 || tpRetISSQN === "1") return "Sim";
-  if (tpRetISSQN === 2 || tpRetISSQN === "2") return "Não";
-
-  // Try to find RT (Retido)
-  const rt = pick(root, ["DPS", "infDPS", "valores", "trib", "tribMun", "RT"]) ??
-             pick(root, ["valores", "trib", "tribMun", "RT"]) ??
-             pick(root, ["DPS", "infDPS", "valores", "iss", "RT"]) ??
-             pick(root, ["valores", "iss", "RT"]) ??
-             pick(root, ["DPS", "infDPS", "valores", "RT"]) ??
-             pick(root, ["valores", "RT"]);
-  if (rt === 1 || rt === "1") return "Sim";
-  if (rt === 2 || rt === "2") return "Não";
-
-  // Try to check if vISSRet is greater than 0
-  const vISSRet = getNumberFallback(root, [
-    ["vISSRet"],
-    ["trib", "tribMun", "vISSRet"],
-    ["trib", "vISSRet"]
-  ]);
-  if (vISSRet > 0) return "Sim";
-
+  if (tpRetISSQN === 3 || tpRetISSQN === "3") return "Sim";
   return "Não";
 }
 
