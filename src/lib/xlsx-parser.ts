@@ -38,11 +38,15 @@ const ISS_SYNONYMS = [
   "issretido",
   "iss ret",
   "iss_ret",
-  "retido",
   "retencao iss",
   "retenção iss",
   "iss retido fonte",
   "issqn retido",
+  "situacao iss",
+  "situação iss",
+  "iss recolher",
+  "iss a recolher",
+  "issqn a recolher",
 ];
 
 export function normalizeString(s: string): string {
@@ -181,13 +185,14 @@ export function parseExcelIssRetido(value: unknown): "Sim" | "Não" {
   const norm = normalizeString(String(value));
   if (!norm) return "Não";
 
-  // Termos que indicam explicitamente NÃO retido (verificar primeiro para evitar falsos positivos)
-  // Ex: "ISSQN a Recolher", "Não Retido", "Não Ret."
+  // Termos que indicam explicitamente NÃO retido (verificar PRIMEIRO para evitar falsos positivos)
+  // Ex: "ISSQN a Recolher", "Não Retido", "Recolher"
   const noTerms = [
-    "arecolher",   // "ISSQN a Recolher" → Não Retido
-    "naoretido",   // "Não Retido"
-    "naoret",      // "Não Ret."
-    "nret",        // "N.Ret"
+    "arecolher",     // "ISSQN a Recolher", "ISS a Recolher"
+    "recolher",      // "Recolher" sozinho
+    "naoretido",     // "Não Retido"
+    "naoret",        // "Não Ret."
+    "nret",          // "N.Ret"
     "naorecolhido",
     "no",
     "false",
@@ -195,27 +200,24 @@ export function parseExcelIssRetido(value: unknown): "Sim" | "Não" {
     "nao",
   ];
   for (const term of noTerms) {
-    if (norm === term || norm.startsWith(term)) return "Não";
+    if (norm === term || norm.startsWith(term) || norm.includes(term)) return "Não";
   }
 
   // Termos que indicam SIM (retido na fonte)
   // Ex: "Retenção do ISSQN", "Retido", "Sim"
+  // IMPORTANTE: não usar termos curtos como "ret" (bate em "recolher")
   const yesTerms = [
     "retencaodoissqn", // "Retenção do ISSQN"
     "retencaoissqn",   // "Retenção ISSQN"
-    "retenção",
-    "retencao",
-    "retido",
-    "ret",
+    "retencao",        // "Retenção"
+    "retido",          // "Retido"
     "sim",
     "yes",
     "true",
     "1",
-    "s",
-    "y",
   ];
   for (const term of yesTerms) {
-    if (norm.includes(normalizeString(term))) return "Sim";
+    if (norm === term || norm.startsWith(term) || norm.includes(normalizeString(term))) return "Sim";
   }
 
   return "Não";

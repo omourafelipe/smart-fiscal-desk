@@ -1256,10 +1256,13 @@ function Dashboard() {
       setXlsxHeaders(headers);
       setXlsxRows(rows);
 
-      // Default column positions: Key (Col 1), Status (Col 6), ISS (Col 7)
-      const kCol = headers.length > 0 ? headers[0] : "";
-      const sCol = headers.length > 5 ? headers[5] : (headers.length > 1 ? headers[1] : "");
-      const issColDefault = headers.length > 6 ? headers[6] : "";
+      // Tenta detectar colunas automaticamente pelo cabeçalho (nome da coluna)
+      const detected = detectColumns(headers);
+
+      // Usa o detectado ou cai para posição fixa como fallback
+      const kCol = detected.keyColumn ?? (headers.length > 0 ? headers[0] : "");
+      const sCol = detected.statusColumn ?? (headers.length > 5 ? headers[5] : headers.length > 1 ? headers[1] : "");
+      const issColDefault = detected.issColumn ?? (headers.length > 6 ? headers[6] : "");
       setKeyCol(kCol);
       setStatusCol(sCol);
       setIssCol(issColDefault);
@@ -2878,7 +2881,7 @@ function Dashboard() {
                         </div>
 
                         <div className="space-y-1">
-                          <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">Coluna ISS Retido</label>
+                          <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">Coluna ISS (Retido / a Recolher)</label>
                           <Select value={issCol} onValueChange={(val) => setIssCol(val)}>
                             <SelectTrigger className="w-full h-8 text-xs rounded-lg border-border bg-muted hover:bg-muted/80 text-foreground transition-colors">
                               <SelectValue placeholder="Selecione..." />
