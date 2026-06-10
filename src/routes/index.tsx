@@ -60,6 +60,7 @@ import {
   detectColumns,
   parseExcelStatus,
   normalizeString,
+  parseExcelIssRetido,
   type ExcelRowData,
 } from "@/lib/xlsx-parser";
 import { Button } from "@/components/ui/button";
@@ -237,6 +238,10 @@ interface ConciliationResult {
   statusLocal: "válida" | "cancelada" | "nao_encontrado";
   statusChanged: boolean;
   notaId?: string;
+  rawIssRetido?: string;
+  issRetidoExcel?: "Sim" | "Não";
+  issRetidoLocal?: "Sim" | "Não" | "—";
+  issRetidoChanged?: boolean;
 }
 
 const mesesOpcoes = [
@@ -350,6 +355,7 @@ function Dashboard() {
   const [xlsxHeaders, setXlsxHeaders] = useState<string[]>([]);
   const [keyCol, setKeyCol] = useState<string>("");
   const [statusCol, setStatusCol] = useState<string>("");
+  const [issCol, setIssCol] = useState<string>("");
   const [conciliatedItems, setConciliatedItems] = useState<ConciliationResult[]>([]);
   const [isXlsxProcessing, setIsXlsxProcessing] = useState(false);
   const [conciliatedStats, setConciliatedStats] = useState({
@@ -1165,6 +1171,7 @@ function Dashboard() {
       rows: ExcelRowData[],
       kCol: string,
       sCol: string,
+      iCol: string,
       localNotas: NotaFiscal[],
     ) => {
       setIsXlsxProcessing(true);
@@ -1191,9 +1198,14 @@ function Dashboard() {
         const rawStatus = String(row[sCol] ?? "").trim();
         let statusExcel = parseExcelStatus(rawStatus);
 
+        const rawIssRetido = iCol ? String(row[iCol] ?? "").trim() : "";
+        const issRetidoExcel = iCol ? parseExcelIssRetido(rawIssRetido) : "Não";
+
         const local = localMap.get(key);
 
         const statusChanged = local ? local.status !== statusExcel : false;
+        const issRetidoLocal = local ? (local.issRetido === "Sim" ? "Sim" : "Não") : "—";
+        const issRetidoChanged = local && iCol ? issRetidoLocal !== issRetidoExcel : false;
 
         const res: ConciliationResult = {
           rowNumber: idx + 2,
@@ -1206,11 +1218,15 @@ function Dashboard() {
           statusLocal: local ? local.status : "nao_encontrado",
           statusChanged,
           notaId: local?.id,
+          rawIssRetido,
+          issRetidoExcel,
+          issRetidoLocal,
+          issRetidoChanged,
         };
 
         if (!local) {
           notFound++;
-        } else if (res.statusChanged) {
+        } else if (res.statusChanged || res.issRetidoChanged) {
           updated++;
         } else {
           alreadyCorrect++;
@@ -1240,15 +1256,16 @@ function Dashboard() {
       setXlsxHeaders(headers);
       setXlsxRows(rows);
 
-      // Auto-detect columns
-      const { keyColumn, statusColumn } = detectColumns(headers);
-      const kCol = keyColumn || headers[0] || "";
-      const sCol = statusColumn || headers[1] || "";
+      // Default column positions: Key (Col 1), Status (Col 6), ISS (Col 7)
+      const kCol = headers.length > 0 ? headers[0] : "";
+      const sCol = headers.length > 5 ? headers[5] : (headers.length > 1 ? headers[1] : "");
+      const issColDefault = headers.length > 6 ? headers[6] : "";
       setKeyCol(kCol);
       setStatusCol(sCol);
+      setIssCol(issColDefault);
 
       if (kCol && sCol && todasNotas) {
-        runConciliation(rows, kCol, sCol, todasNotas);
+        runConciliation(rows, kCol, sCol, issColDefault, todasNotas);
       }
       addActivity("conciliation", "Planilha Carregada", `Relatório "${file.name}" carregado com ${rows.length} linhas.`);
       setRightPanelOpen(true);
@@ -1271,7 +1288,7 @@ function Dashboard() {
 
   const applyUpdates = async () => {
     const changes = conciliatedItems.filter(
-      (item) => item.statusChanged && item.notaId,
+      (item) => (item.statusChanged || item.issRetidoChanged) && item.notaId,
     );
     if (changes.length === 0) {
       toast.info("Nenhuma divergência encontrada para atualizar.");
@@ -1284,6 +1301,9 @@ function Dashboard() {
           if (item.notaId) {
             const updates: Partial<NotaFiscal> = {};
             if (item.statusChanged) updates.status = item.statusExcel;
+            if (item.issRetidoChanged && item.issRetidoExcel) {
+              updates.issRetido = item.issRetidoExcel;
+            }
 
             if (Object.keys(updates).length > 0) {
               await db.notas.update(item.notaId, updates);
@@ -1293,7 +1313,7 @@ function Dashboard() {
       });
       addActivity("update", "Divergências Aplicadas", `${changes.length} nota(s) retificada(s) no banco local.`);
       setRightPanelOpen(true);
-      toast.success("Divergências de Status retificadas no banco de dados local!");
+      toast.success("Divergências retificadas no banco de dados local!");
     } catch (e) {
       console.error(e);
       toast.error("Erro ao salvar as atualizações.");
@@ -1309,7 +1329,11 @@ function Dashboard() {
       "Prestador",
       "Status Planilha",
       "Status Local",
-      "Divergente",
+      "Status Divergente",
+      "ISS Retido Planilha",
+      "ISS Retido Local",
+      "ISS Retido Divergente",
+      "Divergência Total",
     ];
     const rows = conciliatedItems.map((item) => [
       item.rowNumber,
@@ -1320,6 +1344,10 @@ function Dashboard() {
       item.statusExcel,
       item.statusLocal === "nao_encontrado" ? "Não Encontrado" : item.statusLocal,
       item.statusChanged ? "Sim" : "Não",
+      item.issRetidoExcel || "—",
+      item.issRetidoLocal || "—",
+      item.issRetidoChanged ? "Sim" : "Não",
+      (item.statusChanged || item.issRetidoChanged) ? "Sim" : "Não",
     ]);
     const csv = [headers, ...rows]
       .map((r) => r.map((c) => `"${String(c ?? "").replace(/"/g, '""')}"`).join(";"))
@@ -1335,9 +1363,9 @@ function Dashboard() {
 
   useEffect(() => {
     if (xlsxRows.length > 0 && keyCol && statusCol && todasNotas) {
-      runConciliation(xlsxRows, keyCol, statusCol, todasNotas);
+      runConciliation(xlsxRows, keyCol, statusCol, issCol, todasNotas);
     }
-  }, [todasNotas, xlsxRows, keyCol, statusCol, runConciliation]);
+  }, [todasNotas, xlsxRows, keyCol, statusCol, issCol, runConciliation]);
 
   return (
     <div className="min-h-screen bg-background flex font-sans antialiased text-foreground w-full overflow-hidden transition-colors duration-300">
@@ -2848,6 +2876,20 @@ function Dashboard() {
                             </SelectContent>
                           </Select>
                         </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">Coluna ISS Retido</label>
+                          <Select value={issCol} onValueChange={(val) => setIssCol(val)}>
+                            <SelectTrigger className="w-full h-8 text-xs rounded-lg border-border bg-muted hover:bg-muted/80 text-foreground transition-colors">
+                              <SelectValue placeholder="Selecione..." />
+                            </SelectTrigger>
+                            <SelectContent className="rounded-xl shadow-lg border-border bg-popover text-popover-foreground">
+                              {xlsxHeaders.map((h) => (
+                                <SelectItem key={h} value={h}>{h}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
                        </div>
                     </div>
 
@@ -2942,6 +2984,7 @@ function Dashboard() {
                             <TableHead className="font-medium text-muted-foreground h-9">Nº NFS-e</TableHead>
                             <TableHead className="font-medium text-muted-foreground h-9">Prestador</TableHead>
                             <TableHead className="font-medium text-muted-foreground h-9">Status (Planilha | Local)</TableHead>
+                            <TableHead className="font-medium text-muted-foreground h-9">ISS Retido (Planilha | Local)</TableHead>
                             <TableHead className="font-medium text-muted-foreground h-9">Auditoria</TableHead>
                           </TableRow>
                         </TableHeader>
@@ -2950,7 +2993,7 @@ function Dashboard() {
                             <TableRow
                               key={idx}
                               className={`border-b border-border/50 hover:bg-muted/40 transition-colors ${
-                                item.statusChanged ? "bg-amber-500/5 hover:bg-amber-500/10" : ""
+                                item.statusChanged || item.issRetidoChanged ? "bg-amber-500/5 hover:bg-amber-500/10" : ""
                               }`}
                             >
                               <TableCell className="font-mono text-[10px] text-muted-foreground">{item.rowNumber}</TableCell>
@@ -2976,14 +3019,37 @@ function Dashboard() {
                                   )}
                                 </div>
                               </TableCell>
+                              <TableCell className="text-xs">
+                                <div className="flex items-center gap-1.5">
+                                  <span className={`px-1.5 py-0.5 rounded text-[9px] font-semibold ${item.issRetidoExcel === "Sim" ? "bg-indigo-500/10 text-indigo-700 dark:text-indigo-400" : "bg-muted text-muted-foreground"}`}>
+                                    {item.issRetidoExcel === "Sim" ? "Retido" : "Não Ret."}
+                                  </span>
+                                  <span className="text-border">|</span>
+                                  {item.statusLocal === "nao_encontrado" ? (
+                                    <span className="text-muted-foreground text-[9px] font-medium">Inexistente</span>
+                                  ) : (
+                                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-semibold ${item.issRetidoLocal === "Sim" ? "bg-indigo-500/10 text-indigo-700 dark:text-indigo-400" : "bg-muted text-muted-foreground"}`}>
+                                      {item.issRetidoLocal === "Sim" ? "Retido" : "Não Ret."}
+                                    </span>
+                                  )}
+                                </div>
+                              </TableCell>
                               <TableCell className="text-xs font-semibold">
                                 {item.statusLocal === "nao_encontrado" ? (
                                   <span className="text-rose-500 text-[10px] font-semibold flex items-center gap-1">
                                     <XCircle className="h-3 w-3" /> Inexistente no Banco
                                   </span>
+                                ) : item.statusChanged && item.issRetidoChanged ? (
+                                  <span className="text-amber-600 text-[10px] font-semibold flex items-center gap-1">
+                                    <AlertTriangle className="h-3.5 w-3.5" /> Status & ISS divergentes
+                                  </span>
                                 ) : item.statusChanged ? (
                                   <span className="text-amber-600 text-[10px] font-semibold flex items-center gap-1">
                                     <AlertTriangle className="h-3.5 w-3.5" /> Status divergente
+                                  </span>
+                                ) : item.issRetidoChanged ? (
+                                  <span className="text-amber-600 text-[10px] font-semibold flex items-center gap-1">
+                                    <AlertTriangle className="h-3.5 w-3.5" /> ISS Retido divergente
                                   </span>
                                 ) : (
                                   <span className="text-emerald-600 text-[10px] font-semibold flex items-center gap-1">

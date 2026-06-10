@@ -33,6 +33,17 @@ const STATUS_SYNONYMS = [
   "situacao da nfs-e",
   "situação da nfs-e",
 ];
+const ISS_SYNONYMS = [
+  "iss retido",
+  "issretido",
+  "iss ret",
+  "iss_ret",
+  "retido",
+  "retencao iss",
+  "retenção iss",
+  "iss retido fonte",
+  "issqn retido",
+];
 
 export function normalizeString(s: string): string {
   return s
@@ -44,11 +55,12 @@ export function normalizeString(s: string): string {
 }
 
 /**
- * Tenta adivinhar quais colunas correspondem à Chave e ao Status.
+ * Tenta adivinhar quais colunas correspondem à Chave, Status e ISS Retido.
  */
-export function detectColumns(headers: string[]): { keyColumn?: string; statusColumn?: string } {
+export function detectColumns(headers: string[]): { keyColumn?: string; statusColumn?: string; issColumn?: string } {
   let keyColumn: string | undefined;
   let statusColumn: string | undefined;
+  let issColumn: string | undefined;
 
   for (const header of headers) {
     const norm = normalizeString(header);
@@ -72,6 +84,16 @@ export function detectColumns(headers: string[]): { keyColumn?: string; statusCo
         }
       }
     }
+
+    // Procura por sinônimos do iss retido
+    if (!issColumn) {
+      for (const synonym of ISS_SYNONYMS) {
+        if (norm.includes(normalizeString(synonym))) {
+          issColumn = header;
+          break;
+        }
+      }
+    }
   }
 
   // Fallback se não encontrar
@@ -85,8 +107,13 @@ export function detectColumns(headers: string[]): { keyColumn?: string; statusCo
       (h) => normalizeString(h).includes("state") || normalizeString(h).includes("descr"),
     );
   }
+  if (!issColumn) {
+    issColumn = headers.find(
+      (h) => normalizeString(h).includes("retido") || normalizeString(h).includes("retenc"),
+    );
+  }
 
-  return { keyColumn, statusColumn };
+  return { keyColumn, statusColumn, issColumn };
 }
 
 /**
@@ -147,6 +174,19 @@ export function parseExcelStatus(rawStatus: string): "válida" | "cancelada" {
   }
 
   return "válida"; // Padrão válida
+}
+
+export function parseExcelIssRetido(value: unknown): "Sim" | "Não" {
+  if (value === undefined || value === null) return "Não";
+  const norm = normalizeString(String(value));
+  if (!norm) return "Não";
+  
+  // Terms that clearly indicate yes
+  const yesTerms = ["sim", "yes", "s", "y", "true", "1", "retido", "retencao", "retençao", "ret"];
+  for (const term of yesTerms) {
+    if (norm.includes(term)) return "Sim";
+  }
+  return "Não";
 }
 
 /**
