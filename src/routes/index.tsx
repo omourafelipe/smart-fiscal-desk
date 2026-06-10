@@ -1626,7 +1626,7 @@ function Dashboard() {
               {/* METRICS / KPI GRID (ByeWind style: clean card layout, light pastel colors, trend arrows) */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-5">
                 <KpiCardNew
-                  label="Faturamento Válido"
+                  label="Faturamento"
                   value={fmtBRL(faturamento)}
                   trendText={faturamentoTrend.text}
                   isPositive={faturamentoTrend.isPositive}
@@ -1634,7 +1634,7 @@ function Dashboard() {
                   tone="blue"
                 />
                 <KpiCardNew
-                  label="Faturamento Plano de Saúde"
+                  label="Plano de Saúde"
                   value={fmtBRL(plansFaturamento)}
                   trendText={plansTrend.text}
                   isPositive={plansTrend.isPositive}
@@ -1642,7 +1642,7 @@ function Dashboard() {
                   tone="purple"
                 />
                 <KpiCardNew
-                  label="Faturamento Serviços Hospitalares"
+                  label="Serviços Hospitalares"
                   value={fmtBRL(hospFaturamento)}
                   trendText={hospTrend.text}
                   isPositive={hospTrend.isPositive}
@@ -1650,7 +1650,7 @@ function Dashboard() {
                   tone="green"
                 />
                 <KpiCardNew
-                  label="Notas Emitidas Válidas"
+                  label="Notas Emitidas"
                   value={notasAtivas.length.toLocaleString("pt-BR")}
                   trendText={notasAtivasTrend.text}
                   isPositive={notasAtivasTrend.isPositive}
