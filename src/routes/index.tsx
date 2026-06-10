@@ -291,7 +291,22 @@ function Dashboard() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   // Layout & Navigation States
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("sidebarOpen");
+      return saved === "true"; // default to false
+    }
+    return false;
+  });
+
+  const toggleSidebar = () => {
+    setSidebarOpen((prev) => {
+      const next = !prev;
+      localStorage.setItem("sidebarOpen", String(next));
+      return next;
+    });
+  };
+
   const [rightPanelOpen, setRightPanelOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"dashboard" | "conciliation">("dashboard");
 
@@ -443,8 +458,12 @@ function Dashboard() {
           (c1 === "43301" || c1 === "40301");
         if (c1 !== c2 && !isHospitalarMatch) return false;
       }
-      if (searchCliente && !n.cliente.toLowerCase().includes(searchCliente.toLowerCase()))
-        return false;
+      if (searchCliente) {
+        const query = searchCliente.toLowerCase();
+        const clientMatch = n.cliente.toLowerCase().includes(query);
+        const numberMatch = String(n.nNFSe || "").toLowerCase().includes(query);
+        if (!clientMatch && !numberMatch) return false;
+      }
       return true;
     });
   }, [todasNotas, empresaFiltro, mesFiltro, anoFiltro, cServFiltro, searchCliente, getDateField]);
@@ -502,8 +521,12 @@ function Dashboard() {
           (c1 === "43301" || c1 === "40301");
         if (c1 !== c2 && !isHospitalarMatch) return false;
       }
-      if (searchCliente && !n.cliente.toLowerCase().includes(searchCliente.toLowerCase()))
-        return false;
+      if (searchCliente) {
+        const query = searchCliente.toLowerCase();
+        const clientMatch = n.cliente.toLowerCase().includes(query);
+        const numberMatch = String(n.nNFSe || "").toLowerCase().includes(query);
+        if (!clientMatch && !numberMatch) return false;
+      }
       return true;
     });
   }, [todasNotas, empresaFiltro, mesFiltro, anoFiltro, cServFiltro, searchCliente, anos, getDateField]);
@@ -609,8 +632,12 @@ function Dashboard() {
           (c1 === "43301" || c1 === "40301");
         if (c1 !== c2 && !isHospitalarMatch) return false;
       }
-      if (searchCliente && !n.cliente.toLowerCase().includes(searchCliente.toLowerCase()))
-        return false;
+      if (searchCliente) {
+        const query = searchCliente.toLowerCase();
+        const clientMatch = n.cliente.toLowerCase().includes(query);
+        const numberMatch = String(n.nNFSe || "").toLowerCase().includes(query);
+        if (!clientMatch && !numberMatch) return false;
+      }
       return true;
     });
   }, [todasNotas, empresaFiltro, anoFiltro, cServFiltro, searchCliente, getDateField, getNoteStatus]);
@@ -640,8 +667,12 @@ function Dashboard() {
           (c1 === "43301" || c1 === "40301");
         if (c1 !== c2 && !isHospitalarMatch) return false;
       }
-      if (searchCliente && !n.cliente.toLowerCase().includes(searchCliente.toLowerCase()))
-        return false;
+      if (searchCliente) {
+        const query = searchCliente.toLowerCase();
+        const clientMatch = n.cliente.toLowerCase().includes(query);
+        const numberMatch = String(n.nNFSe || "").toLowerCase().includes(query);
+        if (!clientMatch && !numberMatch) return false;
+      }
       return true;
     });
   }, [todasNotas, empresaFiltro, anoFiltro, cServFiltro, searchCliente, anos, getDateField, getNoteStatus]);
@@ -792,6 +823,9 @@ function Dashboard() {
     let individualCount = 0;
 
     notasAtivas.forEach((n) => {
+      const code = String(n.codTribNacional || "").replace(/^0+/, "");
+      if (code === "40301" || code === "040301") return;
+
       const cleanKey = String(n.cnpjCpfCliente ?? "").replace(/\D/g, "");
       const isPlural = (n.cliente || "").toUpperCase().includes("PLURAL GESTAO");
 
@@ -1161,8 +1195,8 @@ function Dashboard() {
 
       {/* LEFT SIDEBAR (ByeWind / SnowUI style) */}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 bg-card border-r border-border flex flex-col justify-between transition-transform duration-300 ease-in-out md:translate-x-0 md:static md:w-64 flex-shrink-0 ${
-          sidebarOpen ? "translate-x-0" : "-translate-x-full"
+        className={`fixed inset-y-0 left-0 z-40 bg-card border-r border-border flex flex-col justify-between transition-all duration-300 ease-in-out md:static flex-shrink-0 ${
+          sidebarOpen ? "w-64 translate-x-0" : "w-64 -translate-x-full md:translate-x-0 md:w-0 md:border-r-0 overflow-hidden"
         }`}
       >
         <div className="flex flex-col flex-1 overflow-y-auto px-5 py-6 gap-6">
@@ -1326,6 +1360,14 @@ function Dashboard() {
         />
       )}
 
+      {/* OVERLAY FOR RIGHT PANEL / NOTIFICATION DRAWER */}
+      {rightPanelOpen && (
+        <div
+          onClick={() => setRightPanelOpen(false)}
+          className="fixed inset-0 z-30 bg-slate-950/20 backdrop-blur-xs"
+        />
+      )}
+
       {/* MAIN CONTAINER */}
       <div className="flex-1 flex flex-col min-w-0 overflow-y-auto h-screen">
         {/* HEADER BAR (ByeWind Style) */}
@@ -1333,7 +1375,7 @@ function Dashboard() {
           {/* Header Left */}
           <div className="flex items-center gap-4">
             <button
-              onClick={() => setSidebarOpen(!sidebarOpen)}
+              onClick={toggleSidebar}
               className="h-8 w-8 rounded-lg border border-border hover:bg-muted/80 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
             >
               <Menu className="h-4 w-4" />
@@ -1357,7 +1399,7 @@ function Dashboard() {
               <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
               <input
                 type="text"
-                placeholder="Buscar cliente..."
+                placeholder="Buscar cliente ou nº NFS..."
                 value={searchCliente}
                 onChange={(e) => setSearchCliente(e.target.value)}
                 className="w-full h-8 pl-8 pr-10 rounded-lg bg-muted border border-border text-xs focus:bg-card focus:outline-none focus:ring-1 focus:ring-ring transition-all placeholder:text-muted-foreground"
@@ -1678,7 +1720,7 @@ function Dashboard() {
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                 
                 {/* Faturamento Line Chart (ByeWind Image 1 line chart layout) */}
-                <div className="bg-card border border-border rounded-2xl p-5 shadow-xs lg:col-span-8 transition-colors duration-300">
+                <div className="bg-card border border-border rounded-2xl p-5 shadow-xs lg:col-span-12 transition-colors duration-300">
                   <div className="flex items-center justify-between gap-4 mb-5 flex-wrap">
                     <div>
                       <h3 className="text-xs font-bold text-foreground">Evolução do Faturamento</h3>
@@ -1784,64 +1826,17 @@ function Dashboard() {
                         </AreaChart>
                       </ResponsiveContainer>
                     )}
-                  </div>
-                </div>
-
-                {/* Top Services (ByeWind "Traffic by Website" progress layout) */}
-                <div className="bg-card border border-border rounded-2xl p-5 shadow-xs lg:col-span-4 flex flex-col justify-between transition-colors duration-300">
-                  <div>
-                    <h3 className="text-xs font-bold text-foreground mb-1">Faturamento por Serviço</h3>
-                    <p className="text-[10px] text-muted-foreground mb-4">Participação dos principais serviços prestados</p>
-                    
-                    <div className="space-y-4">
-                      {topServicesList.length === 0 ? (
-                        <div className="text-center text-xs text-muted-foreground py-12">Nenhum serviço registrado</div>
-                      ) : (
-                        topServicesList.map((service, index) => (
-                          <div key={index} className="space-y-1.5">
-                            <div className="flex items-center justify-between text-xs">
-                              <span className="font-semibold text-foreground truncate max-w-[200px]" title={service.name}>
-                                {service.name}
-                              </span>
-                              <span className="font-medium text-muted-foreground font-mono text-[10px]">
-                                {service.percentage.toFixed(1)}%
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-3">
-                              {/* Custom styled progress bars following image 1 */}
-                              <div className="w-full bg-muted h-1.5 rounded-full overflow-hidden">
-                                <div
-                                  className="h-full rounded-full transition-all duration-500"
-                                  style={{
-                                    width: `${service.percentage}%`,
-                                    backgroundColor: COLORS[index % COLORS.length]
-                                  }}
-                                />
-                              </div>
-                              <span className="text-[10px] font-bold text-foreground whitespace-nowrap w-16 text-right">
-                                {service.value >= 1000 ? `R$ ${(service.value / 1000).toFixed(0)}k` : `R$ ${service.value}`}
-                              </span>
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="border-t border-slate-100 pt-3 mt-4 flex justify-between items-center text-[10px] text-slate-400 font-medium">
-                    <span>Base local Samel</span>
-                    <span>Multiempresa</span>
-                  </div>
                 </div>
               </div>
+            </div>
 
               {/* SECONDARY CHARTS GRID (Donut Charts & Top Clients Table) */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 
                 {/* Donut Chart: Faturamento PJ vs PF */}
                 <div className="bg-card border border-border rounded-2xl p-5 shadow-xs transition-colors duration-300">
-                  <h3 className="text-xs font-bold text-foreground mb-1">Perfil do Cliente</h3>
-                  <p className="text-[10px] text-muted-foreground mb-4">Faturamento distribuído entre PJ e PF</p>
+                  <h3 className="text-xs font-bold text-foreground mb-1">Tipo de Contratação</h3>
+                  <p className="text-[10px] text-muted-foreground mb-4">Faturamento distribuído por tipo de contratação</p>
                   
                   <div className="h-[200px] flex items-center justify-center relative">
                     {pjPfData.length === 0 ? (
@@ -1986,18 +1981,15 @@ function Dashboard() {
                           <th className="pb-2 font-medium">Nome / CNPJ</th>
                           <th className="pb-2 text-center font-medium">Notas</th>
                           <th className="pb-2 text-right font-medium">Faturamento</th>
-                          <th className="pb-2 text-right font-medium">Share</th>
                         </tr>
                       </thead>
                       <tbody>
                         {topClientesList.length === 0 ? (
                           <tr>
-                            <td colSpan={4} className="text-center text-muted-foreground py-12">Nenhum cliente registrado</td>
+                            <td colSpan={3} className="text-center text-muted-foreground py-12">Nenhum cliente registrado</td>
                           </tr>
                         ) : (
                           topClientesList.map((client, index) => {
-                            const share = faturamento > 0 ? (client.total / faturamento) * 100 : 0;
-                            const isHighConcentration = share > 10;
                             return (
                               <tr key={index} className="border-b border-border/50 hover:bg-muted/40 transition-colors">
                                 <td className="py-2.5 max-w-[120px]">
@@ -2010,19 +2002,6 @@ function Dashboard() {
                                 </td>
                                 <td className="py-2.5 text-center text-muted-foreground font-mono text-[10px]">{client.count}</td>
                                 <td className="py-2.5 text-right font-bold text-foreground">{fmtBRL(client.total)}</td>
-                                <td className="py-2.5 text-right font-medium">
-                                  <div className={`flex items-center justify-end gap-1 font-mono text-[10px] ${
-                                    isHighConcentration ? "text-rose-600 font-bold" : "text-muted-foreground"
-                                  }`}>
-                                    {isHighConcentration && <AlertTriangle className="h-3 w-3 text-rose-500 animate-pulse" />}
-                                    {share.toFixed(1)}%
-                                  </div>
-                                  {isHighConcentration && (
-                                    <span className="text-[7px] text-rose-500 font-bold uppercase tracking-wider block">
-                                      Alta Conc.
-                                    </span>
-                                  )}
-                                </td>
                               </tr>
                             );
                           })
@@ -2046,7 +2025,7 @@ function Dashboard() {
                     <div className="relative w-48 sm:w-64">
                       <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
                       <Input
-                        placeholder="Buscar por cliente..."
+                        placeholder="Buscar por cliente ou nº NFS..."
                         value={searchCliente}
                         onChange={(e) => setSearchCliente(e.target.value)}
                         className="pl-8 h-8 rounded-lg text-xs bg-muted border-border hover:bg-muted/80 focus:bg-card placeholder:text-muted-foreground w-full"
