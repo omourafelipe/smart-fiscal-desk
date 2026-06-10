@@ -5,6 +5,8 @@ import { useLiveQuery } from "dexie-react-hooks";
 import {
   BarChart,
   Bar,
+  AreaChart,
+  Area,
   XAxis,
   YAxis,
   Tooltip,
@@ -45,6 +47,8 @@ import {
   Database,
   LayoutDashboard,
   Filter,
+  Sun,
+  Moon,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -257,6 +261,36 @@ const mesesOpcoes = [
 ];
 
 function Dashboard() {
+  const [theme, setTheme] = useState<"light" | "dark">("light");
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("theme") as "light" | "dark" | null;
+      const systemPreference = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      const initialTheme = saved || systemPreference;
+      setTheme(initialTheme);
+      
+      const root = window.document.documentElement;
+      if (initialTheme === "dark") {
+        root.classList.add("dark");
+      } else {
+        root.classList.remove("dark");
+      }
+    }
+  }, []);
+
+  const toggleTheme = () => {
+    const nextTheme = theme === "light" ? "dark" : "light";
+    setTheme(nextTheme);
+    const root = window.document.documentElement;
+    if (nextTheme === "dark") {
+      root.classList.add("dark");
+    } else {
+      root.classList.remove("dark");
+    }
+    localStorage.setItem("theme", nextTheme);
+  };
+
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -1161,12 +1195,12 @@ function Dashboard() {
   }, [todasNotas, xlsxRows, keyCol, statusCol, operacaoCol, runConciliation]);
 
   return (
-    <div className="min-h-screen bg-slate-50/50 flex font-sans antialiased text-slate-800 w-full overflow-hidden">
+    <div className="min-h-screen bg-background flex font-sans antialiased text-foreground w-full overflow-hidden transition-colors duration-300">
       <Toaster richColors position="top-right" />
 
       {/* LEFT SIDEBAR (ByeWind / SnowUI style) */}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 bg-white border-r border-slate-100 flex flex-col justify-between transition-transform duration-300 ease-in-out md:translate-x-0 md:static md:w-64 flex-shrink-0 ${
+        className={`fixed inset-y-0 left-0 z-40 bg-card border-r border-border flex flex-col justify-between transition-transform duration-300 ease-in-out md:translate-x-0 md:static md:w-64 flex-shrink-0 ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -1177,26 +1211,26 @@ function Dashboard() {
               <Sparkles className="h-4 w-4" />
             </div>
             <div>
-              <h2 className="text-sm font-semibold tracking-tight text-slate-900 leading-none">Smart Fiscal</h2>
+              <h2 className="text-sm font-semibold tracking-tight text-foreground leading-none">Smart Fiscal</h2>
               <span className="text-[10px] font-medium text-indigo-600 uppercase tracking-wider">Diretoria BI</span>
             </div>
           </div>
 
           {/* User Profile Info */}
-          <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100/50 mt-2">
+          <div className="flex items-center gap-3 p-3 rounded-xl bg-muted/60 border border-border/40 mt-2">
             <div className="h-9 w-9 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-sm">
               DS
             </div>
             <div className="overflow-hidden">
-              <p className="text-xs font-semibold text-slate-800 truncate">Diretoria Samel</p>
-              <p className="text-[10px] text-slate-400 truncate">diretoria@samel.com.br</p>
+              <p className="text-xs font-semibold text-foreground truncate">Diretoria Samel</p>
+              <p className="text-[10px] text-muted-foreground truncate">diretoria@samel.com.br</p>
             </div>
           </div>
 
           {/* Regime de Data (Competência vs Emissão) */}
           <div className="flex flex-col gap-2 px-1">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Regime de Data</span>
-            <div className="grid grid-cols-2 bg-slate-50 p-1 rounded-xl border border-slate-100/50">
+            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Regime de Data</span>
+            <div className="grid grid-cols-2 bg-muted/60 p-1 rounded-xl border border-border/40">
               <button
                 onClick={() => {
                   setPeriodType("competencia");
@@ -1205,8 +1239,8 @@ function Dashboard() {
                 }}
                 className={`py-1.5 rounded-lg text-[11px] font-medium transition-all text-center cursor-pointer ${
                   periodType === "competencia"
-                    ? "bg-white text-slate-950 shadow-xs font-semibold"
-                    : "text-slate-400 hover:text-slate-700"
+                    ? "bg-card text-foreground shadow-xs font-semibold"
+                    : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 Competência
@@ -1219,8 +1253,8 @@ function Dashboard() {
                 }}
                 className={`py-1.5 rounded-lg text-[11px] font-medium transition-all text-center cursor-pointer ${
                   periodType === "emissao"
-                    ? "bg-white text-slate-950 shadow-xs font-semibold"
-                    : "text-slate-400 hover:text-slate-700"
+                    ? "bg-card text-foreground shadow-xs font-semibold"
+                    : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 Emissão
@@ -1232,17 +1266,17 @@ function Dashboard() {
           <nav className="flex flex-col gap-5 mt-4">
             {/* Favorites Category */}
             <div className="flex flex-col gap-1.5">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1">Favoritos</span>
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider px-1">Favoritos</span>
               <button
                 onClick={() => setActiveTab("dashboard")}
                 className={`flex items-center gap-3 px-3 py-2 text-xs font-medium rounded-xl transition-all relative w-full text-left ${
                   activeTab === "dashboard"
-                    ? "bg-slate-50 text-slate-950 font-semibold"
-                    : "text-slate-500 hover:text-slate-900 hover:bg-slate-50/50"
+                    ? "bg-muted text-foreground font-semibold"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
                 }`}
               >
                 {activeTab === "dashboard" && (
-                  <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r-md bg-slate-950" />
+                  <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r-md bg-indigo-600" />
                 )}
                 <LayoutDashboard className="h-4 w-4" /> Visão Geral Faturamento
               </button>
@@ -1250,12 +1284,12 @@ function Dashboard() {
                 onClick={() => setActiveTab("conciliation")}
                 className={`flex items-center gap-3 px-3 py-2 text-xs font-medium rounded-xl transition-all relative w-full text-left ${
                   activeTab === "conciliation"
-                    ? "bg-slate-50 text-slate-950 font-semibold"
-                    : "text-slate-500 hover:text-slate-900 hover:bg-slate-50/50"
+                    ? "bg-muted text-foreground font-semibold"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
                 }`}
               >
                 {activeTab === "conciliation" && (
-                  <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r-md bg-slate-950" />
+                  <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r-md bg-indigo-600" />
                 )}
                 <FileSpreadsheet className="h-4 w-4" /> Validador Sintético
               </button>
@@ -1263,18 +1297,18 @@ function Dashboard() {
 
             {/* Dashboards Category */}
             <div className="flex flex-col gap-1.5">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1">Dashboards</span>
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider px-1">Dashboards</span>
               <button
                 onClick={() => setActiveTab("dashboard")}
                 className={`flex items-center justify-between px-3 py-2 text-xs font-medium rounded-xl transition-all w-full text-left ${
-                  activeTab === "dashboard" ? "text-slate-950 font-semibold" : "text-slate-500 hover:text-slate-900"
+                  activeTab === "dashboard" ? "text-foreground font-semibold" : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 <div className="flex items-center gap-3">
                   <Database className="h-4 w-4" /> Faturamento
                 </div>
                 {notasAtivas.length > 0 && (
-                  <span className="text-[9px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-md font-mono">
+                  <span className="text-[9px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-md font-mono border border-border/40">
                     {notasAtivas.length}
                   </span>
                 )}
@@ -1282,14 +1316,14 @@ function Dashboard() {
               <button
                 onClick={() => setActiveTab("conciliation")}
                 className={`flex items-center justify-between px-3 py-2 text-xs font-medium rounded-xl transition-all w-full text-left ${
-                  activeTab === "conciliation" ? "text-slate-950 font-semibold" : "text-slate-500 hover:text-slate-900"
+                  activeTab === "conciliation" ? "text-foreground font-semibold" : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 <div className="flex items-center gap-3">
                   <FileSpreadsheet className="h-4 w-4" /> Conciliador
                 </div>
                 {conciliatedStats.updated > 0 && (
-                  <span className="text-[9px] bg-amber-50 text-amber-600 border border-amber-100 px-1.5 py-0.5 rounded-md font-mono">
+                  <span className="text-[9px] bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 px-1.5 py-0.5 rounded-md font-mono">
                     {conciliatedStats.updated}
                   </span>
                 )}
@@ -1298,17 +1332,17 @@ function Dashboard() {
 
             {/* Quick Actions Category */}
             <div className="flex flex-col gap-1.5">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1">Ações Rápidas</span>
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider px-1">Ações Rápidas</span>
               <button
                 onClick={exportCsv}
                 disabled={!notasFiltradas.length}
-                className="flex items-center gap-3 px-3 py-2 text-xs font-medium text-slate-500 hover:text-slate-900 hover:bg-slate-50/50 rounded-xl transition-all disabled:opacity-50 disabled:hover:bg-transparent w-full text-left"
+                className="flex items-center gap-3 px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/40 rounded-xl transition-all disabled:opacity-50 disabled:hover:bg-transparent w-full text-left"
               >
                 <Download className="h-4 w-4" /> Exportar Relatório CSV
               </button>
               <button
                 onClick={clearDb}
-                className="flex items-center gap-3 px-3 py-2 text-xs font-medium text-rose-600 hover:text-rose-700 hover:bg-rose-50/50 rounded-xl transition-all w-full text-left"
+                className="flex items-center gap-3 px-3 py-2 text-xs font-medium text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 hover:bg-rose-500/10 rounded-xl transition-all w-full text-left"
               >
                 <Trash2 className="h-4 w-4" /> Limpar Base Local
               </button>
@@ -1317,9 +1351,9 @@ function Dashboard() {
         </div>
 
         {/* Sidebar Footer */}
-        <div className="p-4 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400 font-medium">
+        <div className="p-4 border-t border-border flex items-center justify-between text-[10px] text-muted-foreground font-medium">
           <span>v1.01 SPED</span>
-          <span className="bg-slate-50 border border-slate-100 px-2 py-0.5 rounded-full text-slate-500">100% Local</span>
+          <span className="bg-muted border border-border px-2 py-0.5 rounded-full text-muted-foreground">100% Local</span>
         </div>
       </aside>
 
@@ -1334,22 +1368,22 @@ function Dashboard() {
       {/* MAIN CONTAINER */}
       <div className="flex-1 flex flex-col min-w-0 overflow-y-auto h-screen">
         {/* HEADER BAR (ByeWind Style) */}
-        <header className="h-14 bg-white border-b border-slate-100 flex items-center justify-between px-6 sticky top-0 z-20 flex-shrink-0">
+        <header className="h-14 bg-card/85 backdrop-blur-md border-b border-border flex items-center justify-between px-6 sticky top-0 z-20 flex-shrink-0 transition-colors duration-300">
           {/* Header Left */}
           <div className="flex items-center gap-4">
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="h-8 w-8 rounded-lg border border-slate-100 hover:bg-slate-50 flex items-center justify-center text-slate-500 hover:text-slate-800 transition-colors"
+              className="h-8 w-8 rounded-lg border border-border hover:bg-muted/80 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
             >
               <Menu className="h-4 w-4" />
             </button>
-            <button className="text-slate-300 hover:text-amber-400 transition-colors hidden sm:block">
-              <Star className="h-4 w-4 fill-current text-slate-200" />
+            <button className="text-muted-foreground/45 hover:text-amber-400 transition-colors hidden sm:block">
+              <Star className="h-4 w-4 fill-current text-muted-foreground/30" />
             </button>
-            <div className="flex items-center gap-1.5 text-xs font-medium text-slate-400">
+            <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
               <span>Dashboards</span>
               <span>/</span>
-              <span className="text-slate-800 font-semibold">
+              <span className="text-foreground font-semibold">
                 {activeTab === "dashboard" ? "Faturamento Geral" : "Validador Planilhas"}
               </span>
             </div>
@@ -1359,30 +1393,39 @@ function Dashboard() {
           <div className="flex items-center gap-3">
             {/* Search Input Placeholder */}
             <div className="relative w-48 lg:w-64 hidden sm:block">
-              <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-slate-400" />
+              <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
               <input
                 type="text"
                 placeholder="Buscar cliente..."
                 value={searchCliente}
                 onChange={(e) => setSearchCliente(e.target.value)}
-                className="w-full h-8 pl-8 pr-10 rounded-lg bg-slate-50 border border-slate-100 text-xs focus:bg-white focus:outline-none focus:ring-1 focus:ring-slate-200 transition-all placeholder:text-slate-400"
+                className="w-full h-8 pl-8 pr-10 rounded-lg bg-muted border border-border text-xs focus:bg-card focus:outline-none focus:ring-1 focus:ring-ring transition-all placeholder:text-muted-foreground"
               />
-              <span className="absolute right-2.5 top-2 text-[9px] font-mono text-slate-400 bg-slate-200/60 px-1 rounded-md">
+              <span className="absolute right-2.5 top-2 text-[9px] font-mono text-muted-foreground bg-muted-foreground/15 px-1 rounded-md">
                 ⌘/
               </span>
             </div>
 
+            {/* Theme Toggle Button */}
+            <button
+              onClick={toggleTheme}
+              className="h-8 w-8 rounded-lg border border-border hover:bg-muted/80 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+              title={theme === "light" ? "Modo Escuro" : "Modo Claro"}
+            >
+              {theme === "light" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+            </button>
+
             {/* Utility Icons */}
             <button
               onClick={() => addActivity("update", "Preferências Atualizadas", "O usuário atualizou as preferências do sistema.")}
-              className="h-8 w-8 rounded-lg border border-slate-100 hover:bg-slate-50 flex items-center justify-center text-slate-500 hover:text-slate-800 transition-colors"
+              className="h-8 w-8 rounded-lg border border-border hover:bg-muted/80 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
             >
               <Clock className="h-4 w-4" />
             </button>
 
             <button
               onClick={() => setRightPanelOpen(!rightPanelOpen)}
-              className="h-8 w-8 rounded-lg border border-slate-100 hover:bg-slate-50 flex items-center justify-center text-slate-500 hover:text-slate-800 transition-colors relative"
+              className="h-8 w-8 rounded-lg border border-border hover:bg-muted/80 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors relative"
             >
               <Bell className="h-4 w-4" />
               {activities.length > 1 && (
@@ -1392,7 +1435,7 @@ function Dashboard() {
 
             <button
               onClick={() => setRightPanelOpen(!rightPanelOpen)}
-              className="h-8 w-8 rounded-lg border border-slate-100 hover:bg-slate-50 flex items-center justify-center text-slate-500 hover:text-slate-800 transition-colors hidden md:flex"
+              className="h-8 w-8 rounded-lg border border-border hover:bg-muted/80 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors hidden md:flex"
             >
               <LayoutDashboard className="h-4 w-4" />
             </button>
@@ -1403,13 +1446,13 @@ function Dashboard() {
         <main className="flex-1 p-6 md:p-8 max-w-[1400px] w-full mx-auto space-y-6">
           
           {/* MOBILE TABS CONTROLLER (Fallback Tab List for small screens) */}
-          <div className="flex justify-between items-center gap-4 flex-wrap md:hidden bg-white p-3 rounded-2xl border border-slate-100 shadow-sm">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Visualização</span>
+          <div className="flex justify-between items-center gap-4 flex-wrap md:hidden bg-card p-3 rounded-2xl border border-border shadow-sm">
+            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Visualização</span>
             <div className="flex gap-1.5">
               <button
                 onClick={() => setActiveTab("dashboard")}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                  activeTab === "dashboard" ? "bg-slate-900 text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  activeTab === "dashboard" ? "bg-foreground text-background shadow-sm" : "bg-muted text-muted-foreground hover:bg-muted/80"
                 }`}
               >
                 BI & Dashboards
@@ -1417,7 +1460,7 @@ function Dashboard() {
               <button
                 onClick={() => setActiveTab("conciliation")}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                  activeTab === "conciliation" ? "bg-slate-900 text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  activeTab === "conciliation" ? "bg-foreground text-background shadow-sm" : "bg-muted text-muted-foreground hover:bg-muted/80"
                 }`}
               >
                 Validador (.xlsx)
@@ -1429,16 +1472,16 @@ function Dashboard() {
             <TabsContent value="dashboard" className="space-y-6 mt-0 outline-none">
               
               {/* PAGE MAIN HEADER / FILTERS PANEL */}
-              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 flex-wrap bg-white p-5 rounded-2xl border border-slate-100 shadow-xs">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 flex-wrap bg-card p-5 rounded-2xl border border-border shadow-xs transition-colors duration-300">
                 <div>
-                  <h1 className="text-xl font-bold tracking-tight text-slate-900">Consulta de Faturamento</h1>
-                  <p className="text-xs text-slate-400 mt-1">Análise consolidada para a diretoria · Samel</p>
+                  <h1 className="text-xl font-bold tracking-tight text-foreground">Consulta de Faturamento</h1>
+                  <p className="text-xs text-muted-foreground mt-1">Análise consolidada para a diretoria · Samel</p>
                 </div>
                 
                 {/* Responsive Filter Grid */}
                 <div className="flex items-center gap-2.5 flex-wrap">
                   {/* Regime Toggle Pills */}
-                  <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200/40 mr-1">
+                  <div className="flex bg-muted p-1 rounded-xl border border-border/50 mr-1">
                     <button
                       onClick={() => {
                         setPeriodType("competencia");
@@ -1447,8 +1490,8 @@ function Dashboard() {
                       }}
                       className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                         periodType === "competencia"
-                          ? "bg-white text-slate-900 shadow-xs"
-                          : "text-slate-500 hover:text-slate-800"
+                          ? "bg-card text-foreground shadow-xs"
+                          : "text-muted-foreground hover:text-foreground"
                       }`}
                     >
                       Competência
@@ -1461,8 +1504,8 @@ function Dashboard() {
                       }}
                       className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                         periodType === "emissao"
-                          ? "bg-white text-slate-900 shadow-xs"
-                          : "text-slate-500 hover:text-slate-800"
+                          ? "bg-card text-foreground shadow-xs"
+                          : "text-muted-foreground hover:text-foreground"
                       }`}
                     >
                       Emissão
@@ -1470,11 +1513,11 @@ function Dashboard() {
                   </div>
 
                   <Select value={empresaFiltro} onValueChange={setEmpresaFiltro}>
-                    <SelectTrigger className="w-[220px] h-9 text-xs rounded-xl bg-slate-50 border-slate-100 hover:bg-slate-100/50 transition-colors">
-                      <Building2 className="h-3.5 w-3.5 mr-2 text-slate-400 flex-shrink-0" />
+                    <SelectTrigger className="w-[220px] h-9 text-xs rounded-xl bg-muted border-border hover:bg-muted/80 transition-colors">
+                      <Building2 className="h-3.5 w-3.5 mr-2 text-muted-foreground flex-shrink-0" />
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent className="rounded-xl shadow-lg border-slate-100">
+                    <SelectContent className="rounded-xl shadow-lg border-border bg-popover text-popover-foreground">
                       <SelectItem value="__all__">Todas as Empresas</SelectItem>
                       {empresas.map((e) => (
                         <SelectItem key={e.cnpj} value={e.cnpj}>
@@ -1485,11 +1528,11 @@ function Dashboard() {
                   </Select>
 
                   <Select value={mesFiltro} onValueChange={setMesFiltro}>
-                    <SelectTrigger className="w-[130px] h-9 text-xs rounded-xl bg-slate-50 border-slate-100 hover:bg-slate-100/50 transition-colors">
-                      <Calendar className="h-3.5 w-3.5 mr-2 text-slate-400 flex-shrink-0" />
+                    <SelectTrigger className="w-[130px] h-9 text-xs rounded-xl bg-muted border-border hover:bg-muted/80 transition-colors">
+                      <Calendar className="h-3.5 w-3.5 mr-2 text-muted-foreground flex-shrink-0" />
                       <SelectValue placeholder="Mês" />
                     </SelectTrigger>
-                    <SelectContent className="rounded-xl shadow-lg border-slate-100">
+                    <SelectContent className="rounded-xl shadow-lg border-border bg-popover text-popover-foreground">
                       <SelectItem value="__all__">Todos os meses</SelectItem>
                       {mesesOpcoes.map((m) => (
                         <SelectItem key={m.value} value={m.value}>
@@ -1500,11 +1543,11 @@ function Dashboard() {
                   </Select>
 
                   <Select value={anoFiltro} onValueChange={setAnoFiltro}>
-                    <SelectTrigger className="w-[105px] h-9 text-xs rounded-xl bg-slate-50 border-slate-100 hover:bg-slate-100/50 transition-colors">
-                      <Calendar className="h-3.5 w-3.5 mr-2 text-slate-400 flex-shrink-0" />
+                    <SelectTrigger className="w-[105px] h-9 text-xs rounded-xl bg-muted border-border hover:bg-muted/80 transition-colors">
+                      <Calendar className="h-3.5 w-3.5 mr-2 text-muted-foreground flex-shrink-0" />
                       <SelectValue placeholder="Ano" />
                     </SelectTrigger>
-                    <SelectContent className="rounded-xl shadow-lg border-slate-100">
+                    <SelectContent className="rounded-xl shadow-lg border-border bg-popover text-popover-foreground">
                       <SelectItem value="__all__">Todos os anos</SelectItem>
                       {anos.map((a) => (
                         <SelectItem key={a} value={a}>
@@ -1515,11 +1558,11 @@ function Dashboard() {
                   </Select>
 
                   <Select value={cServFiltro} onValueChange={setCServFiltro}>
-                    <SelectTrigger className="w-[180px] h-9 text-xs rounded-xl bg-slate-50 border-slate-100 hover:bg-slate-100/50 transition-colors">
-                      <Tag className="h-3.5 w-3.5 mr-2 text-slate-400 flex-shrink-0" />
+                    <SelectTrigger className="w-[180px] h-9 text-xs rounded-xl bg-muted border-border hover:bg-muted/80 transition-colors">
+                      <Tag className="h-3.5 w-3.5 mr-2 text-muted-foreground flex-shrink-0" />
                       <SelectValue placeholder="Serviço" />
                     </SelectTrigger>
-                    <SelectContent className="rounded-xl shadow-lg border-slate-100">
+                    <SelectContent className="rounded-xl shadow-lg border-border bg-popover text-popover-foreground">
                       <SelectItem value="__all__">Todos os Serviços</SelectItem>
                       <SelectItem value="042201">Planos de Saúde</SelectItem>
                       <SelectItem value="040301">Serviços Hospitalares</SelectItem>
@@ -1537,10 +1580,10 @@ function Dashboard() {
                 onDragLeave={() => setDragOver(false)}
                 onDrop={onDrop}
                 onClick={() => fileRef.current?.click()}
-                className={`rounded-2xl border border-dashed p-6 text-center cursor-pointer transition-all duration-200 ${
+                className={`rounded-2xl border border-dashed p-6 text-center cursor-pointer transition-all duration-300 ${
                   dragOver
-                    ? "border-indigo-500 bg-indigo-50/50 scale-[1.005]"
-                    : "border-slate-200 bg-white hover:border-indigo-400 hover:bg-slate-50/30"
+                    ? "border-indigo-500 bg-indigo-500/5 dark:bg-indigo-500/10 scale-[1.005] shadow-sm"
+                    : "border-border bg-card text-card-foreground hover:border-indigo-500/50 hover:bg-slate-50/30 dark:hover:bg-slate-800/10"
                 }`}
               >
                 <input
@@ -1555,22 +1598,22 @@ function Dashboard() {
                   {importing ? (
                     <>
                       <Loader2 className="h-8 w-8 text-indigo-600 animate-spin" />
-                      <p className="font-semibold text-xs text-slate-700">Processando XMLs NFS-e...</p>
+                      <p className="font-semibold text-xs text-foreground">Processando XMLs NFS-e...</p>
                       {progress && (
-                        <p className="text-[10px] text-slate-400">
+                        <p className="text-[10px] text-muted-foreground">
                           {progress.done} / {progress.total} XMLs
                         </p>
                       )}
                     </>
                   ) : (
                     <>
-                      <div className="h-10 w-10 rounded-xl bg-indigo-50 flex items-center justify-center">
-                        <Upload className="h-5 w-5 text-indigo-600" />
+                      <div className="h-10 w-10 rounded-xl bg-indigo-500/10 flex items-center justify-center">
+                        <Upload className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
                       </div>
-                      <p className="font-semibold text-xs text-slate-700">
+                      <p className="font-semibold text-xs text-foreground">
                         Arraste os arquivos .zip de XMLs aqui ou clique para selecionar
                       </p>
-                      <p className="text-[10px] text-slate-400">
+                      <p className="text-[10px] text-muted-foreground">
                         Suporta múltiplos arquivos ZIP contendo XMLs no padrão NFS-e Nacional (SPED v1.01)
                       </p>
                     </>
@@ -1623,47 +1666,47 @@ function Dashboard() {
               </div>
 
               {/* TAXES SUMMARY PANEL */}
-              <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-xs">
-                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">Detalhamento de Impostos & Tributos</h3>
+              <div className="bg-card border border-border rounded-2xl p-5 shadow-xs transition-colors duration-300">
+                <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-4">Detalhamento de Impostos & Tributos</h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                   {/* ISS Retido */}
-                  <div className="p-4 rounded-xl bg-slate-50 border border-slate-100/50 flex items-start justify-between">
+                  <div className="p-4 rounded-xl bg-muted/40 border border-border/50 flex items-start justify-between">
                     <div>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">ISS Retido</p>
-                      <p className="text-lg font-bold text-slate-900 mt-1.5">{fmtBRL(issRetidoTotal)}</p>
-                      <p className="text-[10px] text-slate-400 mt-1">Retido na fonte pelo tomador</p>
+                      <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">ISS Retido</p>
+                      <p className="text-lg font-bold text-foreground mt-1.5">{fmtBRL(issRetidoTotal)}</p>
+                      <p className="text-[10px] text-muted-foreground mt-1">Retido na fonte pelo tomador</p>
                     </div>
-                    <div className="h-8 w-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                    <div className="h-8 w-8 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
                       <Building2 className="h-4.5 w-4.5" />
                     </div>
                   </div>
                   
                   {/* ISS a Recolher */}
-                  <div className="p-4 rounded-xl bg-slate-50 border border-slate-100/50 flex items-start justify-between">
+                  <div className="p-4 rounded-xl bg-muted/40 border border-border/50 flex items-start justify-between">
                     <div>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">ISS a Recolher</p>
-                      <p className="text-lg font-bold text-slate-900 mt-1.5">{fmtBRL(issARecolherTotal)}</p>
-                      <p className="text-[10px] text-slate-400 mt-1">Recolhimento próprio do prestador</p>
+                      <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">ISS a Recolher</p>
+                      <p className="text-lg font-bold text-foreground mt-1.5">{fmtBRL(issARecolherTotal)}</p>
+                      <p className="text-[10px] text-muted-foreground mt-1">Recolhimento próprio do prestador</p>
                     </div>
-                    <div className="h-8 w-8 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center">
+                    <div className="h-8 w-8 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center">
                       <Receipt className="h-4.5 w-4.5" />
                     </div>
                   </div>
 
                   {/* Demais Tributos Federais */}
-                  <div className="p-4 rounded-xl bg-slate-50 border border-slate-100/50 flex items-start justify-between">
+                  <div className="p-4 rounded-xl bg-muted/40 border border-border/50 flex items-start justify-between">
                     <div className="flex-1">
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Tributos Federais</p>
-                      <p className="text-lg font-bold text-slate-900 mt-1.5">{fmtBRL(tributosFederaisTotal)}</p>
-                      <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 mt-2 pt-1 border-t border-slate-200/50 text-[9px] text-slate-400 font-mono">
-                        <div>PIS: <span className="text-slate-700 font-semibold">{fmtBRL(pisTotal)}</span></div>
-                        <div>COFINS: <span className="text-slate-700 font-semibold">{fmtBRL(cofinsTotal)}</span></div>
-                        <div>CSLL: <span className="text-slate-700 font-semibold">{fmtBRL(csllTotal)}</span></div>
-                        <div>IRRF: <span className="text-slate-700 font-semibold">{fmtBRL(irrfTotal)}</span></div>
-                        <div className="col-span-2">INSS: <span className="text-slate-700 font-semibold">{fmtBRL(inssTotal)}</span></div>
+                      <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">Tributos Federais</p>
+                      <p className="text-lg font-bold text-foreground mt-1.5">{fmtBRL(tributosFederaisTotal)}</p>
+                      <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 mt-2 pt-1 border-t border-border/50 text-[9px] text-muted-foreground font-mono">
+                        <div>PIS: <span className="text-foreground/85 font-semibold">{fmtBRL(pisTotal)}</span></div>
+                        <div>COFINS: <span className="text-foreground/85 font-semibold">{fmtBRL(cofinsTotal)}</span></div>
+                        <div>CSLL: <span className="text-foreground/85 font-semibold">{fmtBRL(csllTotal)}</span></div>
+                        <div>IRRF: <span className="text-foreground/85 font-semibold">{fmtBRL(irrfTotal)}</span></div>
+                        <div className="col-span-2">INSS: <span className="text-foreground/85 font-semibold">{fmtBRL(inssTotal)}</span></div>
                       </div>
                     </div>
-                    <div className="h-8 w-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center flex-shrink-0">
+                    <div className="h-8 w-8 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center flex-shrink-0">
                       <TrendingUp className="h-4.5 w-4.5" />
                     </div>
                   </div>
@@ -1674,31 +1717,31 @@ function Dashboard() {
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                 
                 {/* Faturamento Line Chart (ByeWind Image 1 line chart layout) */}
-                <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-xs lg:col-span-8">
+                <div className="bg-card border border-border rounded-2xl p-5 shadow-xs lg:col-span-8 transition-colors duration-300">
                   <div className="flex items-center justify-between gap-4 mb-5 flex-wrap">
                     <div>
-                      <h3 className="text-xs font-bold text-slate-800">Evolução do Faturamento</h3>
-                      <p className="text-[10px] text-slate-400 mt-0.5">Comparativo do faturamento com o período imediatamente anterior</p>
+                      <h3 className="text-xs font-bold text-foreground">Evolução do Faturamento</h3>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">Comparativo do faturamento com o período imediatamente anterior</p>
                     </div>
                     {/* Legend keys matching image 1 & 2 */}
-                    <div className="flex items-center gap-4 text-[10px] font-medium text-slate-500">
+                    <div className="flex items-center gap-4 text-[10px] font-medium text-muted-foreground">
                       <div className="flex items-center gap-1.5">
-                        <span className="h-1.5 w-1.5 rounded-full bg-indigo-600" />
+                        <span className="h-1.5 w-1.5 rounded-full bg-indigo-600 animate-pulse" />
                         <span>Período Atual</span>
                       </div>
                       <div className="flex items-center gap-1.5">
-                        <span className="h-1.5 w-1.5 rounded-full bg-slate-300" />
-                        <span className="border-b border-dashed border-slate-500 pb-0.5">Período Anterior</span>
+                        <span className="h-1.5 w-1.5 rounded-full bg-slate-400/80" />
+                        <span className="border-b border-dashed border-muted-foreground/60 pb-0.5">Período Anterior</span>
                       </div>
                     </div>
                   </div>
                   
                   <div className="h-[280px]">
                     {lineChartData.length === 0 ? (
-                      <EmptyState />
+                       <EmptyState />
                     ) : (
                       <ResponsiveContainer width="100%" height="100%">
-                        <BarChart
+                        <AreaChart
                           data={lineChartData}
                           onClick={(state) => {
                             if (state && state.activeLabel) {
@@ -1729,10 +1772,20 @@ function Dashboard() {
                             }
                           }}
                         >
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                          <XAxis dataKey="label" stroke="#94a3b8" fontSize={10} axisLine={false} tickLine={false} />
+                          <defs>
+                            <linearGradient id="colorCurrent" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#6366f1" stopOpacity={0.25}/>
+                              <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
+                            </linearGradient>
+                            <linearGradient id="colorPrev" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#94a3b8" stopOpacity={0.15}/>
+                              <stop offset="95%" stopColor="#94a3b8" stopOpacity={0}/>
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-border)" opacity={0.4} />
+                          <XAxis dataKey="label" stroke="var(--color-muted-foreground)" fontSize={10} axisLine={false} tickLine={false} />
                           <YAxis
-                            stroke="#94a3b8"
+                            stroke="var(--color-muted-foreground)"
                             fontSize={10}
                             axisLine={false}
                             tickLine={false}
@@ -1742,52 +1795,60 @@ function Dashboard() {
                           />
                           <Tooltip
                             formatter={(v) => fmtBRL(Number(v))}
-                            contentStyle={{ borderRadius: 12, border: "1px solid #f1f5f9", boxShadow: "0 4px 12px rgba(0,0,0,0.03)" }}
+                            contentStyle={{
+                              backgroundColor: "var(--color-popover)",
+                              borderColor: "var(--color-border)",
+                              borderRadius: 12,
+                              color: "var(--color-foreground)",
+                              boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.02)"
+                            }}
                           />
-                          <Bar
+                          <Area
+                            type="monotone"
                             dataKey="Período Anterior"
-                            fill="#cbd5e1"
-                            opacity={0.6}
-                            radius={[4, 4, 0, 0]}
-                            barSize={12}
-                            style={{ cursor: "pointer" }}
+                            stroke="#94a3b8"
+                            strokeWidth={2}
+                            strokeDasharray="4 4"
+                            fillOpacity={1}
+                            fill="url(#colorPrev)"
                           />
-                          <Bar
+                          <Area
+                            type="monotone"
                             dataKey="Período Atual"
-                            fill="#6366f1"
-                            radius={[4, 4, 0, 0]}
-                            barSize={12}
-                            style={{ cursor: "pointer" }}
+                            stroke="#6366f1"
+                            strokeWidth={2.5}
+                            fillOpacity={1}
+                            fill="url(#colorCurrent)"
                           />
-                        </BarChart>
+                        </AreaChart>
                       </ResponsiveContainer>
                     )}
                   </div>
                 </div>
 
                 {/* Top Services (ByeWind "Traffic by Website" progress layout) */}
-                <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-xs lg:col-span-4 flex flex-col justify-between">
+                <div className="bg-card border border-border rounded-2xl p-5 shadow-xs lg:col-span-4 flex flex-col justify-between transition-colors duration-300">
                   <div>
-                    <h3 className="text-xs font-bold text-slate-800 mb-1">Faturamento por Serviço</h3>
-                    <p className="text-[10px] text-slate-400 mb-4">Participação dos principais serviços prestados</p>
+                    <h3 className="text-xs font-bold text-foreground mb-1">Faturamento por Serviço</h3>
+                    <p className="text-[10px] text-muted-foreground mb-4">Participação dos principais serviços prestados</p>
                     
                     <div className="space-y-4">
                       {topServicesList.length === 0 ? (
-                        <div className="text-center text-xs text-slate-400 py-12">Nenhum serviço registrado</div>
+                        <div className="text-center text-xs text-muted-foreground py-12">Nenhum serviço registrado</div>
                       ) : (
                         topServicesList.map((service, index) => (
                           <div key={index} className="space-y-1.5">
                             <div className="flex items-center justify-between text-xs">
-                              <span className="font-semibold text-slate-700 truncate max-w-[200px]" title={service.name}>
+                              <span className="font-semibold text-foreground truncate max-w-[200px]" title={service.name}>
                                 {service.name}
                               </span>
-                              <span className="font-medium text-slate-500 font-mono text-[10px]">
+                              <span className="font-medium text-muted-foreground font-mono text-[10px]">
                                 {service.percentage.toFixed(1)}%
                               </span>
                             </div>
                             <div className="flex items-center gap-3">
                               {/* Custom styled progress bars following image 1 */}
-                              <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                              <div className="w-full bg-muted h-1.5 rounded-full overflow-hidden">
                                 <div
                                   className="h-full rounded-full transition-all duration-500"
                                   style={{
@@ -1796,7 +1857,7 @@ function Dashboard() {
                                   }}
                                 />
                               </div>
-                              <span className="text-[10px] font-bold text-slate-700 whitespace-nowrap w-16 text-right">
+                              <span className="text-[10px] font-bold text-foreground whitespace-nowrap w-16 text-right">
                                 {service.value >= 1000 ? `R$ ${(service.value / 1000).toFixed(0)}k` : `R$ ${service.value}`}
                               </span>
                             </div>
@@ -1817,9 +1878,9 @@ function Dashboard() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 
                 {/* Donut Chart: Faturamento PJ vs PF */}
-                <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-xs">
-                  <h3 className="text-xs font-bold text-slate-800 mb-1">Perfil do Cliente</h3>
-                  <p className="text-[10px] text-slate-400 mb-4">Faturamento distribuído entre PJ e PF</p>
+                <div className="bg-card border border-border rounded-2xl p-5 shadow-xs transition-colors duration-300">
+                  <h3 className="text-xs font-bold text-foreground mb-1">Perfil do Cliente</h3>
+                  <p className="text-[10px] text-muted-foreground mb-4">Faturamento distribuído entre PJ e PF</p>
                   
                   <div className="h-[200px] flex items-center justify-center relative">
                     {pjPfData.length === 0 ? (
@@ -1835,17 +1896,28 @@ function Dashboard() {
                               innerRadius={45}
                               outerRadius={70}
                               paddingAngle={3}
+                              stroke="var(--color-card)"
+                              strokeWidth={3}
                             >
                               <Cell fill="#6366f1" />
                               <Cell fill="#ec4899" />
                             </Pie>
-                            <Tooltip formatter={(v) => fmtBRL(Number(v))} />
+                            <Tooltip
+                              formatter={(v) => fmtBRL(Number(v))}
+                              contentStyle={{
+                                backgroundColor: "var(--color-popover)",
+                                borderColor: "var(--color-border)",
+                                borderRadius: 12,
+                                color: "var(--color-foreground)",
+                                boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.05)"
+                              }}
+                            />
                           </PieChart>
                         </ResponsiveContainer>
                         {/* Legend aligned on the side/bottom */}
                         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                          <span className="text-[10px] font-bold text-slate-400 uppercase">Total</span>
-                          <span className="text-sm font-extrabold text-slate-800">
+                          <span className="text-[10px] font-bold text-muted-foreground uppercase">Total</span>
+                          <span className="text-sm font-extrabold text-foreground">
                             {faturamento >= 1000000 ? `R$ ${(faturamento / 1000000).toFixed(1)}M` : `R$ ${(faturamento / 1000).toFixed(0)}k`}
                           </span>
                         </div>
@@ -1853,16 +1925,16 @@ function Dashboard() {
                     )}
                   </div>
 
-                  <div className="flex flex-col gap-2.5 mt-3 pt-3 border-t border-slate-50 text-xs">
+                  <div className="flex flex-col gap-2.5 mt-3 pt-3 border-t border-border/50 text-xs">
                     {pjPfData.map((item, idx) => (
                       <div key={idx} className="flex items-center justify-between">
-                        <div className="flex items-center gap-1.5 text-[10px] text-slate-500">
+                        <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
                           <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: idx === 0 ? "#6366f1" : "#ec4899" }} />
-                          <span className="font-semibold text-slate-700 truncate max-w-[150px]">{item.name}</span>
+                          <span className="font-semibold text-foreground/90 truncate max-w-[150px]">{item.name}</span>
                         </div>
                         <div className="text-right flex flex-col items-end">
-                          <span className="font-bold text-slate-800">{fmtBRL(item.value)}</span>
-                          <span className="text-[9px] text-slate-400 font-mono">T. Médio: {fmtBRL(item.ticketMedio)} ({item.count} notas)</span>
+                          <span className="font-bold text-foreground">{fmtBRL(item.value)}</span>
+                          <span className="text-[9px] text-muted-foreground font-mono">T. Médio: {fmtBRL(item.ticketMedio)} ({item.count} notas)</span>
                         </div>
                       </div>
                     ))}
@@ -1870,9 +1942,9 @@ function Dashboard() {
                 </div>
 
                 {/* Donut Chart: Planos vs Hospitais Comparativo */}
-                <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-xs">
-                  <h3 className="text-xs font-bold text-slate-800 mb-1">Comparativo de Serviços Chave</h3>
-                  <p className="text-[10px] text-slate-400 mb-4">Planos de Saúde vs. Serviços Hospitalares</p>
+                <div className="bg-card border border-border rounded-2xl p-5 shadow-xs transition-colors duration-300">
+                  <h3 className="text-xs font-bold text-foreground mb-1">Comparativo de Serviços Chave</h3>
+                  <p className="text-[10px] text-muted-foreground mb-4">Planos de Saúde vs. Serviços Hospitalares</p>
                   
                   <div className="h-[200px] flex items-center justify-center relative">
                     {comparativoServicosData.every((d) => d.value === 0) ? (
@@ -1888,6 +1960,8 @@ function Dashboard() {
                               innerRadius={45}
                               outerRadius={70}
                               paddingAngle={3}
+                              stroke="var(--color-card)"
+                              strokeWidth={3}
                             >
                               {comparativoServicosData
                                 .filter((d) => d.value > 0)
@@ -1895,39 +1969,48 @@ function Dashboard() {
                                   <Cell key={i} fill={entry.fill} />
                                 ))}
                             </Pie>
-                            <Tooltip formatter={(v) => fmtBRL(Number(v))} />
+                            <Tooltip
+                              formatter={(v) => fmtBRL(Number(v))}
+                              contentStyle={{
+                                backgroundColor: "var(--color-popover)",
+                                borderColor: "var(--color-border)",
+                                borderRadius: 12,
+                                color: "var(--color-foreground)",
+                                boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.05)"
+                              }}
+                            />
                           </PieChart>
                         </ResponsiveContainer>
                         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                          <span className="text-[10px] font-bold text-slate-400 uppercase">Foco BI</span>
-                          <span className="text-xs font-bold text-slate-800">Samel</span>
+                          <span className="text-[10px] font-bold text-muted-foreground uppercase">Foco BI</span>
+                          <span className="text-xs font-bold text-foreground">Samel</span>
                         </div>
                       </>
                     )}
                   </div>
 
-                  <div className="flex justify-around items-center mt-3 pt-3 border-t border-slate-50 text-xs">
+                  <div className="flex justify-around items-center mt-3 pt-3 border-t border-border/50 text-xs">
                     {comparativoServicosData.filter(d => d.value > 0).map((item, idx) => (
                       <div key={idx} className="flex flex-col items-center">
-                        <div className="flex items-center gap-1.5 text-[10px] text-slate-500">
+                        <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
                           <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: item.fill }} />
                           <span className="truncate max-w-[100px]">{item.name}</span>
                         </div>
-                        <span className="font-bold text-slate-800 mt-0.5">{fmtBRL(item.value)}</span>
+                        <span className="font-bold text-foreground mt-0.5">{fmtBRL(item.value)}</span>
                       </div>
                     ))}
                   </div>
                 </div>
 
                 {/* Top Clients Table (ByeWind "Top Selling Products" style from Image 2) */}
-                <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-xs lg:col-span-1">
-                  <h3 className="text-xs font-bold text-slate-800 mb-1">Principais Clientes</h3>
-                  <p className="text-[10px] text-slate-400 mb-4">Top 5 tomadores por volume de faturamento</p>
+                <div className="bg-card border border-border rounded-2xl p-5 shadow-xs lg:col-span-1 transition-colors duration-300">
+                  <h3 className="text-xs font-bold text-foreground mb-1">Principais Clientes</h3>
+                  <p className="text-[10px] text-muted-foreground mb-4">Top 5 tomadores por volume de faturamento</p>
                   
                   <div className="overflow-x-auto">
                     <table className="w-full text-left text-xs border-collapse">
                       <thead>
-                        <tr className="border-b border-slate-100 text-slate-400 font-semibold">
+                        <tr className="border-b border-border text-muted-foreground font-semibold">
                           <th className="pb-2 font-medium">Nome / CNPJ</th>
                           <th className="pb-2 text-center font-medium">Notas</th>
                           <th className="pb-2 text-right font-medium">Faturamento</th>
@@ -1937,27 +2020,27 @@ function Dashboard() {
                       <tbody>
                         {topClientesList.length === 0 ? (
                           <tr>
-                            <td colSpan={4} className="text-center text-slate-400 py-12">Nenhum cliente registrado</td>
+                            <td colSpan={4} className="text-center text-muted-foreground py-12">Nenhum cliente registrado</td>
                           </tr>
                         ) : (
                           topClientesList.map((client, index) => {
                             const share = faturamento > 0 ? (client.total / faturamento) * 100 : 0;
                             const isHighConcentration = share > 10;
                             return (
-                              <tr key={index} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
+                              <tr key={index} className="border-b border-border/50 hover:bg-muted/40 transition-colors">
                                 <td className="py-2.5 max-w-[120px]">
-                                  <div className="font-semibold text-slate-700 truncate" title={client.nome}>
+                                  <div className="font-semibold text-foreground/90 truncate" title={client.nome}>
                                     {client.nome}
                                   </div>
-                                  <div className="text-[9px] text-slate-400 font-mono mt-0.5">
+                                  <div className="text-[9px] text-muted-foreground font-mono mt-0.5">
                                     {formatarCnpjCpf(client.cnpjCpf)}
                                   </div>
                                 </td>
-                                <td className="py-2.5 text-center text-slate-600 font-mono text-[10px]">{client.count}</td>
-                                <td className="py-2.5 text-right font-bold text-slate-800">{fmtBRL(client.total)}</td>
+                                <td className="py-2.5 text-center text-muted-foreground font-mono text-[10px]">{client.count}</td>
+                                <td className="py-2.5 text-right font-bold text-foreground">{fmtBRL(client.total)}</td>
                                 <td className="py-2.5 text-right font-medium">
                                   <div className={`flex items-center justify-end gap-1 font-mono text-[10px] ${
-                                    isHighConcentration ? "text-rose-600 font-bold" : "text-slate-500"
+                                    isHighConcentration ? "text-rose-600 font-bold" : "text-muted-foreground"
                                   }`}>
                                     {isHighConcentration && <AlertTriangle className="h-3 w-3 text-rose-500 animate-pulse" />}
                                     {share.toFixed(1)}%
@@ -1979,22 +2062,22 @@ function Dashboard() {
               </div>
 
               {/* NFS-e PRIMARY TABLE LIST */}
-              <div className="bg-white border border-slate-100 rounded-2xl shadow-xs overflow-hidden">
-                <div className="p-5 border-b border-slate-100 flex items-center justify-between gap-4 flex-wrap">
-                  <h3 className="text-xs font-bold text-slate-800 flex items-center gap-2">
-                    <FileText className="h-4 w-4 text-slate-400" />
+              <div className="bg-card border border-border rounded-2xl shadow-xs overflow-hidden transition-colors duration-300">
+                <div className="p-5 border-b border-border flex items-center justify-between gap-4 flex-wrap">
+                  <h3 className="text-xs font-bold text-foreground flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-muted-foreground" />
                     Notas Fiscais Emitidas ({notasFiltradas.length.toLocaleString("pt-BR")})
                   </h3>
                   
                   {/* Search and Period Filter */}
                   <div className="flex items-center gap-2 flex-wrap">
                     <div className="relative w-48 sm:w-64">
-                      <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-slate-400" />
+                      <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
                       <Input
                         placeholder="Buscar por cliente..."
                         value={searchCliente}
                         onChange={(e) => setSearchCliente(e.target.value)}
-                        className="pl-8 h-8 rounded-lg text-xs bg-slate-50 border-slate-100 hover:bg-slate-100/30 focus:bg-white placeholder:text-slate-400 w-full"
+                        className="pl-8 h-8 rounded-lg text-xs bg-muted border-border hover:bg-muted/80 focus:bg-card placeholder:text-muted-foreground w-full"
                       />
                     </div>
                   </div>
@@ -2002,60 +2085,60 @@ function Dashboard() {
 
                 <div className="overflow-x-auto">
                   <Table className="min-w-[1400px]">
-                    <TableHeader className="bg-slate-50/70">
-                      <TableRow className="border-b border-slate-100">
-                        <TableHead className="font-medium text-slate-400 h-9">Nº NFS</TableHead>
-                        <TableHead className="font-medium text-slate-400 h-9">Emissão</TableHead>
-                        <TableHead className="font-medium text-slate-400 h-9">Competência</TableHead>
-                        <TableHead className="font-medium text-slate-400 h-9">CNPJ/CPF Cliente</TableHead>
-                        <TableHead className="font-medium text-slate-400 h-9">Cliente</TableHead>
-                        <TableHead className="text-right font-medium text-slate-400 h-9">Vlr. Serviço</TableHead>
-                        <TableHead className="text-right font-medium text-slate-400 h-9">Vlr. Líquido</TableHead>
-                        <TableHead className="text-right font-medium text-slate-400 h-9">Vlr. ISS</TableHead>
-                        <TableHead className="text-center font-medium text-slate-400 h-9">ISS Retido?</TableHead>
-                        <TableHead className="font-medium text-slate-400 h-9">Serviço</TableHead>
-                        <TableHead className="font-medium text-slate-400 h-9">Situação</TableHead>
+                    <TableHeader className="bg-muted/30">
+                      <TableRow className="border-b border-border">
+                        <TableHead className="font-medium text-muted-foreground h-9">Nº NFS</TableHead>
+                        <TableHead className="font-medium text-muted-foreground h-9">Emissão</TableHead>
+                        <TableHead className="font-medium text-muted-foreground h-9">Competência</TableHead>
+                        <TableHead className="font-medium text-muted-foreground h-9">CNPJ/CPF Cliente</TableHead>
+                        <TableHead className="font-medium text-muted-foreground h-9">Cliente</TableHead>
+                        <TableHead className="text-right font-medium text-muted-foreground h-9">Vlr. Serviço</TableHead>
+                        <TableHead className="text-right font-medium text-muted-foreground h-9">Vlr. Líquido</TableHead>
+                        <TableHead className="text-right font-medium text-muted-foreground h-9">Vlr. ISS</TableHead>
+                        <TableHead className="text-center font-medium text-muted-foreground h-9">ISS Retido?</TableHead>
+                        <TableHead className="font-medium text-muted-foreground h-9">Serviço</TableHead>
+                        <TableHead className="font-medium text-muted-foreground h-9">Situação</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {paginatedNotas.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={11} className="text-center text-slate-400 py-12 text-xs">
+                          <TableCell colSpan={11} className="text-center text-muted-foreground py-12 text-xs">
                             Nenhuma nota fiscal encontrada no banco local. Envie um ZIP com XMLs para começar.
                           </TableCell>
                         </TableRow>
                       ) : (
                         paginatedNotas.map((n) => (
-                          <TableRow key={n.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
-                            <TableCell className="font-mono text-[10px] text-slate-600 font-semibold">{n.nNFSe}</TableCell>
-                            <TableCell className="text-xs text-slate-600 whitespace-nowrap">{formatarData(n.dhEmi)}</TableCell>
-                            <TableCell className="text-xs text-slate-500 whitespace-nowrap">{formatarCompetencia(n.dCompet)}</TableCell>
-                            <TableCell className="text-[10px] font-mono text-slate-500 whitespace-nowrap">{formatarCnpjCpf(n.cnpjCpfCliente)}</TableCell>
-                            <TableCell className="text-xs text-slate-700 max-w-[180px] truncate font-medium" title={n.cliente}>{n.cliente}</TableCell>
-                            <TableCell className="text-right font-mono text-xs font-semibold text-slate-800">{fmtBRL(n.valor)}</TableCell>
-                            <TableCell className="text-right font-mono text-xs text-slate-600">{fmtBRL(n.vlrLiquido ?? n.valor)}</TableCell>
-                            <TableCell className="text-right font-mono text-xs text-slate-500">{fmtBRL(n.vlrIss ?? 0)}</TableCell>
+                          <TableRow key={n.id} className="border-b border-border/50 hover:bg-muted/40 transition-colors">
+                            <TableCell className="font-mono text-[10px] text-foreground/95 font-semibold">{n.nNFSe}</TableCell>
+                            <TableCell className="text-xs text-foreground/90 whitespace-nowrap">{formatarData(n.dhEmi)}</TableCell>
+                            <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{formatarCompetencia(n.dCompet)}</TableCell>
+                            <TableCell className="text-[10px] font-mono text-muted-foreground whitespace-nowrap">{formatarCnpjCpf(n.cnpjCpfCliente)}</TableCell>
+                            <TableCell className="text-xs text-foreground/90 max-w-[180px] truncate font-medium" title={n.cliente}>{n.cliente}</TableCell>
+                            <TableCell className="text-right font-mono text-xs font-semibold text-foreground">{fmtBRL(n.valor)}</TableCell>
+                            <TableCell className="text-right font-mono text-xs text-foreground/80">{fmtBRL(n.vlrLiquido ?? n.valor)}</TableCell>
+                            <TableCell className="text-right font-mono text-xs text-muted-foreground">{fmtBRL(n.vlrIss ?? 0)}</TableCell>
                             <TableCell className="text-center">
                               {n.issRetido === "Sim" ? (
-                                <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-100">
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20">
                                   Sim
                                 </span>
                               ) : (
-                                <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-slate-50 text-slate-500 border border-slate-100">
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-muted text-muted-foreground border border-border">
                                   Não
                                 </span>
                               )}
                             </TableCell>
-                            <TableCell className="text-xs text-slate-500 max-w-[200px] truncate" title={n.codTribNacional ? `${n.codTribNacional} - ${getServicoDescricao(n.codTribNacional)}` : "—"}>
+                            <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate" title={n.codTribNacional ? `${n.codTribNacional} - ${getServicoDescricao(n.codTribNacional)}` : "—"}>
                               {n.codTribNacional ? `${n.codTribNacional} - ${getServicoDescricao(n.codTribNacional)}` : "—"}
                             </TableCell>
                             <TableCell>
                               {getNoteStatus(n) === "ativa" ? (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/25">
                                   Ativa
                                 </span>
                               ) : (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-50 text-rose-700 border border-rose-100">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/25">
                                   Cancelada
                                 </span>
                               )}
@@ -2069,7 +2152,7 @@ function Dashboard() {
 
                 {/* Pagination */}
                 {totalPages > 1 && (
-                  <div className="p-4 border-t border-slate-100 bg-slate-50/30 flex items-center justify-between gap-4 flex-wrap text-xs text-slate-500">
+                  <div className="p-4 border-t border-border bg-muted/20 flex items-center justify-between gap-4 flex-wrap text-xs text-muted-foreground">
                     <div>
                       Exibindo {Math.min(sortedNotas.length, (currentPage - 1) * 100 + 1)} a{" "}
                       {Math.min(sortedNotas.length, currentPage * 100)} de {sortedNotas.length} notas
@@ -2113,10 +2196,10 @@ function Dashboard() {
                 onDragLeave={() => setXlsxDragOver(false)}
                 onDrop={onXlsxDrop}
                 onClick={() => xlsxRef.current?.click()}
-                className={`rounded-2xl border border-dashed p-6 text-center cursor-pointer transition-all duration-200 ${
+                className={`rounded-2xl border border-dashed p-6 text-center cursor-pointer transition-all duration-300 ${
                   xlsxDragOver
-                    ? "border-indigo-500 bg-indigo-50/50 scale-[1.005]"
-                    : "border-slate-200 bg-white hover:border-indigo-400 hover:bg-slate-50/30"
+                    ? "border-indigo-500 bg-indigo-500/5 dark:bg-indigo-500/10 scale-[1.005] shadow-sm"
+                    : "border-border bg-card text-card-foreground hover:border-indigo-500/50 hover:bg-slate-50/30 dark:hover:bg-slate-800/10"
                 }`}
               >
                 <input
@@ -2130,26 +2213,26 @@ function Dashboard() {
                   {isXlsxProcessing ? (
                     <>
                       <Loader2 className="h-8 w-8 text-indigo-600 animate-spin" />
-                      <p className="font-semibold text-xs text-slate-700">Conciliando Planilha de Faturamento...</p>
+                      <p className="font-semibold text-xs text-foreground">Conciliando Planilha de Faturamento...</p>
                     </>
                   ) : (
                     <>
-                      <div className="h-10 w-10 rounded-xl bg-indigo-50 flex items-center justify-center">
-                        <FileSpreadsheet className="h-5 w-5 text-indigo-600" />
+                      <div className="h-10 w-10 rounded-xl bg-indigo-500/10 flex items-center justify-center">
+                        <FileSpreadsheet className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
                       </div>
                       {xlsxFile ? (
                         <>
-                          <p className="font-semibold text-xs text-indigo-600">{xlsxFile.name}</p>
-                          <p className="text-[10px] text-slate-400">
+                          <p className="font-semibold text-xs text-indigo-600 dark:text-indigo-400">{xlsxFile.name}</p>
+                          <p className="text-[10px] text-muted-foreground">
                             Clique ou arraste outro arquivo para substituir
                           </p>
                         </>
                       ) : (
                         <>
-                          <p className="font-semibold text-xs text-slate-700">
+                          <p className="font-semibold text-xs text-foreground">
                             Arraste a planilha de fechamento fiscal (.xlsx) aqui ou clique para selecionar
                           </p>
-                          <p className="text-[10px] text-slate-400">
+                          <p className="text-[10px] text-muted-foreground">
                             O arquivo deve conter as colunas de "Chave de Acesso" e "Situação/Status"
                           </p>
                         </>
@@ -2165,20 +2248,20 @@ function Dashboard() {
                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                     
                     {/* Columns Mappings Panel */}
-                    <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-xs lg:col-span-4 flex flex-col gap-4">
+                    <div className="bg-card border border-border rounded-2xl p-5 shadow-xs lg:col-span-4 flex flex-col gap-4 transition-colors duration-300">
                       <div>
-                        <h3 className="text-xs font-bold text-slate-800">Mapeamento de Planilha</h3>
-                        <p className="text-[10px] text-slate-400 mt-0.5">Identifique as colunas de referência do seu relatório Excel</p>
+                        <h3 className="text-xs font-bold text-foreground">Mapeamento de Planilha</h3>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">Identifique as colunas de referência do seu relatório Excel</p>
                       </div>
 
                       <div className="space-y-3 mt-2">
                         <div className="space-y-1">
-                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Coluna Chave de Acesso</label>
+                          <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">Coluna Chave de Acesso</label>
                           <Select value={keyCol} onValueChange={(val) => setKeyCol(val)}>
-                            <SelectTrigger className="w-full h-8 text-xs rounded-lg border-slate-100 bg-slate-50">
+                            <SelectTrigger className="w-full h-8 text-xs rounded-lg border-border bg-muted hover:bg-muted/80 text-foreground transition-colors">
                               <SelectValue placeholder="Selecione..." />
                             </SelectTrigger>
-                            <SelectContent className="rounded-xl shadow-lg border-slate-100">
+                            <SelectContent className="rounded-xl shadow-lg border-border bg-popover text-popover-foreground">
                               {xlsxHeaders.map((h) => (
                                 <SelectItem key={h} value={h}>{h}</SelectItem>
                               ))}
@@ -2187,12 +2270,12 @@ function Dashboard() {
                         </div>
 
                         <div className="space-y-1">
-                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Coluna Status / Situação</label>
+                          <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">Coluna Status / Situação</label>
                           <Select value={statusCol} onValueChange={(val) => setStatusCol(val)}>
-                            <SelectTrigger className="w-full h-8 text-xs rounded-lg border-slate-100 bg-slate-50">
+                            <SelectTrigger className="w-full h-8 text-xs rounded-lg border-border bg-muted hover:bg-muted/80 text-foreground transition-colors">
                               <SelectValue placeholder="Selecione..." />
                             </SelectTrigger>
-                            <SelectContent className="rounded-xl shadow-lg border-slate-100">
+                            <SelectContent className="rounded-xl shadow-lg border-border bg-popover text-popover-foreground">
                               {xlsxHeaders.map((h) => (
                                 <SelectItem key={h} value={h}>{h}</SelectItem>
                               ))}
@@ -2201,12 +2284,12 @@ function Dashboard() {
                         </div>
 
                         <div className="space-y-1">
-                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Coluna Operação (ISS Retido)</label>
+                          <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">Coluna Operação (ISS Retido)</label>
                           <Select value={operacaoCol} onValueChange={(val) => setOperacaoCol(val)}>
-                            <SelectTrigger className="w-full h-8 text-xs rounded-lg border-slate-100 bg-slate-50">
+                            <SelectTrigger className="w-full h-8 text-xs rounded-lg border-border bg-muted hover:bg-muted/80 text-foreground transition-colors">
                               <SelectValue placeholder="Selecione..." />
                             </SelectTrigger>
-                            <SelectContent className="rounded-xl shadow-lg border-slate-100">
+                            <SelectContent className="rounded-xl shadow-lg border-border bg-popover text-popover-foreground">
                               {xlsxHeaders.map((h) => (
                                 <SelectItem key={h} value={h}>{h}</SelectItem>
                               ))}
@@ -2220,49 +2303,49 @@ function Dashboard() {
                     <div className="lg:col-span-8 grid grid-cols-2 gap-4">
                       
                       {/* Divergent Notes Card */}
-                      <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-xs flex items-center justify-between bg-white">
+                      <div className="bg-card border border-border rounded-2xl p-4 shadow-xs flex items-center justify-between bg-card transition-colors duration-300">
                         <div>
-                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Divergentes / Retificáveis</p>
-                          <p className="text-2xl font-extrabold text-indigo-600 mt-1">{conciliatedStats.updated}</p>
-                          <p className="text-[9px] text-slate-400 mt-0.5">Diferem das notas no banco local</p>
+                          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Divergentes / Retificáveis</p>
+                          <p className="text-2xl font-extrabold text-indigo-600 dark:text-indigo-400 mt-1">{conciliatedStats.updated}</p>
+                          <p className="text-[9px] text-muted-foreground mt-0.5">Diferem das notas no banco local</p>
                         </div>
-                        <div className="h-9 w-9 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600">
+                        <div className="h-9 w-9 rounded-xl bg-indigo-500/10 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
                           <AlertTriangle className="h-4.5 w-4.5" />
                         </div>
                       </div>
 
                       {/* Correct / Conciliated Card */}
-                      <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-xs flex items-center justify-between bg-white">
+                      <div className="bg-card border border-border rounded-2xl p-4 shadow-xs flex items-center justify-between bg-card transition-colors duration-300">
                         <div>
-                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Já Conciliadas</p>
-                          <p className="text-2xl font-extrabold text-emerald-600 mt-1">{conciliatedStats.alreadyCorrect}</p>
-                          <p className="text-[9px] text-slate-400 mt-0.5">Alinhadas com banco local</p>
+                          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Já Conciliadas</p>
+                          <p className="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400 mt-1">{conciliatedStats.alreadyCorrect}</p>
+                          <p className="text-[9px] text-muted-foreground mt-0.5">Alinhadas com banco local</p>
                         </div>
-                        <div className="h-9 w-9 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600">
+                        <div className="h-9 w-9 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
                           <Check className="h-4.5 w-4.5" />
                         </div>
                       </div>
 
                       {/* Missing Card */}
-                      <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-xs flex items-center justify-between bg-white">
+                      <div className="bg-card border border-border rounded-2xl p-4 shadow-xs flex items-center justify-between bg-card transition-colors duration-300">
                         <div>
-                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Não Encontradas</p>
-                          <p className="text-2xl font-extrabold text-rose-500 mt-1">{conciliatedStats.notFound}</p>
-                          <p className="text-[9px] text-slate-400 mt-0.5">Inexistentes no banco de dados</p>
+                          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Não Encontradas</p>
+                          <p className="text-2xl font-extrabold text-rose-500 dark:text-rose-400 mt-1">{conciliatedStats.notFound}</p>
+                          <p className="text-[9px] text-muted-foreground mt-0.5">Inexistentes no banco de dados</p>
                         </div>
-                        <div className="h-9 w-9 rounded-xl bg-rose-50 flex items-center justify-center text-rose-500">
+                        <div className="h-9 w-9 rounded-xl bg-rose-500/10 flex items-center justify-center text-rose-500 dark:text-rose-400">
                           <XCircle className="h-4.5 w-4.5" />
                         </div>
                       </div>
 
                       {/* Total Processed Card */}
-                      <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-xs flex items-center justify-between bg-white">
+                      <div className="bg-card border border-border rounded-2xl p-4 shadow-xs flex items-center justify-between bg-card transition-colors duration-300">
                         <div>
-                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Processado</p>
-                          <p className="text-2xl font-extrabold text-slate-700 mt-1">{conciliatedStats.total}</p>
-                          <p className="text-[9px] text-slate-400 mt-0.5">Linhas identificadas na planilha</p>
+                          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Total Processado</p>
+                          <p className="text-2xl font-extrabold text-foreground mt-1">{conciliatedStats.total}</p>
+                          <p className="text-[9px] text-muted-foreground mt-0.5">Linhas identificadas na planilha</p>
                         </div>
-                        <div className="h-9 w-9 rounded-xl bg-slate-100 flex items-center justify-center text-slate-500">
+                        <div className="h-9 w-9 rounded-xl bg-muted flex items-center justify-center text-muted-foreground">
                           <FileSpreadsheet className="h-4.5 w-4.5" />
                         </div>
                       </div>
@@ -2270,11 +2353,11 @@ function Dashboard() {
                   </div>
 
                   {/* RESULTS TABLE */}
-                  <div className="bg-white border border-slate-100 rounded-2xl shadow-xs overflow-hidden">
-                    <div className="p-5 border-b border-slate-100 flex items-center justify-between gap-4 flex-wrap">
+                  <div className="bg-card border border-border rounded-2xl shadow-xs overflow-hidden transition-colors duration-300">
+                    <div className="p-5 border-b border-border flex items-center justify-between gap-4 flex-wrap">
                       <div>
-                        <h3 className="text-xs font-bold text-slate-800">Resultados da Validação Sintética</h3>
-                        <p className="text-[10px] text-slate-400 mt-0.5">Auditoria linha a linha entre planilha (.xlsx) e XMLs locais</p>
+                        <h3 className="text-xs font-bold text-foreground">Resultados da Validação Sintética</h3>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">Auditoria linha a linha entre planilha (.xlsx) e XMLs locais</p>
                       </div>
 
                       <div className="flex gap-2">
@@ -2282,7 +2365,7 @@ function Dashboard() {
                           size="sm"
                           onClick={applyUpdates}
                           disabled={conciliatedStats.updated === 0}
-                          className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg text-xs h-8"
+                          className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg text-xs h-8 cursor-pointer"
                         >
                           <Check className="h-3.5 w-3.5 mr-1.5" /> Retificar Status no Banco
                         </Button>
@@ -2291,7 +2374,7 @@ function Dashboard() {
                           size="sm"
                           onClick={exportValidationCsv}
                           disabled={conciliatedItems.length === 0}
-                          className="border-slate-200 hover:bg-slate-50 text-slate-600 text-xs h-8"
+                          className="border-border hover:bg-muted text-muted-foreground hover:text-foreground text-xs h-8 cursor-pointer"
                         >
                           <Download className="h-3.5 w-3.5 mr-1.5" /> Exportar Relatório de Divergências
                         </Button>
@@ -2300,43 +2383,43 @@ function Dashboard() {
 
                     <div className="overflow-x-auto">
                       <Table>
-                        <TableHeader className="bg-slate-50/70">
-                          <TableRow className="border-b border-slate-100">
-                            <TableHead className="font-medium text-slate-400 h-9">Linha</TableHead>
-                            <TableHead className="font-medium text-slate-400 h-9">Chave de Acesso</TableHead>
-                            <TableHead className="font-medium text-slate-400 h-9">Nº NFS-e</TableHead>
-                            <TableHead className="font-medium text-slate-400 h-9">Prestador</TableHead>
-                            <TableHead className="font-medium text-slate-400 h-9">Status (Planilha | Local)</TableHead>
-                            <TableHead className="font-medium text-slate-400 h-9">ISS Retido (Planilha | Local)</TableHead>
-                            <TableHead className="font-medium text-slate-400 h-9">Auditoria</TableHead>
+                        <TableHeader className="bg-muted/30">
+                          <TableRow className="border-b border-border">
+                            <TableHead className="font-medium text-muted-foreground h-9">Linha</TableHead>
+                            <TableHead className="font-medium text-muted-foreground h-9">Chave de Acesso</TableHead>
+                            <TableHead className="font-medium text-muted-foreground h-9">Nº NFS-e</TableHead>
+                            <TableHead className="font-medium text-muted-foreground h-9">Prestador</TableHead>
+                            <TableHead className="font-medium text-muted-foreground h-9">Status (Planilha | Local)</TableHead>
+                            <TableHead className="font-medium text-muted-foreground h-9">ISS Retido (Planilha | Local)</TableHead>
+                            <TableHead className="font-medium text-muted-foreground h-9">Auditoria</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {conciliatedItems.map((item, idx) => (
                             <TableRow
                               key={idx}
-                              className={`border-b border-slate-50 hover:bg-slate-50/30 transition-colors ${
-                                item.statusChanged || item.issRetidoDivergent ? "bg-amber-50/20 hover:bg-amber-50/40" : ""
+                              className={`border-b border-border/50 hover:bg-muted/40 transition-colors ${
+                                item.statusChanged || item.issRetidoDivergent ? "bg-amber-500/5 hover:bg-amber-500/10" : ""
                               }`}
                             >
-                              <TableCell className="font-mono text-[10px] text-slate-400">{item.rowNumber}</TableCell>
-                              <TableCell className="font-mono text-[10px] text-slate-500 max-w-[220px] truncate" title={item.rawKey}>
+                              <TableCell className="font-mono text-[10px] text-muted-foreground">{item.rowNumber}</TableCell>
+                              <TableCell className="font-mono text-[10px] text-muted-foreground max-w-[220px] truncate" title={item.rawKey}>
                                 {item.rawKey}
                               </TableCell>
-                              <TableCell className="font-mono text-[10px] text-slate-600 font-semibold">{item.nNFSe}</TableCell>
-                              <TableCell className="text-xs text-slate-600 max-w-[150px] truncate" title={item.prestador}>
+                              <TableCell className="font-mono text-[10px] text-foreground font-semibold">{item.nNFSe}</TableCell>
+                              <TableCell className="text-xs text-foreground/90 max-w-[150px] truncate" title={item.prestador}>
                                 {item.prestador}
                               </TableCell>
                               <TableCell className="text-xs">
                                 <div className="flex items-center gap-1.5">
-                                  <span className={`px-1.5 py-0.5 rounded text-[9px] font-semibold ${item.statusExcel === "ativa" ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>
+                                  <span className={`px-1.5 py-0.5 rounded text-[9px] font-semibold ${item.statusExcel === "ativa" ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "bg-rose-500/10 text-rose-700 dark:text-rose-400"}`}>
                                     {item.statusExcel === "ativa" ? "Ativa" : "Canc."}
                                   </span>
-                                  <span className="text-slate-300">|</span>
+                                  <span className="text-border">|</span>
                                   {item.statusLocal === "nao_encontrado" ? (
-                                    <span className="text-slate-400 text-[9px] font-medium">Inexistente</span>
+                                    <span className="text-muted-foreground text-[9px] font-medium">Inexistente</span>
                                   ) : (
-                                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-semibold ${item.statusLocal === "ativa" ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>
+                                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-semibold ${item.statusLocal === "ativa" ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "bg-rose-500/10 text-rose-700 dark:text-rose-400"}`}>
                                       {item.statusLocal === "ativa" ? "Ativa" : "Canc."}
                                     </span>
                                   )}
@@ -2345,15 +2428,15 @@ function Dashboard() {
                               <TableCell className="text-xs">
                                 <div className="flex items-center gap-1.5">
                                   {item.issRetidoExcel ? (
-                                    <span className={`px-1.5 py-0.5 rounded border text-[9px] font-medium ${item.issRetidoExcel === "Sim" ? "bg-amber-50 text-amber-700 border-amber-100" : "bg-slate-50 text-slate-500 border-slate-100"}`}>
+                                    <span className={`px-1.5 py-0.5 rounded border text-[9px] font-medium ${item.issRetidoExcel === "Sim" ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/25" : "bg-muted text-muted-foreground border-border"}`}>
                                       {item.issRetidoExcel}
                                     </span>
                                   ) : (
-                                    <span className="text-slate-300">—</span>
+                                    <span className="text-border">—</span>
                                   )}
-                                  <span className="text-slate-300">|</span>
+                                  <span className="text-border">|</span>
                                   {item.statusLocal === "nao_encontrado" ? (
-                                    <span className="text-slate-400 text-[9px] font-medium">Inexistente</span>
+                                    <span className="text-muted-foreground text-[9px] font-medium">Inexistente</span>
                                   ) : item.issRetidoLocal ? (
                                     <span className={`px-1.5 py-0.5 rounded border text-[9px] font-medium ${item.issRetidoLocal === "Sim" ? "bg-amber-50 text-amber-700 border-amber-100" : "bg-slate-50 text-slate-500 border-slate-100"}`}>
                                       {item.issRetidoLocal}
@@ -2394,7 +2477,7 @@ function Dashboard() {
             </TabsContent>
           </Tabs>
 
-          <footer className="text-center text-[10px] text-slate-400 pt-8 mt-12 border-t border-slate-100">
+          <footer className="text-center text-[10px] text-muted-foreground pt-8 mt-12 border-t border-border/80">
             🔒 Processamento 100% Client-Side local — Seus XMLs NFS-e e planilhas financeiras nunca saem do seu navegador.
           </footer>
         </main>
@@ -2402,19 +2485,19 @@ function Dashboard() {
 
       {/* RIGHT PANEL: ALERTS & ACTIVITIES (ByeWind style: clean drawer sliding from right) */}
       <aside
-        className={`fixed inset-y-0 right-0 z-40 bg-white border-l border-slate-100 w-80 flex flex-col justify-between transition-transform duration-300 ease-in-out transform shadow-xl md:shadow-none flex-shrink-0 ${
+        className={`fixed inset-y-0 right-0 z-40 bg-card border-l border-border w-80 flex flex-col justify-between transition-transform duration-300 ease-in-out transform shadow-xl md:shadow-none flex-shrink-0 ${
           rightPanelOpen ? "translate-x-0 animate-in slide-in-from-right duration-300" : "translate-x-full"
         }`}
       >
         <div className="flex flex-col flex-1 overflow-y-auto px-5 py-6 gap-6">
-          <div className="flex items-center justify-between border-b border-slate-50 pb-3">
+          <div className="flex items-center justify-between border-b border-border/50 pb-3">
             <div>
-              <h3 className="text-xs font-bold text-slate-800">Alertas & Atividades</h3>
-              <p className="text-[10px] text-slate-400 mt-0.5">Linha do tempo de auditorias e importações</p>
+              <h3 className="text-xs font-bold text-foreground">Alertas & Atividades</h3>
+              <p className="text-[10px] text-muted-foreground mt-0.5">Linha do tempo de auditorias e importações</p>
             </div>
             <button
               onClick={() => setRightPanelOpen(false)}
-              className="h-6 w-6 rounded-lg hover:bg-slate-50 flex items-center justify-center text-slate-400 hover:text-slate-700 transition-colors"
+              className="h-6 w-6 rounded-lg hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
             >
               <ChevronRight className="h-4 w-4" />
             </button>
@@ -2422,9 +2505,9 @@ function Dashboard() {
 
           {/* Activity Timeline */}
           <div className="flex flex-col gap-4">
-            <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Histórico Recente</h4>
+            <h4 className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Histórico Recente</h4>
             
-            <div className="relative pl-4 border-l border-slate-100 flex flex-col gap-5">
+            <div className="relative pl-4 border-l border-border flex flex-col gap-5">
               {activities.map((act) => {
                 const colors = {
                   upload: "bg-blue-500",
@@ -2435,12 +2518,12 @@ function Dashboard() {
                 return (
                   <div key={act.id} className="relative group">
                     {/* Timeline node */}
-                    <span className={`absolute -left-[20px] top-1.5 h-2 w-2 rounded-full ring-4 ring-white ${colors[act.type] || "bg-slate-400"}`} />
+                    <span className={`absolute -left-[20px] top-1.5 h-2 w-2 rounded-full ring-4 ring-card ${colors[act.type] || "bg-slate-400"}`} />
                     
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-xs font-bold text-slate-800 leading-tight">{act.title}</span>
-                      <p className="text-[10px] text-slate-500 leading-relaxed">{act.description}</p>
-                      <span className="text-[9px] text-slate-400 font-mono mt-1">
+                      <span className="text-xs font-bold text-foreground leading-tight">{act.title}</span>
+                      <p className="text-[10px] text-muted-foreground leading-relaxed">{act.description}</p>
+                      <span className="text-[9px] text-muted-foreground/85 font-mono mt-1">
                         {act.time.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
                       </span>
                     </div>
@@ -2451,8 +2534,8 @@ function Dashboard() {
           </div>
 
           {/* Quick Team Contacts (ByeWind style: Contacts section at the bottom) */}
-          <div className="flex flex-col gap-3 mt-6 pt-6 border-t border-slate-50">
-            <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Equipe Financeira</h4>
+          <div className="flex flex-col gap-3 mt-6 pt-6 border-t border-border">
+            <h4 className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Equipe Financeira</h4>
             
             <div className="flex flex-col gap-3">
               <ContactItem name="Natali Craig" role="Contadora Líder Samel" avatarText="NC" />
@@ -2463,7 +2546,7 @@ function Dashboard() {
           </div>
         </div>
 
-        <div className="p-4 border-t border-slate-100 text-center text-[10px] text-slate-400 font-medium bg-slate-50/50">
+        <div className="p-4 border-t border-border text-center text-[10px] text-muted-foreground font-medium bg-muted/20">
           Auditoria de Fechamento Executivo
         </div>
       </aside>
@@ -2474,13 +2557,13 @@ function Dashboard() {
 // Sub-components helper for Contacts
 function ContactItem({ name, role, avatarText }: { name: string; role: string; avatarText: string }) {
   return (
-    <div className="flex items-center gap-2.5 p-1 hover:bg-slate-50 rounded-lg transition-colors cursor-pointer">
-      <div className="h-7 w-7 rounded-full bg-slate-100 text-[10px] font-bold text-slate-600 flex items-center justify-center flex-shrink-0">
+    <div className="flex items-center gap-2.5 p-1 hover:bg-muted rounded-lg transition-colors cursor-pointer">
+      <div className="h-7 w-7 rounded-full bg-muted text-[10px] font-bold text-foreground flex items-center justify-center flex-shrink-0">
         {avatarText}
       </div>
       <div className="overflow-hidden">
-        <p className="text-[11px] font-bold text-slate-700 leading-tight truncate">{name}</p>
-        <p className="text-[9px] text-slate-400 truncate mt-0.5">{role}</p>
+        <p className="text-[11px] font-bold text-foreground leading-tight truncate">{name}</p>
+        <p className="text-[9px] text-muted-foreground truncate mt-0.5">{role}</p>
       </div>
     </div>
   );
@@ -2502,12 +2585,20 @@ function KpiCardNew({
   subtext: string;
   tone: "blue" | "purple" | "green" | "rose" | "amber";
 }) {
-  const bgColors = {
-    blue: "bg-blue-50/70 border-blue-100/70 text-blue-800",
-    purple: "bg-purple-50/70 border-purple-100/70 text-purple-800",
-    green: "bg-emerald-50/70 border-emerald-100/70 text-emerald-800",
-    rose: "bg-rose-50/70 border-rose-100/70 text-rose-800",
-    amber: "bg-amber-50/70 border-amber-100/70 text-amber-800",
+  const borderColors = {
+    blue: "border-blue-100 dark:border-blue-900/50 hover:border-blue-300 dark:hover:border-blue-800/60",
+    purple: "border-purple-100 dark:border-purple-900/50 hover:border-purple-300 dark:hover:border-purple-800/60",
+    green: "border-emerald-100 dark:border-emerald-900/50 hover:border-emerald-300 dark:hover:border-emerald-800/60",
+    rose: "border-rose-100 dark:border-rose-900/50 hover:border-rose-300 dark:hover:border-rose-800/60",
+    amber: "border-amber-100 dark:border-amber-900/50 hover:border-amber-300 dark:hover:border-amber-800/60",
+  };
+
+  const glowEffects = {
+    blue: "hover:shadow-[0_8px_30px_rgba(59,130,246,0.06)] dark:hover:shadow-[0_8px_30px_rgba(59,130,246,0.03)]",
+    purple: "hover:shadow-[0_8px_30px_rgba(139,92,246,0.06)] dark:hover:shadow-[0_8px_30px_rgba(139,92,246,0.03)]",
+    green: "hover:shadow-[0_8px_30px_rgba(16,185,129,0.06)] dark:hover:shadow-[0_8px_30px_rgba(16,185,129,0.03)]",
+    rose: "hover:shadow-[0_8px_30px_rgba(239,68,68,0.06)] dark:hover:shadow-[0_8px_30px_rgba(239,68,68,0.03)]",
+    amber: "hover:shadow-[0_8px_30px_rgba(245,158,11,0.06)] dark:hover:shadow-[0_8px_30px_rgba(245,158,11,0.03)]",
   };
 
   const isLong = value.length > 12;
@@ -2519,21 +2610,23 @@ function KpiCardNew({
       : "text-lg sm:text-2xl font-extrabold tracking-tight";
 
   return (
-    <div className={`p-4 sm:p-5 xl:p-4 2xl:p-5 rounded-2xl border ${bgColors[tone]} flex flex-col justify-between shadow-xs hover:shadow-sm transition-all duration-200 bg-white`}>
+    <div className={`p-4 sm:p-5 xl:p-4 2xl:p-5 rounded-2xl border bg-card text-card-foreground flex flex-col justify-between shadow-xs ${borderColors[tone]} ${glowEffects[tone]} transition-all duration-300 hover:-translate-y-0.5`}>
       <div className="space-y-1">
-        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{label}</p>
-        <p className={`${valueFontSize} text-slate-900`}>{value}</p>
+        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">{label}</p>
+        <p className={`${valueFontSize} text-foreground`}>{value}</p>
       </div>
 
-      <div className="flex items-center gap-1.5 mt-4 pt-2 border-t border-slate-100/30 flex-wrap">
+      <div className="flex items-center gap-1.5 mt-4 pt-2 border-t border-border/40 flex-wrap">
         <span
           className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[9px] font-bold ${
-            isPositive ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"
+            isPositive 
+              ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" 
+              : "bg-rose-500/10 text-rose-700 dark:text-rose-400"
           }`}
         >
           {trendText} {isPositive ? "↗" : "↘"}
         </span>
-        <span className="text-[9px] text-slate-400 font-medium truncate max-w-[110px]" title={subtext}>{subtext}</span>
+        <span className="text-[9px] text-muted-foreground font-medium truncate max-w-[110px]" title={subtext}>{subtext}</span>
       </div>
     </div>
   );
@@ -2541,7 +2634,7 @@ function KpiCardNew({
 
 function EmptyState() {
   return (
-    <div className="h-full flex items-center justify-center text-sm text-slate-400">
+    <div className="h-full flex items-center justify-center text-sm text-muted-foreground">
       Sem dados para os filtros atuais.
     </div>
   );
