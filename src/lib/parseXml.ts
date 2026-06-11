@@ -78,6 +78,47 @@ function getIssRetido(root: unknown): "Sim" | "Não" {
   return "Não";
 }
 
+function getMunicipalCode(inf: unknown): string {
+  return String(
+    // Padrão Nacional
+    pick(inf, ["DPS", "infDPS", "serv", "cServ", "cTribMun"]) ??
+    pick(inf, ["serv", "cServ", "cTribMun"]) ??
+    
+    // ABRASF / Outros
+    pick(inf, ["DPS", "infDPS", "serv", "CodigoTributacaoMunicipio"]) ??
+    pick(inf, ["servico", "CodigoTributacaoMunicipio"]) ??
+    pick(inf, ["Servico", "CodigoTributacaoMunicipio"]) ??
+    pick(inf, ["CodigoTributacaoMunicipio"]) ??
+
+    pick(inf, ["DPS", "infDPS", "serv", "CodigoServicoMunicipio"]) ??
+    pick(inf, ["servico", "CodigoServicoMunicipio"]) ??
+    pick(inf, ["Servico", "CodigoServicoMunicipio"]) ??
+    pick(inf, ["CodigoServicoMunicipio"]) ??
+
+    // Fallbacks
+    pick(inf, ["DPS", "infDPS", "serv", "cServ"]) ??
+    pick(inf, ["serv", "cServ"]) ??
+    ""
+  ).trim();
+}
+
+function getNbsCode(inf: unknown): string {
+  return String(
+    // Padrão Nacional / Webservice atualizado
+    pick(inf, ["DPS", "infDPS", "serv", "cNBS"]) ??
+    pick(inf, ["DPS", "infDPS", "serv", "cServ", "cNBS"]) ??
+    pick(inf, ["serv", "cNBS"]) ??
+    pick(inf, ["serv", "cServ", "cNBS"]) ??
+
+    // ABRASF v2.04
+    pick(inf, ["DPS", "infDPS", "serv", "CodigoNbs"]) ??
+    pick(inf, ["servico", "CodigoNbs"]) ??
+    pick(inf, ["Servico", "CodigoNbs"]) ??
+    pick(inf, ["CodigoNbs"]) ??
+    ""
+  ).trim();
+}
+
 export function parseNfseXml(xml: string): NotaFiscal | null {
   try {
     const json = parser.parse(xml);
@@ -196,12 +237,15 @@ export function parseNfseXml(xml: string): NotaFiscal | null {
       ["vINSS"]
     ]);
 
-    const codTribNacional = String(
-      pick(inf, ["DPS", "infDPS", "serv", "cServ", "cTribNac"]) ??
-        pick(inf, ["DPS", "infDPS", "serv", "cTribNac"]) ??
-        pick(inf, ["DPS", "infDPS", "serv", "cServ"]) ??
+    const nbs = getNbsCode(inf);
+    const cTribNac = String(
+      pick(inf, ["DPS", "infDPS", "serv", "cTribNac"]) ??
+        pick(inf, ["DPS", "infDPS", "serv", "cServ", "cTribNac"]) ??
+        pick(inf, ["serv", "cTribNac"]) ??
         "",
     ).trim();
+    const municipal = getMunicipalCode(inf);
+    const codTribNacional = nbs || cTribNac || municipal;
 
     let dCompet = String(
       pick(inf, ["DPS", "infDPS", "dCompet"]) ??
@@ -319,12 +363,15 @@ export function parseNfseXmlTomada(
       .replace(/\D/g, "")
       .trim();
 
-    const codTribNacional = String(
-      pick(inf, ["DPS", "infDPS", "serv", "cServ", "cTribNac"]) ??
-        pick(inf, ["DPS", "infDPS", "serv", "cTribNac"]) ??
-        pick(inf, ["DPS", "infDPS", "serv", "cServ"]) ??
+    const nbs = getNbsCode(inf);
+    const cTribNac = String(
+      pick(inf, ["DPS", "infDPS", "serv", "cTribNac"]) ??
+        pick(inf, ["DPS", "infDPS", "serv", "cServ", "cTribNac"]) ??
+        pick(inf, ["serv", "cTribNac"]) ??
         "",
     ).trim();
+    const municipal = getMunicipalCode(inf);
+    const codTribNacional = nbs || cTribNac || municipal;
 
     // ISS — responsabilidade do tomador de reter quando aplicável
     const issRetidoFlag = getIssRetido(inf);
