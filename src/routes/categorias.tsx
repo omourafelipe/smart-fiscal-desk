@@ -80,13 +80,13 @@ function CategoriasRouteComponent() {
       if (!codigosMap.has(code)) {
         const officialDesc = getServicoDescricao(code);
         let catAuto = categorizarServico(desc, code, todasCategorias, categoryOverrides);
-        if (catAuto === "Serviços Diversos") {
+        if (catAuto === "") {
           const catOfficial = categorizarServico(officialDesc, code, todasCategorias, categoryOverrides);
-          if (catOfficial !== "Serviços Diversos") {
+          if (catOfficial !== "") {
             catAuto = catOfficial;
           } else {
             const closest = obterCategoriaMaisProxima(officialDesc, todasCategorias);
-            if (closest && closest !== "Serviços Diversos") {
+            if (closest && closest !== "") {
               catAuto = closest;
             }
           }
@@ -177,7 +177,7 @@ function CategoriasRouteComponent() {
       let matched = obterCategoriaPorCodigo(code);
       if (!matched) {
         const closest = obterCategoriaMaisProxima(desc, todasCategorias);
-        if (closest && closest !== "Serviços Diversos") {
+        if (closest && closest !== "") {
           matched = closest;
         }
       }
@@ -479,7 +479,9 @@ function CategoriasRouteComponent() {
                         <span className="truncate block text-foreground/85 font-medium">{linha.descricao}</span>
                       </td>
                       <td className="px-4 py-3">
-                        <span className="text-muted-foreground font-medium">{linha.catAuto}</span>
+                        <span className={`font-medium ${linha.catAuto ? "text-muted-foreground" : "text-muted-foreground/60 italic"}`}>
+                          {linha.catAuto || "Sem categoria"}
+                        </span>
                       </td>
                       <td className="px-4 py-3">
                         <select
@@ -496,7 +498,7 @@ function CategoriasRouteComponent() {
                               {cat}
                             </option>
                           ))}
-                          <option value="Serviços Diversos">Serviços Diversos</option>
+                          <option value="">Sem categoria</option>
                         </select>
                       </td>
                       <td className="px-4 py-3 text-right font-mono text-muted-foreground font-semibold">

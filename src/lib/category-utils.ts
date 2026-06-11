@@ -179,7 +179,7 @@ export function obterCategoriaPorCodigo(code: string): string | null {
 
 export function obterCategoriaPorDescricao(desc: string): string {
   const s = normalizeString(desc || "").toLowerCase();
-  if (!s) return "Serviços Diversos";
+  if (!s) return "";
 
   const rules: Array<[string, string[]]> = [
     ["Informática e TI", ["software", "sistema", "informatica", "informático", "licenca", "licença", "hospedagem", "cloud", "saas", "paas", "iaas", "suporte tecnico", "internet", "telecom", "fibra optica", "data center", "servidor", "rede", "ti ", "tecnologia da informacao", "processamento de dados", "banco de dados", "programacao", "programação", "desenvolvimento de aplicativo", "desenvolvimento de sistema"]],
@@ -222,7 +222,7 @@ export function obterCategoriaPorDescricao(desc: string): string {
     if (keys.some((k) => s.includes(k))) return cat;
   }
 
-  return "Serviços Diversos";
+  return "";
 }
 
 export function obterCategoriaMaisProxima(desc: string, categoriasDisponiveis: string[]): string {
@@ -232,9 +232,9 @@ export function obterCategoriaMaisProxima(desc: string, categoriasDisponiveis: s
     .map(w => w.trim())
     .filter(w => w.length > 2 && !stopWords.includes(w));
   
-  if (descWords.length === 0) return "Serviços Diversos";
+  if (descWords.length === 0) return "";
 
-  let bestCat = "Serviços Diversos";
+  let bestCat = "";
   let maxScore = 0;
 
   for (const cat of categoriasDisponiveis) {
@@ -262,7 +262,7 @@ export function obterCategoriaMaisProxima(desc: string, categoriasDisponiveis: s
     }
   }
 
-  return maxScore > 0 ? bestCat : "Serviços Diversos";
+  return maxScore > 0 ? bestCat : "";
 }
 
 export function categorizarServico(desc: string, code?: string, todasCategorias?: string[], overrides?: Record<string, string>): string {
@@ -280,11 +280,11 @@ export function categorizarServico(desc: string, code?: string, todasCategorias?
   // 3. Roda correspondência de regras de palavras-chave sobre a descrição oficial da nbs_mapping
   if (officialDesc && officialDesc !== "Sem descrição" && !officialDesc.startsWith("Outros (")) {
     const cat = obterCategoriaPorDescricao(officialDesc);
-    if (cat && cat !== "Serviços Diversos") return cat;
+    if (cat && cat !== "") return cat;
 
     if (todasCategorias) {
       const closest = obterCategoriaMaisProxima(officialDesc, todasCategorias);
-      if (closest && closest !== "Serviços Diversos") return closest;
+      if (closest && closest !== "") return closest;
     }
   }
 
@@ -318,13 +318,13 @@ export function categorizarServico(desc: string, code?: string, todasCategorias?
   // 5. Fallback final na descrição livre preenchida no XML pelo prestador
   if (desc) {
     const cat = obterCategoriaPorDescricao(desc);
-    if (cat && cat !== "Serviços Diversos") return cat;
+    if (cat && cat !== "") return cat;
 
     if (todasCategorias) {
       const closest = obterCategoriaMaisProxima(desc, todasCategorias);
-      if (closest && closest !== "Serviços Diversos") return closest;
+      if (closest && closest !== "") return closest;
     }
   }
 
-  return "Serviços Diversos";
+  return "";
 }

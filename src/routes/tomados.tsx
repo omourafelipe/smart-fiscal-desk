@@ -29,6 +29,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { categorizarServico, lc116CategoriasMap } from "@/lib/category-utils";
+import { autoCadastrarCategoriasParaNovosCodigos } from "@/lib/category-suggester";
 
 const searchSchema = z.object({
   mes: z.string().optional().catch("__all__"),
@@ -173,6 +174,8 @@ function TomadosRouteComponent() {
 
       if (batch.length > 0) {
         await db.notasTomadas.bulkPut(batch);
+        const uniqueImportedCodes = Array.from(new Set(batch.map(n => n.codTribNacional).filter(Boolean)));
+        await autoCadastrarCategoriasParaNovosCodigos(uniqueImportedCodes);
         addActivity("upload", `${batch.length} Tomadas Importadas`, `Importação de serviços tomados finalizada.`);
         toast.success(`${batch.length} nota(s) de serviço tomado importada(s).`);
       } else {
@@ -211,11 +214,10 @@ function TomadosRouteComponent() {
     });
   }, [todasNotasTomadas, mesFiltroTomadas, anoFiltroTomadas, empresaFiltroTomadas, searchTomadas]);
 
-  // Gráfico B — distribuição por categoria de serviço
   const { servicoData, top9Keys } = useMemo(() => {
     const servicoMap = new Map<string, number>();
     notasTomValidasSemCategoria.forEach((n) => {
-      const key = categorizarComOverride(n.servico, n.codTribNacional);
+      const key = categorizarComOverride(n.servico, n.codTribNacional) || "Sem categoria";
       servicoMap.set(key, (servicoMap.get(key) ?? 0) + n.valor);
     });
 
@@ -231,11 +233,10 @@ function TomadosRouteComponent() {
     return { servicoData, top9Keys };
   }, [notasTomValidasSemCategoria, categorizarComOverride]);
 
-  // Filtra notas por categoria ativa
   const notasTomValidas = useMemo(() => {
     return notasTomValidasSemCategoria.filter((n) => {
       if (categoriaFiltroTomadas === "__all__") return true;
-      const cat = categorizarComOverride(n.servico, n.codTribNacional);
+      const cat = categorizarComOverride(n.servico, n.codTribNacional) || "Sem categoria";
       if (categoriaFiltroTomadas === "Outras") {
         return !top9Keys.includes(cat);
       }
@@ -690,37 +691,42 @@ function TomadosRouteComponent() {
                       : "Nenhum resultado para os filtros selecionados."}
                   </TableCell>
                 </TableRow>
-              ) : paginatedTomadas.map((n, i) => (
-                <TableRow key={n.id} className={`border-b border-border/40 text-xs hover:bg-muted/30 transition-colors ${i % 2 === 0 ? "" : "bg-muted/10"}`}>
-                  <TableCell>
-                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold ${n.status === "válida" ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "bg-rose-500/10 text-rose-700 dark:text-rose-400"}`}>
-                      {n.status === "válida" ? <Building2 className="h-2.5 w-2.5" /> : <XCircle className="h-2.5 w-2.5" />}
-                      {n.status === "válida" ? "Válida" : "Cancelada"}
-                    </span>
-                  </TableCell>
-                  <TableCell className="font-mono text-[10px]">{n.nNFSe}</TableCell>
-                  <TableCell className="text-muted-foreground">{n.dCompet ? n.dCompet.slice(0,7) : "—"}</TableCell>
-                  <TableCell className="font-mono text-[10px] text-muted-foreground">{n.cnpjPrestador}</TableCell>
-                  <TableCell className="max-w-[140px] truncate font-medium" title={n.nomePrestador}>{n.nomePrestador}</TableCell>
-                  <TableCell className="max-w-[180px] truncate" title={n.servico}>
-                    <div className="font-medium text-foreground truncate">{n.servico || "—"}</div>
-                    <div className="text-[9px] text-indigo-600 dark:text-indigo-400 font-bold mt-0.5">{categorizarComOverride(n.servico, n.codTribNacional)}</div>
-                  </TableCell>
-                  <TableCell className="text-right font-bold">{fmtBRL(n.valor)}</TableCell>
-                  <TableCell className="text-right text-muted-foreground">{fmtBRL(n.vlrLiquido)}</TableCell>
-                  <TableCell className="text-right text-muted-foreground">{n.issRetido === "Sim" && n.vlrIssRet > 0 ? fmtBRL(n.vlrIssRet) : "—"}</TableCell>
-                  <TableCell className="text-center">
-                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${n.issRetido === "Sim" ? "bg-indigo-500/10 text-indigo-700 dark:text-indigo-400" : "bg-muted text-muted-foreground"}`}>
-                      {n.issRetido}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-right text-muted-foreground">{n.vlrIrrf > 0 ? fmtBRL(n.vlrIrrf) : "—"}</TableCell>
-                  <TableCell className="text-right text-muted-foreground">{n.vlrCsll > 0 ? fmtBRL(n.vlrCsll) : "—"}</TableCell>
-                  <TableCell className="text-right text-muted-foreground">{n.vlrPis > 0 ? fmtBRL(n.vlrPis) : "—"}</TableCell>
-                  <TableCell className="text-right text-muted-foreground">{n.vlrCofins > 0 ? fmtBRL(n.vlrCofins) : "—"}</TableCell>
-                  <TableCell className="text-right text-muted-foreground">{n.vlrInss > 0 ? fmtBRL(n.vlrInss) : "—"}</TableCell>
-                </TableRow>
-              ))}
+              ) : paginatedTomadas.map((n, i) => {
+                const cat = categorizarComOverride(n.servico, n.codTribNacional);
+                return (
+                  <TableRow key={n.id} className={`border-b border-border/40 text-xs hover:bg-muted/30 transition-colors ${i % 2 === 0 ? "" : "bg-muted/10"}`}>
+                    <TableCell>
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold ${n.status === "válida" ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "bg-rose-500/10 text-rose-700 dark:text-rose-400"}`}>
+                        {n.status === "válida" ? <Building2 className="h-2.5 w-2.5" /> : <XCircle className="h-2.5 w-2.5" />}
+                        {n.status === "válida" ? "Válida" : "Cancelada"}
+                      </span>
+                    </TableCell>
+                    <TableCell className="font-mono text-[10px]">{n.nNFSe}</TableCell>
+                    <TableCell className="text-muted-foreground">{n.dCompet ? n.dCompet.slice(0,7) : "—"}</TableCell>
+                    <TableCell className="font-mono text-[10px] text-muted-foreground">{n.cnpjPrestador}</TableCell>
+                    <TableCell className="max-w-[140px] truncate font-medium" title={n.nomePrestador}>{n.nomePrestador}</TableCell>
+                    <TableCell className="max-w-[180px] truncate" title={n.servico}>
+                      <div className="font-medium text-foreground truncate">{n.servico || "—"}</div>
+                      <div className={`text-[9px] font-bold mt-0.5 ${cat ? "text-indigo-600 dark:text-indigo-400" : "text-muted-foreground/60"}`}>
+                        {cat || "Sem categoria"}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right font-bold">{fmtBRL(n.valor)}</TableCell>
+                    <TableCell className="text-right text-muted-foreground">{fmtBRL(n.vlrLiquido)}</TableCell>
+                    <TableCell className="text-right text-muted-foreground">{n.issRetido === "Sim" && n.vlrIssRet > 0 ? fmtBRL(n.vlrIssRet) : "—"}</TableCell>
+                    <TableCell className="text-center">
+                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${n.issRetido === "Sim" ? "bg-indigo-500/10 text-indigo-700 dark:text-indigo-400" : "bg-muted text-muted-foreground"}`}>
+                        {n.issRetido}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right text-muted-foreground">{n.vlrIrrf > 0 ? fmtBRL(n.vlrIrrf) : "—"}</TableCell>
+                    <TableCell className="text-right text-muted-foreground">{n.vlrCsll > 0 ? fmtBRL(n.vlrCsll) : "—"}</TableCell>
+                    <TableCell className="text-right text-muted-foreground">{n.vlrPis > 0 ? fmtBRL(n.vlrPis) : "—"}</TableCell>
+                    <TableCell className="text-right text-muted-foreground">{n.vlrCofins > 0 ? fmtBRL(n.vlrCofins) : "—"}</TableCell>
+                    <TableCell className="text-right text-muted-foreground">{n.vlrInss > 0 ? fmtBRL(n.vlrInss) : "—"}</TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </div>

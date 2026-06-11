@@ -32,6 +32,7 @@ import {
 import { db, type NotaFiscal } from "@/lib/db";
 import { parseNfseXml } from "@/lib/parseXml";
 import { getServicoDescricao } from "@/lib/category-utils";
+import { autoCadastrarCategoriasParaNovosCodigos } from "@/lib/category-suggester";
 import { useLayoutShell } from "@/components/layout/LayoutShell";
 import { useFiscalData } from "@/hooks/useFiscalData";
 import { KpiCardNew } from "@/components/shared/KpiCardNew";
@@ -325,6 +326,8 @@ function Dashboard() {
 
       if (allNotas.length) {
         await db.notas.bulkPut(allNotas);
+        const uniqueImportedCodes = Array.from(new Set(allNotas.map(n => n.codTribNacional).filter(Boolean)));
+        await autoCadastrarCategoriasParaNovosCodigos(uniqueImportedCodes);
         addActivity("upload", `${allNotas.length} Notas Importadas`, "Importação de XMLs finalizada com sucesso.");
       }
       setProgress(null);

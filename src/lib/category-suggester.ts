@@ -1,6 +1,9 @@
+import { db } from "./db";
 import {
   lc116CategoriasMap,
   getServicoDescricao,
+  obterCategoriaPorCodigo,
+  obterCategoriaPorDescricao,
 } from "./category-utils";
 
 export interface SugestaoCategoria {
@@ -85,7 +88,7 @@ export function extrairNomeCategoriaSugerido(desc: string): string {
 }
 
 /**
- * Analisa os códigos que caíram em "Serviços Diversos" e agrupa sugestões coerentes
+ * Analisa os códigos que caíram em categorias em branco (Sem categoria) e agrupa sugestões coerentes
  */
 export function gerarSugestoesCategorias(
   uniqueCodes: Array<{ codigo: string; descricao: string; catAuto: string; count: number }>,
@@ -95,8 +98,8 @@ export function gerarSugestoesCategorias(
   const sugestoesMap = new Map<string, { codigos: string[]; totalNotas: number; descricaoExemplo: string }>();
 
   for (const item of uniqueCodes) {
-    // Apenas códigos que caíram em "Serviços Diversos" e não possuem override manual
-    if (item.catAuto !== "Serviços Diversos" || categoryOverrides[item.codigo]) {
+    // Apenas códigos sem categoria definida e sem override manual
+    if (item.catAuto !== "" || categoryOverrides[item.codigo]) {
       continue;
     }
 
@@ -105,7 +108,7 @@ export function gerarSugestoesCategorias(
     const officialDesc = getServicoDescricao(item.codigo);
     const nomeSugerido = extrairNomeCategoriaSugerido(officialDesc);
 
-    if (!nomeSugerido || nomeSugerido.toLowerCase() === "serviços diversos") {
+    if (!nomeSugerido || nomeSugerido.toLowerCase() === "serviços diversos" || nomeSugerido.trim() === "") {
       continue;
     }
 
@@ -147,4 +150,72 @@ export function gerarSugestoesCategorias(
     })
     .sort((a, b) => b.totalNotas - a.totalNotas)
     .slice(0, 5); // Mostra no máximo as top 5 sugestões mais relevantes
+}
+
+/**
+ * Cadastra automaticamente categorias sugeridas e cria os overrides mapeados para novos códigos de serviço
+ */
+export async function autoCadastrarCategoriasParaNovosCodigos(codigos: string[]): Promise<void> {
+  try {
+    const customCats = await db.customCategories.toArray();
+    const existingCustomNames = new Set(customCats.map(c => c.nome.toLowerCase()));
+
+    const overrides = await db.categoryOverrides.toArray();
+    const existingOverrides = new Map(overrides.map(o => [o.codigo, o.categoria]));
+
+    const categoriasOficiais = Object.values(lc116CategoriasMap);
+    const todasCategorias = [...categoriasOficiais, ...customCats.map(c => c.nome)];
+
+    const novosCustomCats: { id: string; nome: string }[] = [];
+    const novosOverrides: { codigo: string; categoria: string }[] = [];
+
+    const processadosNomes = new Set(existingCustomNames);
+
+    for (const code of codigos) {
+      if (!code) continue;
+
+      // Se já possui override de categoria manual/automático, ignora
+      if (existingOverrides.has(code)) continue;
+
+      const officialDesc = getServicoDescricao(code);
+
+      // Se já cai em alguma categoria oficial por código/faixa ou por descrição, ignora
+      const catAuto = obterCategoriaPorCodigo(code);
+      if (catAuto && catAuto !== "") {
+        continue;
+      }
+
+      if (officialDesc && officialDesc !== "Sem descrição" && !officialDesc.startsWith("Outros (")) {
+        const catDesc = obterCategoriaPorDescricao(officialDesc);
+        if (catDesc && catDesc !== "") {
+          continue;
+        }
+      }
+
+      // Tenta extrair a categoria sugerida a partir da descrição oficial da NBS
+      const nomeSugerido = extrairNomeCategoriaSugerido(officialDesc);
+      if (nomeSugerido && nomeSugerido.toLowerCase() !== "serviços diversos" && nomeSugerido.trim() !== "") {
+        const key = nomeSugerido.toLowerCase();
+
+        // Adiciona à lista de novas categorias customizadas se não existir
+        if (!processadosNomes.has(key) && !todasCategorias.some(c => c.toLowerCase() === key)) {
+          novosCustomCats.push({ id: nomeSugerido, nome: nomeSugerido });
+          processadosNomes.add(key);
+        }
+
+        // Mapeia o código para essa nova categoria
+        novosOverrides.push({ codigo: code, categoria: nomeSugerido });
+      }
+    }
+
+    // Grava de forma massiva em IndexedDB
+    if (novosCustomCats.length > 0) {
+      await db.customCategories.bulkPut(novosCustomCats);
+    }
+    if (novosOverrides.length > 0) {
+      await db.categoryOverrides.bulkPut(novosOverrides);
+    }
+  } catch (e) {
+    console.error("Erro ao auto cadastrar categorias para novos códigos:", e);
+  }
 }
