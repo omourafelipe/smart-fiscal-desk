@@ -56,6 +56,7 @@ import { ptBR } from "date-fns/locale";
 
 import { db, type NotaFiscal, type NotaFiscalTomada } from "@/lib/db";
 import { parseNfseXml, parseNfseXmlTomada } from "@/lib/parseXml";
+import nbsMapping from "@/lib/nbs_mapping.json";
 import {
   parseExcelFile,
   detectColumns,
@@ -260,73 +261,143 @@ const mesesOpcoes = [
   { value: "12", label: "Dezembro" },
 ];
 
-/**
- * Classifica uma descrição de serviço (xDescServ) em uma categoria geral.
- * Match case-insensitive; primeira regra a casar vence.
- */
-function categorizarServico(desc: string, code?: string): string {
-  let s = (desc || "").toLowerCase();
+// Dicionário com mapeamento dos 40 itens oficiais da LC 116 para seus nomes legíveis
+const lc116CategoriasMap: Record<string, string> = {
+  "01": "01 - Informática e TI",
+  "02": "02 - Pesquisa e Desenvolvimento",
+  "03": "03 - Locação e Cessão de Direito",
+  "04": "04 - Saúde e Assistência Médica",
+  "05": "05 - Medicina Veterinária",
+  "06": "06 - Cuidados Pessoais e Estética",
+  "07": "07 - Engenharia e Construção Civil",
+  "08": "08 - Treinamento e Educação",
+  "09": "09 - Hospedagem e Turismo",
+  "10": "10 - Publicidade e Marketing",
+  "11": "11 - Transporte e Logística",
+  "12": "12 - Lazer e Recreação",
+  "13": "13 - Produção e Fonografia",
+  "14": "14 - Manutenção e Assistência Técnica",
+  "15": "15 - Serviços Financeiros",
+  "16": "16 - Transporte de Natureza Municipal",
+  "17": "17 - Consultoria, Assessoria e RH",
+  "18": "18 - Regulação de Sinistros e Afins",
+  "19": "19 - Serviços de Distribuição e Venda",
+  "20": "20 - Serviços Portuários e Aeroportuários",
+  "21": "21 - Serviços Jurídicos e Cartoriais",
+  "22": "22 - Serviços de Auxílio a Edificações",
+  "23": "23 - Eventos e Produções",
+  "24": "24 - Serviços de Chaveiros e Afins",
+  "25": "25 - Serviços Funerários",
+  "26": "26 - Serviços de Coleta e Tratamento de Resíduos",
+  "27": "27 - Serviços de Artistas e Modelos",
+  "28": "28 - Serviços de Desenho Industrial",
+  "29": "29 - Serviços de Vigilância e Segurança",
+  "30": "30 - Serviços de Transporte de Valores",
+  "31": "31 - Serviços de Instrução e Treinamento",
+  "32": "32 - Serviços de Desenhos e Artes Visuais",
+  "33": "33 - Serviços de Despachantes e Afins",
+  "34": "34 - Serviços de Investigações e Detetives",
+  "35": "35 - Serviços de Reportagem e Assessoria de Imprensa",
+  "36": "36 - Serviços de Meteorologia",
+  "37": "37 - Serviços de Artistas Plásticos",
+  "38": "38 - Serviços de Museologia",
+  "39": "39 - Serviços de Ourivesaria",
+  "40": "40 - Obras de Arte e Restauração",
+};
+
+const nbsLookupMap = new Map<string, string>();
+const lc116LookupMap = new Map<string, string>();
+
+// Popula os mapas com os dados importados de nbsMapping
+nbsMapping.forEach((item: any) => {
+  const cleanNbs = String(item.nbs || "").replace(/\D/g, "");
+  const cleanLc116 = String(item.itemLC116 || "").replace(/\D/g, "");
   
-  // Mapeia códigos de serviço da LC 116/2003 e cTribNac para suas descrições/categorias
-  const cleanCode = (code || desc || "").replace(/\D/g, "");
-  if (/^\d+$/.test(cleanCode) && cleanCode.length > 0) {
-    if (cleanCode.startsWith("01") || cleanCode.startsWith("101") || cleanCode.startsWith("102") || cleanCode.startsWith("103") || cleanCode.startsWith("104") || cleanCode.startsWith("105") || cleanCode.startsWith("106") || cleanCode.startsWith("107") || cleanCode.startsWith("108") || cleanCode.startsWith("109")) {
-      return "Tecnologia / TI";
-    } else if (cleanCode.startsWith("03") || cleanCode.startsWith("301") || cleanCode.startsWith("302") || cleanCode.startsWith("303") || cleanCode.startsWith("304") || cleanCode.startsWith("305")) {
-      return "Locação / Aluguel";
-    } else if (cleanCode.startsWith("04") || cleanCode.startsWith("401") || cleanCode.startsWith("402") || cleanCode.startsWith("403") || cleanCode.startsWith("404") || cleanCode.startsWith("405") || cleanCode.startsWith("406") || cleanCode.startsWith("407") || cleanCode.startsWith("408") || cleanCode.startsWith("409") || cleanCode.startsWith("410") || cleanCode.startsWith("411") || cleanCode.startsWith("412") || cleanCode.startsWith("413") || cleanCode.startsWith("414") || cleanCode.startsWith("415") || cleanCode.startsWith("416") || cleanCode.startsWith("417") || cleanCode.startsWith("418") || cleanCode.startsWith("419") || cleanCode.startsWith("420") || cleanCode.startsWith("421") || cleanCode.startsWith("422") || cleanCode.startsWith("423")) {
-      return "Saúde / Hospitalar";
-    } else if (cleanCode.startsWith("07") || cleanCode.startsWith("701") || cleanCode.startsWith("702") || cleanCode.startsWith("703") || cleanCode.startsWith("704") || cleanCode.startsWith("705") || cleanCode.startsWith("706") || cleanCode.startsWith("707") || cleanCode.startsWith("708") || cleanCode.startsWith("709") || cleanCode.startsWith("710") || cleanCode.startsWith("711") || cleanCode.startsWith("712") || cleanCode.startsWith("713") || cleanCode.startsWith("714") || cleanCode.startsWith("715") || cleanCode.startsWith("716") || cleanCode.startsWith("717") || cleanCode.startsWith("718") || cleanCode.startsWith("719") || cleanCode.startsWith("720") || cleanCode.startsWith("721") || cleanCode.startsWith("722")) {
-      return "Engenharia e Construção";
-    } else if (cleanCode.startsWith("08") || cleanCode.startsWith("801") || cleanCode.startsWith("802")) {
-      return "Treinamento e Educação";
-    } else if (cleanCode.startsWith("10") || cleanCode.startsWith("1001") || cleanCode.startsWith("1002") || cleanCode.startsWith("1003") || cleanCode.startsWith("1004") || cleanCode.startsWith("1005") || cleanCode.startsWith("1006") || cleanCode.startsWith("1007") || cleanCode.startsWith("1008") || cleanCode.startsWith("1009") || cleanCode.startsWith("1010")) {
-      return "Publicidade e Marketing";
-    } else if (cleanCode.startsWith("11") || cleanCode.startsWith("1101") || cleanCode.startsWith("1102") || cleanCode.startsWith("1103") || cleanCode.startsWith("1104") || cleanCode.startsWith("1105") || cleanCode.startsWith("1601") || cleanCode.startsWith("1602")) {
-      return "Transporte e Logística";
-    } else if (cleanCode.startsWith("14") || cleanCode.startsWith("1401") || cleanCode.startsWith("1402") || cleanCode.startsWith("1403") || cleanCode.startsWith("1404") || cleanCode.startsWith("1405") || cleanCode.startsWith("1406") || cleanCode.startsWith("1407") || cleanCode.startsWith("1408") || cleanCode.startsWith("1409") || cleanCode.startsWith("1410") || cleanCode.startsWith("1411") || cleanCode.startsWith("1412") || cleanCode.startsWith("1413") || cleanCode.startsWith("1414")) {
-      return "Manutenção e Reparos";
-    } else if (cleanCode.startsWith("15") || cleanCode.startsWith("1501") || cleanCode.startsWith("1502") || cleanCode.startsWith("1503") || cleanCode.startsWith("1504") || cleanCode.startsWith("1505") || cleanCode.startsWith("1518")) {
-      return "Serviços Financeiros";
-    } else if (cleanCode.startsWith("17") || cleanCode.startsWith("1701") || cleanCode.startsWith("1702") || cleanCode.startsWith("1703") || cleanCode.startsWith("1704") || cleanCode.startsWith("1705") || cleanCode.startsWith("1706") || cleanCode.startsWith("1709") || cleanCode.startsWith("1710") || cleanCode.startsWith("1711") || cleanCode.startsWith("1712") || cleanCode.startsWith("1713") || cleanCode.startsWith("1714") || cleanCode.startsWith("1715") || cleanCode.startsWith("1716") || cleanCode.startsWith("1717") || cleanCode.startsWith("1718") || cleanCode.startsWith("1719") || cleanCode.startsWith("1720") || cleanCode.startsWith("1721") || cleanCode.startsWith("1722") || cleanCode.startsWith("1723") || cleanCode.startsWith("1724") || cleanCode.startsWith("1725")) {
-      return "Consultoria e Assessoria";
-    } else if (cleanCode.startsWith("23") || cleanCode.startsWith("2301")) {
-      return "Eventos e Produções";
-    } else if (cleanCode.startsWith("21") || cleanCode.startsWith("2101")) {
-      return "Serviços Jurídicos e Cartoriais";
-    } else if (cleanCode.startsWith("26") || cleanCode.startsWith("2601")) {
-      return "Transporte e Logística";
+  if (cleanNbs) {
+    nbsLookupMap.set(cleanNbs, item.itemLC116);
+  }
+  if (cleanLc116) {
+    lc116LookupMap.set(cleanLc116, item.itemLC116);
+  }
+});
+
+function obterCategoriaPorCodigo(code: string): string | null {
+  const clean = String(code).trim().replace(/\D/g, "");
+  if (!clean) return null;
+
+  let matchedLc116 = nbsLookupMap.get(clean);
+  if (!matchedLc116) {
+    matchedLc116 = lc116LookupMap.get(clean);
+  }
+
+  let itemGroup = "";
+  if (matchedLc116) {
+    itemGroup = matchedLc116.split(".")[0].padStart(2, "0");
+  } else {
+    if (clean.length >= 6) {
+      itemGroup = clean.slice(0, 2);
+    } else if (clean.length === 3) {
+      itemGroup = "0" + clean.slice(0, 1);
+    } else if (clean.length === 4) {
+      const firstTwo = clean.slice(0, 2);
+      const val = parseInt(firstTwo, 10);
+      if (val >= 1 && val <= 40) {
+        itemGroup = firstTwo;
+      } else {
+        itemGroup = "0" + clean.slice(0, 1);
+      }
     }
   }
 
-  if (!s.trim()) return "Serviços Diversos";
+  if (itemGroup && lc116CategoriasMap[itemGroup]) {
+    return lc116CategoriasMap[itemGroup];
+  }
+
+  return null;
+}
+
+function obterCategoriaPorDescricao(desc: string): string {
+  const s = (desc || "").toLowerCase().trim();
+  if (!s) return "Serviços Diversos";
+
   const rules: Array<[string, string[]]> = [
-    ["Saúde / Hospitalar", ["hospital", "médic", "medic", "clínic", "clinic", "laboratóri", "laboratori", "exame", "enfermag", "fisioterap", "saúde", "saude"]],
-    ["Locação / Aluguel", ["locaç", "locac", "aluguel", "leasing"]],
-    ["Manutenção e Reparos", ["manutenç", "manutenc", "reparo", "conserto", "assistência técnica", "assistencia tecnica", "reforma", "instalaç", "instalac"]],
-    ["Limpeza e Conservação", ["limpeza", "conservaç", "conservac", "higieniz", "jardinagem", "detetizac", "dedetizac", "desinsetizac"]],
-    ["Segurança e Vigilância", ["seguranç", "seguranc", "vigilânc", "vigilanc", "portaria", "monitoramento"]],
-    ["Transporte e Logística", ["transporte", "frete", "logístic", "logistic", "entrega", "fretamento", "moto boy", "motoboy", "correio", "malote"]],
-    ["Consultoria e Assessoria", ["consultor", "assessor", "auditoria", "conselho", "gestão", "gestao"]],
-    ["Tecnologia / TI", ["software", "sistema", "informátic", "informatic", "licença", "licenca", "hospedagem", "cloud", "suporte técnic", "suporte tecnic", "internet", "link", "telecom", "fibra optica"]],
-    ["Treinamento e Educação", ["treinamento", "curso", "capacitaç", "capacitac", "ensino", "educação", "educacao", "palestra", "escola"]],
-    ["Publicidade e Marketing", ["publicidade", "marketing", "propaganda", "mídia", "midia", "comunicacao", "veiculacao"]],
-    ["Engenharia e Construção", ["engenhar", "obra", "construç", "construc", "projeto", "arquitet", "topograf"]],
-    ["Alimentação", ["alimentaç", "alimentac", "refeiç", "refeic", "restaurante", "lanche", "refeicoes", "buffet", "catering"]],
-    ["Hospedagem e Turismo", ["turismo", "hospedagem", "hotel", "pousada", "viagem", "passagem aerea"]],
-    ["Lazer e Recreação", ["lazer", "entretenimento", "recreação", "recreac"]],
-    ["Serviços Financeiros", ["financeiro", "bancário", "bancario", "crédito", "credito", "cobranca", "cobrança", "seguro", "corretagem"]],
-    ["Eventos e Produções", ["evento", "produção", "produc", "planejamento", "festa", "congresso"]],
-    ["Serviços Administrativos", ["recepção", "recepcao", "apoio", "digitador", "digitação", "digitacao", "atendimento", "telemarketing", "secretaria"]],
-    ["Lavanderia e Higienização", ["lavanderia", "lavagem", "passadoria", "higienização têxtil", "higienizacao textil", "lavar"]],
-    ["Serviços Jurídicos e Cartoriais", ["advog", "advoc", "jurídic", "juridic", "cartório", "cartorio", "tabeliã", "tabelia", "notaria"]],
-    ["Descarte de Resíduos", ["lixo", "resíduo", "residuo", "descarte", "tratamento de agua", "coleta de lixo", "incineracao", "biomedico"]],
+    ["04 - Saúde e Assistência Médica", ["hospital", "médic", "medic", "clínic", "clinic", "laboratóri", "laboratori", "exame", "enfermag", "fisioterap", "saúde", "saude"]],
+    ["03 - Locação e Cessão de Direito", ["locaç", "locac", "aluguel", "leasing"]],
+    ["14 - Manutenção e Assistência Técnica", ["manutenç", "manutenc", "reparo", "conserto", "assistência técnica", "assistencia tecnica", "reforma", "instalaç", "instalac"]],
+    ["11 - Transporte e Logística", ["transporte", "frete", "logístic", "logistic", "entrega", "fretamento", "moto boy", "motoboy", "correio", "malote"]],
+    ["17 - Consultoria, Assessoria e RH", ["consultor", "assessor", "auditoria", "conselho", "gestão", "gestao"]],
+    ["01 - Informática e TI", ["software", "sistema", "informátic", "informatic", "licença", "licenca", "hospedagem", "cloud", "suporte técnic", "suporte tecnic", "internet", "link", "telecom", "fibra optica"]],
+    ["08 - Treinamento e Educação", ["treinamento", "curso", "capacitaç", "capacitac", "ensino", "educação", "educacao", "palestra", "escola"]],
+    ["10 - Publicidade e Marketing", ["publicidade", "marketing", "propaganda", "mídia", "midia", "comunicacao", "veiculacao"]],
+    ["07 - Engenharia e Construção Civil", ["engenhar", "obra", "construç", "construc", "projeto", "arquitet", "topograf", "limpeza", "conservaç", "conservac", "higieniz", "jardinagem"]],
+    ["23 - Eventos e Produções", ["evento", "produção", "produc", "planejamento", "festa", "congresso", "lazer", "entretenimento", "recreação", "recreac"]],
+    ["15 - Serviços Financeiros", ["financeiro", "bancário", "bancario", "crédito", "credito", "cobranca", "cobrança", "seguro", "corretagem"]],
+    ["21 - Serviços Jurídicos e Cartoriais", ["advog", "advoc", "jurídic", "juridic", "cartório", "cartorio", "tabeliã", "tabelia", "notaria"]],
+    ["26 - Serviços de Coleta e Tratamento de Resíduos", ["lixo", "resíduo", "residuo", "descarte", "tratamento de agua", "coleta de lixo", "incineracao", "biomedico"]],
   ];
+
   for (const [cat, keys] of rules) {
     if (keys.some((k) => s.includes(k))) return cat;
   }
+
   return "Serviços Diversos";
 }
+
+function categorizarServico(desc: string, code?: string): string {
+  if (code) {
+    const cat = obterCategoriaPorCodigo(code);
+    if (cat) return cat;
+  }
+
+  const cleanCodeFromDesc = (desc || "").split(/\s+/)[0]?.replace(/\D/g, "");
+  if (cleanCodeFromDesc && cleanCodeFromDesc.length >= 3) {
+    const cat = obterCategoriaPorCodigo(cleanCodeFromDesc);
+    if (cat) return cat;
+  }
+
+  return obterCategoriaPorDescricao(desc);
+}
+
 
 function Dashboard() {
   const [theme, setTheme] = useState<"light" | "dark">("light");
