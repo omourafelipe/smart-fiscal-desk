@@ -224,9 +224,46 @@ const formatarMesAnoFiltro = (periodoStr: string) => {
 
 const getServicoDescricao = (codTrib: string) => {
   const code = String(codTrib).trim();
+  if (!code) return "Sem descrição";
+
   if (code === "042201" || code === "42201") return "Planos de Saúde";
   if (code === "040301" || code === "40301" || code === "043301" || code === "43301") return "Serviços Hospitalares";
-  return code ? `Outros (${code})` : "Sem descrição";
+
+  const clean = code.replace(/\D/g, "");
+
+  // 1. cTribNac do Padrão Nacional (6 dígitos exatos)
+  if (clean.length === 6) {
+    const desc = cClassTribDescricaoMap.get(clean);
+    if (desc) return desc;
+  }
+
+  // 2. NBS (9 ou mais dígitos)
+  if (clean.length >= 9) {
+    const desc = nbsDescricaoMap.get(clean);
+    if (desc) return desc;
+  }
+
+  // 3. itemLC116 direto (2–4 dígitos)
+  if (clean.length >= 2 && clean.length <= 4) {
+    const normalized = clean.replace(/^0+/, "");
+    const desc = lc116DescricaoMap.get(normalized);
+    if (desc) return desc;
+  }
+
+  // 4. Fallback heurístico para códigos estendidos/municipais (5–8 dígitos, ex: "040101" -> prefixo "0401" -> "401")
+  if (clean.length >= 5 && clean.length <= 8) {
+    // Tenta os 4 primeiros dígitos
+    const firstFour = clean.slice(0, 4).replace(/^0+/, "");
+    let desc = lc116DescricaoMap.get(firstFour);
+    if (desc) return desc;
+
+    // Tenta os 3 primeiros dígitos
+    const firstThree = clean.slice(0, 3).replace(/^0+/, "");
+    desc = lc116DescricaoMap.get(firstThree);
+    if (desc) return desc;
+  }
+
+  return `Outros (${code})`;
 };
 
 interface ConciliationResult {
@@ -307,11 +344,16 @@ const lc116CategoriasMap: Record<string, string> = {
 
 // ── Mapa 1: NBS (9 dígitos numéricos) → itemLC116
 const nbsLookupMap = new Map<string, string>();
+const nbsDescricaoMap = new Map<string, string>();
+
 // ── Mapa 2: itemLC116 sem zeros à esquerda (ex: "101") → itemLC116
 const lc116LookupMap = new Map<string, string>();
+const lc116DescricaoMap = new Map<string, string>();
+
 // ── Mapa 3: cClassTrib (6 dígitos, campo cTribNac do Padrão Nacional) → grupo LC116
 //    Um cClassTrib pode cobrir vários grupos; guardamos o primeiro (mais específico)
 const cClassTribLookupMap = new Map<string, string>();
+const cClassTribDescricaoMap = new Map<string, string>();
 
 nbsMapping.forEach((item: any) => {
   const cleanNbs = String(item.nbs || "").replace(/\D/g, "");
@@ -320,8 +362,15 @@ nbsMapping.forEach((item: any) => {
   if (cleanNbs && !nbsLookupMap.has(cleanNbs)) {
     nbsLookupMap.set(cleanNbs, item.itemLC116);
   }
+  if (cleanNbs && !nbsDescricaoMap.has(cleanNbs)) {
+    nbsDescricaoMap.set(cleanNbs, item.descricaoNbs || item.descricaoLC116 || "");
+  }
+
   if (cleanLc116 && !lc116LookupMap.has(cleanLc116)) {
     lc116LookupMap.set(cleanLc116, item.itemLC116);
+  }
+  if (cleanLc116 && !lc116DescricaoMap.has(cleanLc116)) {
+    lc116DescricaoMap.set(cleanLc116, item.descricaoLC116 || "");
   }
 
   // Popula cClassTribLookupMap: cada código de 6 dígitos que aparece em cClassTrib
@@ -332,6 +381,9 @@ nbsMapping.forEach((item: any) => {
       // Usa o grupo (primeiros 2 dígitos do itemLC116, com zero à esquerda)
       const group = String(item.itemLC116 || "").split(".")[0].padStart(2, "0");
       cClassTribLookupMap.set(part, group);
+    }
+    if (!cClassTribDescricaoMap.has(part)) {
+      cClassTribDescricaoMap.set(part, item.descricaoLC116 || "");
     }
   }
 });
@@ -482,6 +534,48 @@ function obterCategoriaPorDescricao(desc: string): string {
   return "Serviços Diversos";
 }
 
+function obterCategoriaMaisProxima(desc: string, categoriasDisponiveis: string[]): string {
+  const normalizedDesc = normalizeString(desc || "").toLowerCase();
+  // Filtra stop words e palavras curtas
+  const stopWords = ["de", "do", "da", "em", "para", "com", "ou", "e", "um", "uma", "os", "as"];
+  const descWords = normalizedDesc.split(/[\s,./()\-]+/)
+    .map(w => w.trim())
+    .filter(w => w.length > 2 && !stopWords.includes(w));
+  
+  if (descWords.length === 0) return "Serviços Diversos";
+
+  let bestCat = "Serviços Diversos";
+  let maxScore = 0;
+
+  for (const cat of categoriasDisponiveis) {
+    const normalizedCat = normalizeString(cat || "").toLowerCase();
+    const catWords = normalizedCat.split(/[\s,./()\-]+/)
+      .map(w => w.trim())
+      .filter(w => w.length > 2 && !stopWords.includes(w));
+    
+    let score = 0;
+    for (const w of descWords) {
+      if (catWords.includes(w)) {
+        score += 3; // Correspondência exata da palavra
+      } else {
+        // Verifica se é substring
+        for (const cw of catWords) {
+          if (cw.includes(w) || w.includes(cw)) {
+            score += 1;
+          }
+        }
+      }
+    }
+    
+    if (score > maxScore) {
+      maxScore = score;
+      bestCat = cat;
+    }
+  }
+
+  return maxScore > 0 ? bestCat : "Serviços Diversos";
+}
+
 /**
  * Ponto de entrada da categorização de NFS-e.
  *
@@ -489,13 +583,50 @@ function obterCategoriaPorDescricao(desc: string): string {
  *  1. Lookup pelo código (cTribNac / NBS / municipal) na tabela de referência
  *  2. Fallback por palavras-chave na descrição do serviço
  */
-function categorizarServico(desc: string, code?: string): string {
+function categorizarServico(desc: string, code?: string, todasCategorias?: string[]): string {
+  // 1. Tenta por palavras-chave na descrição do serviço (que é mais específica)
+  if (desc) {
+    const cat = obterCategoriaPorDescricao(desc);
+    if (cat && cat !== "Serviços Diversos") return cat;
+
+    // Se tiver a lista de todas as categorias (incluindo customizadas), tenta encontrar por similaridade
+    if (todasCategorias) {
+      const closest = obterCategoriaMaisProxima(desc, todasCategorias);
+      if (closest && closest !== "Serviços Diversos") return closest;
+    }
+  }
+
+  // 2. Se não deu match por palavra-chave, tenta o lookup exato do código (sem heurística genérica de 2 dígitos)
+  if (code) {
+    const clean = String(code).trim().replace(/\D/g, "");
+    if (clean.length === 6) {
+      const group = cClassTribLookupMap.get(clean);
+      if (group && lc116CategoriasMap[group]) return lc116CategoriasMap[group];
+    }
+    if (clean.length >= 9) {
+      const matched = nbsLookupMap.get(clean);
+      if (matched) {
+        const group = matched.split(".")[0].padStart(2, "0");
+        if (lc116CategoriasMap[group]) return lc116CategoriasMap[group];
+      }
+    }
+    if (clean.length >= 2 && clean.length <= 4) {
+      const normalized = clean.replace(/^0+/, "");
+      const matched = lc116LookupMap.get(normalized);
+      if (matched) {
+        const group = matched.split(".")[0].padStart(2, "0");
+        if (lc116CategoriasMap[group]) return lc116CategoriasMap[group];
+      }
+    }
+  }
+
+  // 3. Fallback de código (heurística de 2 dígitos) se nada mais funcionou
   if (code) {
     const cat = obterCategoriaPorCodigo(code);
     if (cat) return cat;
   }
 
-  return obterCategoriaPorDescricao(desc);
+  return "Serviços Diversos";
 }
 
 
@@ -585,7 +716,98 @@ function Dashboard() {
   // Versão que aplica overrides manuais antes da categorização automática
   const categorizarComOverride = (desc: string, code?: string): string => {
     if (code && categoryOverrides[code]) return categoryOverrides[code];
-    return categorizarServico(desc, code);
+    const todas = [...Object.values(lc116CategoriasMap), ...customCategories];
+    return categorizarServico(desc, code, todas);
+  };
+
+  // ── Categorias personalizadas/customizadas criadas pelo usuário
+  const [customCategories, setCustomCategories] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("customCategories") || "[]");
+    } catch {
+      return [];
+    }
+  });
+
+  const [novaCategoriaNome, setNovaCategoriaNome] = useState("");
+  const [showCriarForm, setShowCriarForm] = useState(false);
+
+  const addCustomCategory = (nome: string) => {
+    const cleanNome = nome.trim();
+    if (!cleanNome) return false;
+    const exists = [...Object.values(lc116CategoriasMap), ...customCategories]
+      .some(cat => cat.toLowerCase() === cleanNome.toLowerCase() || cleanNome.toLowerCase() === "serviços diversos");
+    if (exists) {
+      toast.error("Esta categoria já existe!");
+      return false;
+    }
+    
+    setCustomCategories((prev) => {
+      const next = [...prev, cleanNome];
+      localStorage.setItem("customCategories", JSON.stringify(next));
+      return next;
+    });
+    toast.success(`Categoria "${cleanNome}" criada com sucesso!`);
+    return true;
+  };
+
+  const removeCustomCategory = (nome: string) => {
+    setCustomCategories((prev) => {
+      const next = prev.filter(c => c !== nome);
+      localStorage.setItem("customCategories", JSON.stringify(next));
+      return next;
+    });
+    // Remove os overrides que usavam essa categoria para restaurar automático
+    setCategoryOverrides((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const [code, cat] of Object.entries(next)) {
+        if (cat === nome) {
+          delete next[code];
+          changed = true;
+        }
+      }
+      if (changed) {
+        localStorage.setItem("categoryOverrides", JSON.stringify(next));
+      }
+      return next;
+    });
+    toast.success(`Categoria "${nome}" removida.`);
+  };
+
+  // Seleção de códigos para atualização em lote na aba Categorias
+  const [selectedCodes, setSelectedCodes] = useState<Set<string>>(new Set());
+
+  const autoCategorizeSelected = (codes: string[], todasCategorias: string[]) => {
+    let successCount = 0;
+    const nextOverrides = { ...categoryOverrides };
+    
+    codes.forEach((code) => {
+      const desc = getServicoDescricao(code);
+      // Tenta obter categoria automática pelo fluxo padrão do código
+      let matched = obterCategoriaPorCodigo(code);
+      if (!matched) {
+        // Se não deu, tenta match de palavras com a descrição oficial
+        const closest = obterCategoriaMaisProxima(desc, todasCategorias);
+        if (closest && closest !== "Serviços Diversos") {
+          matched = closest;
+        }
+      }
+      
+      if (matched) {
+        nextOverrides[code] = matched;
+        successCount++;
+      }
+    });
+
+    if (successCount > 0) {
+      setCategoryOverrides(nextOverrides);
+      localStorage.setItem("categoryOverrides", JSON.stringify(nextOverrides));
+      toast.success(`${successCount} código(s) categorizado(s) automaticamente com base na descrição.`);
+    } else {
+      toast.info("Não foi possível inferir uma categoria mais específica para os códigos selecionados.");
+    }
+    setSelectedCodes(new Set());
   };
 
   // ── Serviços Tomados state ──────────────────────────────────────────────
@@ -4082,6 +4304,7 @@ function Dashboard() {
             ═══════════════════════════════════════════════════════════════ */}
             <TabsContent value="categorias" className="space-y-6 mt-0 outline-none">
               {(() => {
+                const todasCategorias = [...Object.values(lc116CategoriasMap), ...customCategories].sort();
                 // Coleta todos os códigos únicos presentes nas notas (emitidas + tomadas)
                 const codigosMap = new Map<string, { codigo: string; descricao: string; catAuto: string; count: number }>();
                 const todasCombinadas = [
@@ -4091,10 +4314,23 @@ function Dashboard() {
                 for (const { code, desc } of todasCombinadas) {
                   if (!code) continue;
                   if (!codigosMap.has(code)) {
+                    const officialDesc = getServicoDescricao(code);
+                    let catAuto = categorizarServico(desc, code);
+                    if (catAuto === "Serviços Diversos") {
+                      const catOfficial = categorizarServico(officialDesc, code);
+                      if (catOfficial !== "Serviços Diversos") {
+                        catAuto = catOfficial;
+                      } else {
+                        const closest = obterCategoriaMaisProxima(officialDesc, todasCategorias);
+                        if (closest && closest !== "Serviços Diversos") {
+                          catAuto = closest;
+                        }
+                      }
+                    }
                     codigosMap.set(code, {
                       codigo: code,
-                      descricao: desc || "—",
-                      catAuto: categorizarServico(desc, code),
+                      descricao: officialDesc,
+                      catAuto,
                       count: 1,
                     });
                   } else {
@@ -4102,7 +4338,6 @@ function Dashboard() {
                   }
                 }
                 const linhas = [...codigosMap.values()].sort((a, b) => b.count - a.count);
-                const todasCategorias = Object.values(lc116CategoriasMap).sort();
 
                 const [searchCat, setSearchCat] = useState("");
                 const linhasFiltradas = linhas.filter(
@@ -4117,30 +4352,113 @@ function Dashboard() {
                   <div className="space-y-6">
                     {/* Header */}
                     <div className="bg-card p-5 rounded-2xl border border-border shadow-xs">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                        <div>
-                          <h1 className="text-xl font-bold tracking-tight text-foreground">Categorias de Serviço</h1>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Relação dos códigos encontrados nas NFS-e e suas categorias. Edite para corrigir a classificação.
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {Object.keys(categoryOverrides).length > 0 && (
-                            <span className="text-[10px] bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 px-2 py-1 rounded-lg font-semibold">
-                              {Object.keys(categoryOverrides).length} override(s) manual(is)
-                            </span>
-                          )}
-                          <div className="relative">
-                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-                            <input
-                              type="text"
-                              placeholder="Filtrar..."
-                              value={searchCat}
-                              onChange={(e) => setSearchCat(e.target.value)}
-                              className="pl-8 pr-3 h-8 text-xs rounded-xl border border-border bg-muted/40 outline-none focus:ring-2 focus:ring-indigo-500/30 w-48"
-                            />
+                      <div className="flex flex-col gap-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                          <div>
+                            <h1 className="text-xl font-bold tracking-tight text-foreground">Categorias de Serviço</h1>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Relação dos códigos encontrados nas NFS-e e suas categorias. Edite para corrigir a classificação.
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {Object.keys(categoryOverrides).length > 0 && (
+                              <span className="text-[10px] bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 px-2 py-1 rounded-lg font-semibold">
+                                {Object.keys(categoryOverrides).length} override(s) manual(is)
+                              </span>
+                            )}
+                            {selectedCodes.size > 0 && (
+                              <Button
+                                onClick={() => autoCategorizeSelected(Array.from(selectedCodes), todasCategorias)}
+                                size="sm"
+                                className="h-8 rounded-xl text-xs gap-1.5 cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white font-semibold"
+                              >
+                                ⚡ Auto-Categorizar ({selectedCodes.size})
+                              </Button>
+                            )}
+                            <Button
+                              onClick={() => setShowCriarForm(!showCriarForm)}
+                              size="sm"
+                              variant="outline"
+                              className="h-8 rounded-xl text-xs gap-1.5 cursor-pointer border-indigo-500/20 hover:border-indigo-500/50 hover:bg-indigo-500/5"
+                            >
+                              <span className="text-indigo-600 dark:text-indigo-400 font-semibold">+ Nova Categoria</span>
+                            </Button>
+                            <div className="relative">
+                              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                              <input
+                                type="text"
+                                placeholder="Filtrar..."
+                                value={searchCat}
+                                onChange={(e) => setSearchCat(e.target.value)}
+                                className="pl-8 pr-3 h-8 text-xs rounded-xl border border-border bg-muted/40 outline-none focus:ring-2 focus:ring-indigo-500/30 w-48"
+                              />
+                            </div>
                           </div>
                         </div>
+
+                        {showCriarForm && (
+                          <form
+                            onSubmit={(e) => {
+                              e.preventDefault();
+                              if (addCustomCategory(novaCategoriaNome)) {
+                                setNovaCategoriaNome("");
+                                setShowCriarForm(false);
+                              }
+                            }}
+                            className="flex flex-col gap-2 pt-3 border-t border-border/60 animate-in fade-in slide-in-from-top-2 duration-200"
+                          >
+                            <div className="flex items-center gap-2">
+                              <div className="flex-1 max-w-sm">
+                                <Input
+                                  type="text"
+                                  placeholder="Nome da categoria (ex: Consultoria Especializada)"
+                                  value={novaCategoriaNome}
+                                  onChange={(e) => setNovaCategoriaNome(e.target.value)}
+                                  className="h-8 text-xs rounded-xl"
+                                  autoFocus
+                                />
+                              </div>
+                              <Button type="submit" size="sm" className="h-8 rounded-xl text-xs cursor-pointer">
+                                Criar Categoria
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  setShowCriarForm(false);
+                                  setNovaCategoriaNome("");
+                                }}
+                                className="h-8 rounded-xl text-xs cursor-pointer text-muted-foreground"
+                              >
+                                Cancelar
+                              </Button>
+                            </div>
+                          </form>
+                        )}
+
+                        {customCategories.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 mt-1 pt-3 border-t border-border/50">
+                            <span className="text-[10px] text-muted-foreground self-center mr-1">Categorias criadas:</span>
+                            {customCategories.map((cat) => (
+                              <Badge
+                                key={cat}
+                                variant="outline"
+                                className="text-[10px] px-2 py-0.5 rounded-md gap-1 bg-indigo-500/[0.02] border-indigo-500/10 text-indigo-700 dark:text-indigo-300 flex items-center"
+                              >
+                                {cat}
+                                <button
+                                  type="button"
+                                  onClick={() => removeCustomCategory(cat)}
+                                  className="hover:text-rose-500 cursor-pointer font-bold focus:outline-none ml-1 text-xs"
+                                  title="Excluir esta categoria"
+                                >
+                                  ×
+                                </button>
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -4174,8 +4492,24 @@ function Dashboard() {
                           <table className="w-full text-xs">
                             <thead>
                               <tr className="border-b border-border bg-muted/40">
+                                <th className="text-left px-4 py-3 font-semibold text-muted-foreground uppercase tracking-wider text-[10px] w-10">
+                                  <input
+                                    type="checkbox"
+                                    checked={linhasFiltradas.length > 0 && linhasFiltradas.every(l => selectedCodes.has(l.codigo))}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setSelectedCodes(new Set([...selectedCodes, ...linhasFiltradas.map(l => l.codigo)]));
+                                      } else {
+                                        const next = new Set(selectedCodes);
+                                        linhasFiltradas.forEach(l => next.delete(l.codigo));
+                                        setSelectedCodes(next);
+                                      }
+                                    }}
+                                    className="rounded border-gray-350 dark:border-gray-700 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                                  />
+                                </th>
                                 <th className="text-left px-4 py-3 font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">Código</th>
-                                <th className="text-left px-4 py-3 font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">Descrição (1ª NF)</th>
+                                <th className="text-left px-4 py-3 font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">Descrição do Serviço</th>
                                 <th className="text-left px-4 py-3 font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">Categoria Automática</th>
                                 <th className="text-left px-4 py-3 font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">Categoria Efetiva</th>
                                 <th className="text-right px-4 py-3 font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">NF-e</th>
@@ -4188,6 +4522,22 @@ function Dashboard() {
                                 const catEfetiva = categoryOverrides[linha.codigo] || linha.catAuto;
                                 return (
                                   <tr key={linha.codigo} className={`hover:bg-muted/30 transition-colors ${hasOverride ? "bg-indigo-500/[0.03] dark:bg-indigo-500/[0.05]" : ""}`}>
+                                    <td className="px-4 py-3 w-10 text-left">
+                                      <input
+                                        type="checkbox"
+                                        checked={selectedCodes.has(linha.codigo)}
+                                        onChange={(e) => {
+                                          const next = new Set(selectedCodes);
+                                          if (e.target.checked) {
+                                            next.add(linha.codigo);
+                                          } else {
+                                            next.delete(linha.codigo);
+                                          }
+                                          setSelectedCodes(next);
+                                        }}
+                                        className="rounded border-gray-350 dark:border-gray-700 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                                      />
+                                    </td>
                                     <td className="px-4 py-3">
                                       <span className="font-mono text-[10px] bg-muted border border-border px-1.5 py-0.5 rounded-md">{linha.codigo}</span>
                                     </td>
