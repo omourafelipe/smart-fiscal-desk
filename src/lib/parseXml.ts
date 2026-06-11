@@ -95,7 +95,12 @@ export function parseNfseXml(xml: string): NotaFiscal | null {
       ["vServ"]
     ]);
     const cliente = String(pick(inf, ["DPS", "infDPS", "toma", "xNome"]) ?? "").trim();
-    const servico = String(pick(inf, ["DPS", "infDPS", "serv", "cServ", "xDescServ"]) ?? "").trim();
+    const servico = String(
+      pick(inf, ["DPS", "infDPS", "serv", "xDescServ"]) ??
+      pick(inf, ["DPS", "infDPS", "serv", "cServ", "xDescServ"]) ??
+      pick(inf, ["DPS", "infDPS", "serv", "cServ"]) ??
+      ""
+    ).trim();
     const cStat = String(inf.cStat ?? "").trim();
     const hasSubst = !!pick(inf, ["DPS", "infDPS", "subst"]);
     const chave = String(inf["@_Id"] ?? "")
@@ -298,7 +303,12 @@ export function parseNfseXmlTomada(
       ["vLiquido"],
     ]) || valor;
 
-    const servico = String(pick(inf, ["DPS", "infDPS", "serv", "cServ", "xDescServ"]) ?? "").trim();
+    const servico = String(
+      pick(inf, ["DPS", "infDPS", "serv", "xDescServ"]) ??
+      pick(inf, ["DPS", "infDPS", "serv", "cServ", "xDescServ"]) ??
+      pick(inf, ["DPS", "infDPS", "serv", "cServ"]) ??
+      ""
+    ).trim();
 
     const cStat = String(inf.cStat ?? "").trim();
 
@@ -325,11 +335,10 @@ export function parseNfseXmlTomada(
       ["trib", "tribMun", "vISSQN"],
       ["trib", "tribMun", "vISS"],
     ]);
-    const vlrIssRet = vlrIssRetRaw > 0
-      ? vlrIssRetRaw
-      : issRetidoFlag === "Sim"
-        ? vlrIssQN
-        : 0;
+    // ISS RETIDO apenas o que estiver identificado como "Retenção do ISSQN" ou "Retenção Simples"
+    const vlrIssRet = issRetidoFlag === "Sim"
+      ? (vlrIssRetRaw > 0 ? vlrIssRetRaw : vlrIssQN)
+      : 0;
 
     // Retenções federais
     const vlrCsll = getNumberFallback(inf, [

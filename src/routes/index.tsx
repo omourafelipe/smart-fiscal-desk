@@ -265,7 +265,38 @@ const mesesOpcoes = [
  * Match case-insensitive; primeira regra a casar vence.
  */
 function categorizarServico(desc: string): string {
-  const s = (desc || "").toLowerCase();
+  let s = (desc || "").toLowerCase();
+  
+  // Mapeia códigos de serviço da LC 116/2003 e cTribNac para suas descrições/categorias
+  const cleanCode = s.replace(/\D/g, "");
+  if (/^\d+$/.test(cleanCode) && cleanCode.length > 0) {
+    if (cleanCode.startsWith("01") || cleanCode.startsWith("101") || cleanCode.startsWith("102") || cleanCode.startsWith("103") || cleanCode.startsWith("104") || cleanCode.startsWith("105") || cleanCode.startsWith("106") || cleanCode.startsWith("107") || cleanCode.startsWith("108")) {
+      s += " tecnologia ti software sistema informática";
+    } else if (cleanCode.startsWith("03") || cleanCode.startsWith("301") || cleanCode.startsWith("302") || cleanCode.startsWith("303") || cleanCode.startsWith("304") || cleanCode.startsWith("305")) {
+      s += " locação aluguel";
+    } else if (cleanCode.startsWith("04") || cleanCode.startsWith("401") || cleanCode.startsWith("402") || cleanCode.startsWith("403") || cleanCode.startsWith("404") || cleanCode.startsWith("405") || cleanCode.startsWith("422") || cleanCode.startsWith("433")) {
+      s += " saúde hospitalar médico clinic exame";
+    } else if (cleanCode.startsWith("07") || cleanCode.startsWith("701") || cleanCode.startsWith("702") || cleanCode.startsWith("703") || cleanCode.startsWith("704") || cleanCode.startsWith("705")) {
+      s += " engenharia construção obra projeto";
+    } else if (cleanCode.startsWith("10") || cleanCode.startsWith("1001") || cleanCode.startsWith("1002") || cleanCode.startsWith("1003") || cleanCode.startsWith("1004") || cleanCode.startsWith("1005") || cleanCode.startsWith("1009") || cleanCode.startsWith("1010")) {
+      s += " publicidade marketing propaganda";
+    } else if (cleanCode.startsWith("11") || cleanCode.startsWith("1101") || cleanCode.startsWith("1102") || cleanCode.startsWith("1103") || cleanCode.startsWith("1104") || cleanCode.startsWith("1105")) {
+      s += " transporte logística frete entrega";
+    } else if (cleanCode.startsWith("14") || cleanCode.startsWith("1401") || cleanCode.startsWith("1402") || cleanCode.startsWith("1403") || cleanCode.startsWith("1404") || cleanCode.startsWith("1405") || cleanCode.startsWith("1406")) {
+      s += " manutenção reparos conserto";
+    } else if (cleanCode.startsWith("17") || cleanCode.startsWith("1701") || cleanCode.startsWith("1702") || cleanCode.startsWith("1703") || cleanCode.startsWith("1704") || cleanCode.startsWith("1705") || cleanCode.startsWith("1706")) {
+      s += " consultoria assessoria advocacia jurídica contábil";
+    } else if (cleanCode.startsWith("09") || cleanCode.startsWith("901") || cleanCode.startsWith("902") || cleanCode.startsWith("903")) {
+      s += " hospedagem turismo";
+    } else if (cleanCode.startsWith("12") || cleanCode.startsWith("1201") || cleanCode.startsWith("1202") || cleanCode.startsWith("1203")) {
+      s += " recreação lazer entretenimento";
+    } else if (cleanCode.startsWith("15") || cleanCode.startsWith("1501") || cleanCode.startsWith("1502") || cleanCode.startsWith("1503")) {
+      s += " assessoria financeira bancários";
+    } else if (cleanCode.startsWith("23") || cleanCode.startsWith("2301")) {
+      s += " programação planejamento de eventos";
+    }
+  }
+
   if (!s.trim()) return "Outros";
   const rules: Array<[string, string[]]> = [
     ["Saúde / Hospitalar", ["hospital", "médic", "medic", "clínic", "clinic", "laboratóri", "laboratori", "exame", "enfermag", "fisioterap", "saúde", "saude"]],
@@ -280,6 +311,10 @@ function categorizarServico(desc: string): string {
     ["Publicidade e Marketing", ["publicidade", "marketing", "propaganda", "mídia", "midia"]],
     ["Engenharia e Construção", ["engenhar", "obra", "construç", "construc", "projeto"]],
     ["Alimentação", ["alimentaç", "alimentac", "refeiç", "refeic", "restaurante", "lanche"]],
+    ["Hospedagem e Turismo", ["turismo", "hospedagem", "hotel", "pousada"]],
+    ["Lazer e Recreação", ["lazer", "entretenimento", "recreação", "recreac"]],
+    ["Serviços Financeiros", ["financeiro", "bancário", "bancario", "crédito", "credito"]],
+    ["Eventos e Produções", ["evento", "produção", "produc", "planejamento"]],
   ];
   for (const [cat, keys] of rules) {
     if (keys.some((k) => s.includes(k))) return cat;
@@ -351,6 +386,7 @@ function Dashboard() {
   const [mesFiltroTomadas, setMesFiltroTomadas] = useState("__all__");
   const [anoFiltroTomadas, setAnoFiltroTomadas] = useState("__all__");
   const [empresaFiltroTomadas, setEmpresaFiltroTomadas] = useState("__all__");
+  const [searchTomadas, setSearchTomadas] = useState("");
   const [pageTomadas, setPageTomadas] = useState(1);
   const fileRefTomadas = useRef<HTMLInputElement>(null);
   const PAGE_SIZE_TOMADAS = 20;
@@ -465,6 +501,10 @@ function Dashboard() {
   useEffect(() => {
     setCurrentPage(1);
   }, [empresaFiltro, mesFiltro, anoFiltro, cServFiltro, searchCliente]);
+
+  useEffect(() => {
+    setPageTomadas(1);
+  }, [empresaFiltroTomadas, mesFiltroTomadas, anoFiltroTomadas, searchTomadas]);
 
   const todasNotas = useLiveQuery(() => db.notas.toArray(), [], [] as NotaFiscal[]);
 
@@ -1542,50 +1582,6 @@ function Dashboard() {
 
           {/* Nav Items */}
           <nav className="flex flex-col gap-5 mt-4">
-            {/* Favorites Category */}
-            <div className="flex flex-col gap-1.5">
-              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider px-1">Favoritos</span>
-              <button
-                onClick={() => setActiveTab("dashboard")}
-                className={`flex items-center gap-3 px-3 py-2 text-xs font-medium rounded-xl transition-all relative w-full text-left ${
-                  activeTab === "dashboard"
-                    ? "bg-muted text-foreground font-semibold"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
-                }`}
-              >
-                {activeTab === "dashboard" && (
-                  <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r-md bg-indigo-600" />
-                )}
-                <LayoutDashboard className="h-4 w-4" /> Visão Geral Faturamento
-              </button>
-              <button
-                onClick={() => setActiveTab("grupo")}
-                className={`flex items-center gap-3 px-3 py-2 text-xs font-medium rounded-xl transition-all relative w-full text-left ${
-                  activeTab === "grupo"
-                    ? "bg-muted text-foreground font-semibold"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
-                }`}
-              >
-                {activeTab === "grupo" && (
-                  <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r-md bg-indigo-600" />
-                )}
-                <Building2 className="h-4 w-4" /> Faturamento do Grupo
-              </button>
-              <button
-                onClick={() => setActiveTab("conciliation")}
-                className={`flex items-center gap-3 px-3 py-2 text-xs font-medium rounded-xl transition-all relative w-full text-left ${
-                  activeTab === "conciliation"
-                    ? "bg-muted text-foreground font-semibold"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
-                }`}
-              >
-                {activeTab === "conciliation" && (
-                  <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r-md bg-indigo-600" />
-                )}
-                <FileSpreadsheet className="h-4 w-4" /> Validador Sintético
-              </button>
-            </div>
-
             {/* Dashboards Category */}
             <div className="flex flex-col gap-1.5">
               <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider px-1">Dashboards</span>
@@ -1615,21 +1611,6 @@ function Dashboard() {
                 </div>
               </button>
               <button
-                onClick={() => setActiveTab("conciliation")}
-                className={`flex items-center justify-between px-3 py-2 text-xs font-medium rounded-xl transition-all w-full text-left ${
-                  activeTab === "conciliation" ? "text-foreground font-semibold" : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <FileSpreadsheet className="h-4 w-4" /> Conciliador
-                </div>
-                {conciliatedStats.updated > 0 && (
-                  <span className="text-[9px] bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 px-1.5 py-0.5 rounded-md font-mono">
-                    {conciliatedStats.updated}
-                  </span>
-                )}
-              </button>
-              <button
                 onClick={() => setActiveTab("tomados")}
                 className={`flex items-center justify-between px-3 py-2 text-xs font-medium rounded-xl transition-all w-full text-left ${
                   activeTab === "tomados" ? "text-foreground font-semibold" : "text-muted-foreground hover:text-foreground"
@@ -1641,6 +1622,21 @@ function Dashboard() {
                 {(todasNotasTomadas?.length ?? 0) > 0 && (
                   <span className="text-[9px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-md font-mono border border-border/40">
                     {todasNotasTomadas!.length}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => setActiveTab("conciliation")}
+                className={`flex items-center justify-between px-3 py-2 text-xs font-medium rounded-xl transition-all w-full text-left ${
+                  activeTab === "conciliation" ? "text-foreground font-semibold" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <FileSpreadsheet className="h-4 w-4" /> Conciliador
+                </div>
+                {conciliatedStats.updated > 0 && (
+                  <span className="text-[9px] bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 px-1.5 py-0.5 rounded-md font-mono">
+                    {conciliatedStats.updated}
                   </span>
                 )}
               </button>
@@ -3198,6 +3194,15 @@ function Dashboard() {
                 if (mesFiltroTomadas !== "__all__" && ds.slice(5, 7) !== mesFiltroTomadas) return false;
                 if (anoFiltroTomadas !== "__all__" && ds.slice(0, 4) !== anoFiltroTomadas) return false;
                 if (empresaFiltroTomadas !== "__all__" && n.cnpjTomador !== empresaFiltroTomadas) return false;
+                if (searchTomadas) {
+                  const query = searchTomadas.toLowerCase().trim();
+                  const matchNome = (n.nomePrestador || "").toLowerCase().includes(query) || 
+                                    (n.nomeTomador || "").toLowerCase().includes(query) ||
+                                    (n.cnpjPrestador || "").includes(query) ||
+                                    (n.cnpjTomador || "").includes(query);
+                  const matchNFS = (n.nNFSe || "").toLowerCase().includes(query);
+                  if (!matchNome && !matchNFS) return false;
+                }
                 return true;
               });
 
@@ -3233,11 +3238,26 @@ function Dashboard() {
                 const key = categorizarServico(n.servico);
                 servicoMap.set(key, (servicoMap.get(key) ?? 0) + n.valor);
               });
-              const SERV_COLORS = ["#6366f1","#14b8a6","#f59e0b","#ec4899","#8b5cf6","#ef4444"];
+              const SERV_COLORS = [
+                "#6366f1", // Indigo
+                "#14b8a6", // Teal
+                "#f59e0b", // Amber
+                "#ec4899", // Pink
+                "#8b5cf6", // Violet
+                "#ef4444", // Red
+                "#06b6d4", // Cyan
+                "#10b981", // Emerald
+                "#3b82f6", // Blue
+                "#f97316", // Orange
+                "#64748b"  // Slate (for Outros)
+              ];
               const servicoEntries = Array.from(servicoMap.entries()).sort(([,a],[,b]) => b-a);
-              const topServicos = servicoEntries.slice(0, 5);
-              const outrosServ = servicoEntries.slice(5).reduce((s,[,v]) => s+v, 0);
-              const servicoData = [...topServicos.map(([k,v],i)=>({name:k,value:v,fill:SERV_COLORS[i]})), ...(outrosServ > 0 ? [{name:"Outros",value:outrosServ,fill:SERV_COLORS[5]}] : [])];
+              const topServicos = servicoEntries.slice(0, 10);
+              const outrosServ = servicoEntries.slice(10).reduce((s,[,v]) => s+v, 0);
+              const servicoData = [
+                ...topServicos.map(([k,v],i)=>({name:k,value:v,fill:SERV_COLORS[i % SERV_COLORS.length]})), 
+                ...(outrosServ > 0 ? [{name:"Outros",value:outrosServ,fill:SERV_COLORS[10]}] : [])
+              ];
 
               // Gráfico C — top 8 fornecedores
               const fornMap = new Map<string, { nome: string; total: number }>();
@@ -3439,11 +3459,14 @@ function Dashboard() {
                           </ResponsiveContainer>
                         )}
                       </div>
-                      <div className="flex flex-col gap-1.5 mt-2 pt-2 border-t border-border/50">
-                        {servicoData.slice(0,4).map((d,i) => (
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 mt-2 pt-2 border-t border-border/50">
+                        {servicoData.slice(0, 10).map((d,i) => (
                           <div key={i} className="flex items-center justify-between text-[10px]">
-                            <span className="flex items-center gap-1.5 text-muted-foreground"><span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: d.fill }} />{d.name.slice(0,20)}</span>
-                            <span className="font-bold text-foreground">{fmtBRL(d.value)}</span>
+                            <span className="flex items-center gap-1.5 text-muted-foreground truncate max-w-[120px]" title={d.name}>
+                              <span className="h-1.5 w-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: d.fill }} />
+                              <span className="truncate">{d.name}</span>
+                            </span>
+                            <span className="font-bold text-foreground flex-shrink-0">{fmtBRL(d.value)}</span>
                           </div>
                         ))}
                       </div>
@@ -3502,14 +3525,27 @@ function Dashboard() {
                         <FileText className="h-4 w-4 text-muted-foreground" />
                         NFS-e Recebidas de Fornecedores ({notasTomValidas.length.toLocaleString("pt-BR")})
                       </h3>
-                      {(todasNotasTomadas?.length ?? 0) > 0 && (
-                        <button
-                          onClick={async () => { await db.notasTomadas.clear(); toast.success("Base de serviços tomados limpa."); }}
-                          className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" /> Limpar Base
-                        </button>
-                      )}
+                      
+                      <div className="flex items-center gap-2.5 flex-wrap">
+                        <div className="relative w-48 sm:w-64">
+                          <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
+                          <Input
+                            placeholder="Buscar por fornecedor ou nº NFS..."
+                            value={searchTomadas}
+                            onChange={(e) => setSearchTomadas(e.target.value)}
+                            className="pl-8 h-8 rounded-lg text-xs bg-muted border-border hover:bg-muted/80 focus:bg-card placeholder:text-muted-foreground w-full"
+                          />
+                        </div>
+                        
+                        {(todasNotasTomadas?.length ?? 0) > 0 && (
+                          <button
+                            onClick={async () => { await db.notasTomadas.clear(); toast.success("Base de serviços tomados limpa."); }}
+                            className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" /> Limpar Base
+                          </button>
+                        )}
+                      </div>
                     </div>
                     <div className="overflow-x-auto">
                       <Table className="min-w-[1200px]">
