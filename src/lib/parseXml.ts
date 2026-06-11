@@ -312,7 +312,7 @@ export function parseNfseXml(xml: string): NotaFiscal | null {
  */
 export function parseNfseXmlTomada(
   xml: string,
-  cnpjsGrupo: Set<string>,
+  cnpjsGrupo?: Set<string>,
 ): NotaFiscalTomada | null {
   try {
     const json = parser.parse(xml);
@@ -325,8 +325,19 @@ export function parseNfseXmlTomada(
     const cnpjTomador = String(pick(inf, ["DPS", "infDPS", "toma", "CNPJ"]) ?? "").trim().replace(/\D/g, "");
     const nomeTomador = String(pick(inf, ["DPS", "infDPS", "toma", "xNome"]) ?? "").trim();
 
-    // Valida se o tomador é uma empresa do grupo
-    if (!cnpjTomador || !cnpjsGrupo.has(cnpjTomador)) return null;
+    // Valida se o tomador é uma empresa do grupo (apenas se a lista cnpjsGrupo estiver populada)
+    if (!cnpjTomador) return null;
+    if (cnpjsGrupo) {
+      const hasFn = typeof (cnpjsGrupo as any).has === "function";
+      const size = typeof (cnpjsGrupo as any).size === "number" ? (cnpjsGrupo as any).size : 0;
+      if (hasFn) {
+        if (size > 0 && !cnpjsGrupo.has(cnpjTomador)) return null;
+      } else if (Array.isArray(cnpjsGrupo)) {
+        if (cnpjsGrupo.length > 0 && !(cnpjsGrupo as any).includes(cnpjTomador)) return null;
+      } else {
+        console.warn("parseNfseXmlTomada: cnpjsGrupo is not a Set or Array:", typeof cnpjsGrupo, cnpjsGrupo);
+      }
+    }
 
     // Prestador: fornecedor externo que emitiu a nota
     const cnpjPrestador = String(pick(inf, ["emit", "CNPJ"]) ?? "").trim();

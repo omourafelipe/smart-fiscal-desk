@@ -131,11 +131,21 @@ function TomadosRouteComponent() {
     setImportingTomadas(true);
     setProgressTomadas(null);
     try {
+      const zipFiles = Array.from(files).filter((f) => f.name.toLowerCase().endsWith(".zip"));
+      
+      if (zipFiles.length === 0) {
+        toast.error("Envie arquivos .zip contendo XMLs NFS-e de serviços tomados.");
+        setImportingTomadas(false);
+        return;
+      }
+
       const existingNotas = await db.notas.toArray();
-      const cnpjsGrupo = new Set(
-        existingNotas.map((n) => n.cnpjPrestador.replace(/\D/g, "")).filter(Boolean)
-      );
-      const zipFiles = Array.from(files).filter((f) => f.name.endsWith(".zip"));
+      const existingNotasTomadas = await db.notasTomadas.toArray();
+      const cnpjsGrupo = new Set([
+        ...existingNotas.map((n) => n.cnpjPrestador.replace(/\D/g, "")),
+        ...existingNotasTomadas.map((n) => n.cnpjTomador.replace(/\D/g, ""))
+      ].filter(Boolean));
+
       let totalXmls = 0;
       let doneXmls = 0;
       const batch: NotaFiscalTomada[] = [];
@@ -143,7 +153,9 @@ function TomadosRouteComponent() {
       for (const zipFile of zipFiles) {
         const buf = await zipFile.arrayBuffer();
         const zip = await JSZip.loadAsync(buf);
-        const xmlEntries = Object.values(zip.files).filter((f) => !f.dir && f.name.endsWith(".xml"));
+        const xmlEntries = Object.values(zip.files).filter(
+          (f) => !f.dir && f.name.toLowerCase().endsWith(".xml")
+        );
         totalXmls += xmlEntries.length;
 
         for (const entry of xmlEntries) {
@@ -160,7 +172,11 @@ function TomadosRouteComponent() {
         addActivity("upload", `${batch.length} Tomadas Importadas`, `Importação de serviços tomados finalizada.`);
         toast.success(`${batch.length} nota(s) de serviço tomado importada(s).`);
       } else {
-        toast.warning("Nenhuma nota com CNPJ do grupo como tomador foi encontrada.");
+        if (cnpjsGrupo.size > 0) {
+          toast.warning("Nenhuma nota com CNPJ do grupo como tomador foi encontrada.");
+        } else {
+          toast.warning("Nenhuma nota fiscal de serviço tomado válida foi encontrada.");
+        }
       }
     } catch (e) {
       console.error(e);
