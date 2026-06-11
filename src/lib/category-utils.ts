@@ -5,6 +5,14 @@ import { type CategoryRule, type ServiceClassification } from "./db";
 export const lc116SubItemCategoriasMap: Record<string, string> = {};
 export const categoriaParaGrupoSinteticoMap = new Map<string, string>();
 
+// Dicionários O(1) para busca rápida de itens do nbs_mapping
+export const nbsItemMap = new Map<string, any>();
+export const lc116ItemMap = new Map<string, any>();
+export const cClassTribItemMap = new Map<string, any>();
+
+// Cache em memória para evitar reclassificar as mesmas entradas no mesmo render loop
+export const CLASSIFICACAO_CACHE = new Map<string, ServiceClassification>();
+
 // Dicionário com mapeamento dos 40 itens oficiais da LC 116 para seus nomes legíveis (sem prefixo numérico)
 export const lc116CategoriasMap: Record<string, string> = {
   "01": "Informática e TI",
@@ -164,12 +172,18 @@ nbsMapping.forEach((item: any) => {
   if (cleanNbs && !nbsDescricaoMap.has(cleanNbs)) {
     nbsDescricaoMap.set(cleanNbs, item.descricaoNbs || item.descricaoLC116 || "");
   }
+  if (cleanNbs && !nbsItemMap.has(cleanNbs)) {
+    nbsItemMap.set(cleanNbs, item);
+  }
 
   if (cleanLc116 && !lc116LookupMap.has(cleanLc116)) {
     lc116LookupMap.set(cleanLc116, item.itemLC116);
   }
   if (cleanLc116 && !lc116DescricaoMap.has(cleanLc116)) {
     lc116DescricaoMap.set(cleanLc116, item.descricaoLC116 || "");
+  }
+  if (cleanLc116 && !lc116ItemMap.has(cleanLc116)) {
+    lc116ItemMap.set(cleanLc116, item);
   }
 
   const cClassTrib = String(item.cClassTrib || "");
@@ -180,6 +194,9 @@ nbsMapping.forEach((item: any) => {
     }
     if (!cClassTribDescricaoMap.has(part)) {
       cClassTribDescricaoMap.set(part, item.descricaoLC116 || "");
+    }
+    if (!cClassTribItemMap.has(part)) {
+      cClassTribItemMap.set(part, item);
     }
   }
 });
@@ -498,6 +515,10 @@ export const MAPEAMENTO_PREFIXO_LC116: Record<string, { executiva: string; opera
 };
 
 export function resolverServicoFiscal(codigo: string) {
+  if (!codigo) {
+    return { itemLC116: "", descricaoLC116: "Sem código", nbs: "", descricaoNbs: "" };
+  }
+
   const clean = String(codigo).trim().replace(/\D/g, "");
   let itemLC116 = "";
   let descricaoLC116 = "";
@@ -505,24 +526,15 @@ export function resolverServicoFiscal(codigo: string) {
   let descricaoNbs = "";
 
   if (clean) {
-    let found = nbsMapping.find((item: any) => {
-      const itemCleanNbs = String(item.nbs || "").replace(/\D/g, "");
-      return itemCleanNbs && itemCleanNbs === clean;
-    });
+    let found = nbsItemMap.get(clean);
 
     if (!found && clean.length === 6) {
-      found = nbsMapping.find((item: any) => {
-        const itemClassTrib = String(item.cClassTrib || "");
-        return itemClassTrib.includes(clean);
-      });
+      found = cClassTribItemMap.get(clean);
     }
 
     if (!found) {
-      found = nbsMapping.find((item: any) => {
-        const itemCleanLc = String(item.itemLC116 || "").replace(/\D/g, "").replace(/^0+/, "");
-        const cleanLc = clean.replace(/^0+/, "");
-        return itemCleanLc && itemCleanLc === cleanLc;
-      });
+      const cleanLc = clean.replace(/^0+/, "");
+      found = lc116ItemMap.get(cleanLc);
     }
 
     if (found) {
@@ -545,9 +557,9 @@ export function resolverServicoFiscal(codigo: string) {
           descricaoLC116 = lc116DescricaoMap.get(matchedLc.replace(/\D/g, "").replace(/^0+/, "")) || "";
         }
       } else {
-        const parts = codigo.split(".");
+        const parts = String(codigo).split(".");
         if (parts.length === 2) {
-          itemLC116 = codigo;
+          itemLC116 = String(codigo);
         } else {
           const padded = clean.padStart(4, "0");
           itemLC116 = `${padded.slice(0, 2)}.${padded.slice(2, 4)}`;
@@ -594,10 +606,17 @@ export function classificarServicoLocal(
   descNota: string,
   regras: CategoryRule[]
 ): ServiceClassification {
-  const cleanCode = String(codigo).trim().replace(/\D/g, "");
+  const safeCode = codigo || "";
+  const cleanCode = String(safeCode).trim().replace(/\D/g, "");
   const normDesc = descNota ? normalizeString(descNota) : "";
 
-  const { itemLC116, descricaoLC116, nbs, descricaoNbs } = resolverServicoFiscal(codigo);
+  // 0. Verifica cache em memória
+  const cacheKey = `${safeCode}_${descNota}_${regras.length}`;
+  if (CLASSIFICACAO_CACHE.has(cacheKey)) {
+    return CLASSIFICACAO_CACHE.get(cacheKey)!;
+  }
+
+  const { itemLC116, descricaoLC116, nbs, descricaoNbs } = resolverServicoFiscal(safeCode);
   const ausenteOficial = !itemLC116 && !nbs;
 
   let categoriaExecutiva = "Outros Serviços";
@@ -617,13 +636,13 @@ export function classificarServicoLocal(
   }
 
   if (regraAplicada) {
-    return {
-      codigo,
+    const result: ServiceClassification = {
+      codigo: safeCode,
       categoriaExecutiva: regraAplicada.categoriaExecutiva,
       grupoOperacional: regraAplicada.grupoOperacional,
-      codigoLc116: itemLC116 || (cleanCode.length <= 4 ? codigo : ""),
+      codigoLc116: itemLC116 || (cleanCode.length <= 4 ? safeCode : ""),
       descricaoLc116,
-      codigoNbs: nbs || (cleanCode.length >= 9 ? codigo : ""),
+      codigoNbs: nbs || (cleanCode.length >= 9 ? safeCode : ""),
       descricaoNbs,
       origem: "Manual",
       confianca: 100,
@@ -632,6 +651,8 @@ export function classificarServicoLocal(
       conflito: false,
       ausenteOficial,
     };
+    CLASSIFICACAO_CACHE.set(cacheKey, result);
+    return result;
   }
 
   // -- Prioridade 2: Mapeamento Oficial LC 116 + NBS --
@@ -775,7 +796,8 @@ export function classificarServicoLocal(
       }
     }
 
-    if (!inferredExecutiva) {
+    // Só rodamos Jaccard (O(N)) se o código NÃO foi mapeado oficialmente, reduzindo drastically o processamento
+    if (!inferredExecutiva && !mapeado) {
       let bestJaccard = 0;
       let matchedItem: any = null;
 
@@ -831,13 +853,13 @@ export function classificarServicoLocal(
     }
   }
 
-  return {
-    codigo,
+  const result: ServiceClassification = {
+    codigo: safeCode,
     categoriaExecutiva,
     grupoOperacional,
-    codigoLc116: itemLC116 || (cleanCode.length <= 4 ? codigo : ""),
+    codigoLc116: itemLC116 || (cleanCode.length <= 4 ? safeCode : ""),
     descricaoLc116,
-    codigoNbs: nbs || (cleanCode.length >= 9 ? codigo : ""),
+    codigoNbs: nbs || (cleanCode.length >= 9 ? safeCode : ""),
     descricaoNbs,
     origem,
     confianca,
@@ -846,6 +868,9 @@ export function classificarServicoLocal(
     conflito,
     ausenteOficial,
   };
+
+  CLASSIFICACAO_CACHE.set(cacheKey, result);
+  return result;
 }
 
 export function categorizarServico(desc: string, code?: string, todasCategorias?: string[]): string {
