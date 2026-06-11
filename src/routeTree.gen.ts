@@ -9,8 +9,32 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TomadosRouteImport } from './routes/tomados'
+import { Route as GrupoRouteImport } from './routes/grupo'
+import { Route as ConciliationRouteImport } from './routes/conciliation'
+import { Route as CategoriasRouteImport } from './routes/categorias'
 import { Route as IndexRouteImport } from './routes/index'
 
+const TomadosRoute = TomadosRouteImport.update({
+  id: '/tomados',
+  path: '/tomados',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GrupoRoute = GrupoRouteImport.update({
+  id: '/grupo',
+  path: '/grupo',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ConciliationRoute = ConciliationRouteImport.update({
+  id: '/conciliation',
+  path: '/conciliation',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CategoriasRoute = CategoriasRouteImport.update({
+  id: '/categorias',
+  path: '/categorias',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -19,28 +43,72 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/categorias': typeof CategoriasRoute
+  '/conciliation': typeof ConciliationRoute
+  '/grupo': typeof GrupoRoute
+  '/tomados': typeof TomadosRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/categorias': typeof CategoriasRoute
+  '/conciliation': typeof ConciliationRoute
+  '/grupo': typeof GrupoRoute
+  '/tomados': typeof TomadosRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/categorias': typeof CategoriasRoute
+  '/conciliation': typeof ConciliationRoute
+  '/grupo': typeof GrupoRoute
+  '/tomados': typeof TomadosRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths: '/' | '/categorias' | '/conciliation' | '/grupo' | '/tomados'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/categorias' | '/conciliation' | '/grupo' | '/tomados'
+  id: '__root__' | '/' | '/categorias' | '/conciliation' | '/grupo' | '/tomados'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  CategoriasRoute: typeof CategoriasRoute
+  ConciliationRoute: typeof ConciliationRoute
+  GrupoRoute: typeof GrupoRoute
+  TomadosRoute: typeof TomadosRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/tomados': {
+      id: '/tomados'
+      path: '/tomados'
+      fullPath: '/tomados'
+      preLoaderRoute: typeof TomadosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/grupo': {
+      id: '/grupo'
+      path: '/grupo'
+      fullPath: '/grupo'
+      preLoaderRoute: typeof GrupoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/conciliation': {
+      id: '/conciliation'
+      path: '/conciliation'
+      fullPath: '/conciliation'
+      preLoaderRoute: typeof ConciliationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/categorias': {
+      id: '/categorias'
+      path: '/categorias'
+      fullPath: '/categorias'
+      preLoaderRoute: typeof CategoriasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -53,6 +121,10 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  CategoriasRoute: CategoriasRoute,
+  ConciliationRoute: ConciliationRoute,
+  GrupoRoute: GrupoRoute,
+  TomadosRoute: TomadosRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
