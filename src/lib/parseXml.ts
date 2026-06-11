@@ -66,12 +66,15 @@ function getIssRetido(root: unknown): "Sim" | "Não" {
   // tpRetISSQN: 1 = Retenção do ISSQN, 3 = Retenção Simples (Simples Nacional).
   // Qualquer outro valor (2 = Não Retido, ausente, ou apenas vISSRet > 0 sem
   // identificação explícita) é tratado como "Não".
-  const tpRetISSQN = pick(root, ["DPS", "infDPS", "valores", "trib", "tribMun", "tpRetISSQN"]) ??
-                     pick(root, ["valores", "trib", "tribMun", "tpRetISSQN"]) ??
-                     pick(root, ["DPS", "infDPS", "valores", "tpRetISSQN"]) ??
-                     pick(root, ["valores", "tpRetISSQN"]);
-  if (tpRetISSQN === 1 || tpRetISSQN === "1") return "Sim";
-  if (tpRetISSQN === 3 || tpRetISSQN === "3") return "Sim";
+  const rawVal = pick(root, ["DPS", "infDPS", "valores", "trib", "tribMun", "tpRetISSQN"]) ??
+                 pick(root, ["valores", "trib", "tribMun", "tpRetISSQN"]) ??
+                 pick(root, ["DPS", "infDPS", "valores", "tpRetISSQN"]) ??
+                 pick(root, ["valores", "tpRetISSQN"]);
+  if (rawVal === undefined || rawVal === null) return "Não";
+
+  const tpRetISSQN = String(rawVal).trim().toLowerCase();
+  if (tpRetISSQN === "1" || tpRetISSQN.startsWith("1") || tpRetISSQN.includes("retenção do issqn") || tpRetISSQN.includes("retencao do issqn")) return "Sim";
+  if (tpRetISSQN === "3" || tpRetISSQN.startsWith("3") || tpRetISSQN.includes("retenção simples") || tpRetISSQN.includes("retencao simples")) return "Sim";
   return "Não";
 }
 

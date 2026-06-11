@@ -3196,12 +3196,9 @@ function Dashboard() {
                 if (empresaFiltroTomadas !== "__all__" && n.cnpjTomador !== empresaFiltroTomadas) return false;
                 if (searchTomadas) {
                   const query = searchTomadas.toLowerCase().trim();
-                  const matchNome = (n.nomePrestador || "").toLowerCase().includes(query) || 
-                                    (n.nomeTomador || "").toLowerCase().includes(query) ||
-                                    (n.cnpjPrestador || "").includes(query) ||
-                                    (n.cnpjTomador || "").includes(query);
+                  const matchFornecedor = (n.nomePrestador || "").toLowerCase().includes(query);
                   const matchNFS = (n.nNFSe || "").toLowerCase().includes(query);
-                  if (!matchNome && !matchNFS) return false;
+                  if (!matchFornecedor && !matchNFS) return false;
                 }
                 return true;
               });
@@ -3209,7 +3206,7 @@ function Dashboard() {
               const totalTomados = notasTomValidas.reduce((s, n) => s + n.valor, 0);
               const fornecedoresAtivos = new Set(notasTomValidas.map((n) => n.cnpjPrestador)).size;
               const ticketMedioFornecedor = fornecedoresAtivos > 0 ? totalTomados / fornecedoresAtivos : 0;
-              const issRetidoTomadaTotal = notasTomValidas.reduce((s, n) => n.issRetido === "Sim" ? s + n.vlrIssRet : s, 0);
+              const issRetidoTomadaTotal = notasTomValidas.reduce((s, n) => s + (n.issRetido === "Sim" ? (Number(n.vlrIssRet) || 0) : 0), 0);
               const irrfTotal = notasTomValidas.reduce((s, n) => s + (n.vlrIrrf ?? 0), 0);
               const csllTotal = notasTomValidas.reduce((s, n) => s + (n.vlrCsll ?? 0), 0);
               const pisTotal  = notasTomValidas.reduce((s, n) => s + (n.vlrPis  ?? 0), 0);
@@ -3274,10 +3271,10 @@ function Dashboard() {
                 if (!key) return;
                 const e = retMap.get(key) ?? { ISS: 0, IRRF: 0, CSPN: 0, INSS: 0 };
                 retMap.set(key, {
-                  ISS:  e.ISS  + (n.issRetido === "Sim" ? n.vlrIssRet : 0),
-                  IRRF: e.IRRF + (n.vlrIrrf ?? 0),
-                  CSPN: e.CSPN + (n.vlrCsll ?? 0) + (n.vlrPis ?? 0) + (n.vlrCofins ?? 0),
-                  INSS: e.INSS + (n.vlrInss ?? 0),
+                  ISS:  e.ISS  + (n.issRetido === "Sim" ? (Number(n.vlrIssRet) || 0) : 0),
+                  IRRF: e.IRRF + (Number(n.vlrIrrf) || 0),
+                  CSPN: e.CSPN + (Number(n.vlrCsll) || 0) + (Number(n.vlrPis) || 0) + (Number(n.vlrCofins) || 0),
+                  INSS: e.INSS + (Number(n.vlrInss) || 0),
                 });
               });
               const retData = Array.from(retMap.entries()).sort(([a],[b])=>a.localeCompare(b)).map(([k,v]) => ({
@@ -3447,11 +3444,11 @@ function Dashboard() {
                     <div className="bg-card border border-border rounded-2xl p-5 shadow-xs">
                       <h3 className="text-xs font-bold text-foreground mb-1">Por Tipo de Serviço</h3>
                       <p className="text-[10px] text-muted-foreground mb-4">Distribuição por categoria de serviço</p>
-                      <div className="h-[180px] relative flex items-center justify-center">
+                      <div className="h-[260px] relative flex items-center justify-center">
                         {servicoData.length === 0 ? <EmptyState /> : (
                           <ResponsiveContainer width="100%" height="100%">
                             <PieChart>
-                              <Pie data={servicoData} dataKey="value" nameKey="name" innerRadius={45} outerRadius={70} paddingAngle={3} stroke="var(--color-card)" strokeWidth={3}>
+                              <Pie data={servicoData} dataKey="value" nameKey="name" innerRadius={55} outerRadius={90} paddingAngle={3} stroke="var(--color-card)" strokeWidth={3}>
                                 {servicoData.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
                               </Pie>
                               <Tooltip formatter={(v) => fmtBRL(Number(v))} contentStyle={{ backgroundColor: "var(--color-popover)", borderColor: "var(--color-border)", borderRadius: 12, color: "var(--color-foreground)" }} />
