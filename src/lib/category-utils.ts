@@ -56,7 +56,89 @@ export const lc116DescricaoMap = new Map<string, string>();
 export const cClassTribLookupMap = new Map<string, string>();
 export const cClassTribDescricaoMap = new Map<string, string>();
 
+/**
+ * Formata a descrição longa e formal de um subitem em um nome curto e elegante para categorias.
+ */
+export function obterNomeCategoriaDeSubitem(desc: string): string {
+  if (!desc || desc === "Sem descrição" || desc.startsWith("Outros (")) {
+    return "";
+  }
+
+  let text = desc.trim();
+
+  // Remove ponto final
+  if (text.endsWith(".")) {
+    text = text.slice(0, -1);
+  }
+
+  // Lista de substituições de prefixos formais da LC 116 e NBS
+  const prefixosParaRemover = [
+    /^[Ss]erviços de /i,
+    /^[Ss]erviços relativos a /i,
+    /^[Ss]erviços relacionados com /i,
+    /^[Ss]erviços relacionados a /i,
+    /^[Ee]xecução de /i,
+    /^[Aa]dministração, agenciamento ou gerência de /i,
+    /^[Aa]dministração de /i,
+    /^[Pp]lanejamento, organização e administração de /i,
+    /^[Ll]ocação, sublocação, arrendamento, direito de uso, cessão de direito ou exploração de /i,
+  ];
+
+  for (const regex of prefixosParaRemover) {
+    if (regex.test(text)) {
+      text = text.replace(regex, "");
+      break;
+    }
+  }
+
+  // Substituições de termos específicos muito longos
+  text = text
+    .replace(/^[Aa]ssessoria ou consultoria de qualquer natureza/i, "Assessoria ou Consultoria")
+    .replace(/^[Ll]ocação de /i, "Locação de ")
+    .replace(/^[Cc]essão de direito de /i, "Cessão de ");
+
+  // Trunca em vírgulas, ponto e vírgula, parênteses ou traços para manter o nome curto
+  const limitadores = [";", "(", " - "];
+  for (const lim of limitadores) {
+    const idx = text.indexOf(lim);
+    if (idx !== -1) {
+      text = text.substring(0, idx);
+    }
+  }
+
+  text = text.trim();
+
+  // Capitaliza a primeira letra de cada palavra (Title Case)
+  if (text.length > 0) {
+    text = text
+      .split(" ")
+      .map((w) => {
+        if (w.length <= 2 && ["de", "do", "da", "em", "para", "com", "ou", "e"].includes(w.toLowerCase())) {
+          return w.toLowerCase();
+        }
+        return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+      })
+      .join(" ");
+  }
+
+  // Remove preposições ou conjunções pendentes no final do texto truncado
+  const stopWords = ["de", "do", "da", "em", "para", "com", "ou", "e", "que", "se", "ao", "a"];
+  let words = text.split(" ");
+  while (words.length > 0 && stopWords.includes(words[words.length - 1].toLowerCase())) {
+    words.pop();
+  }
+  return words.join(" ");
+}
+
+// Inicializa o mapa lc116CategoriasMap dinamicamente com os 200 subitens do nbs_mapping
 nbsMapping.forEach((item: any) => {
+  if (item.itemLC116 && item.descricaoLC116) {
+    const cleanName = obterNomeCategoriaDeSubitem(item.descricaoLC116);
+    if (cleanName && !lc116CategoriasMap[item.itemLC116]) {
+      lc116CategoriasMap[item.itemLC116] = cleanName;
+    }
+  }
+
   const cleanNbs = String(item.nbs || "").replace(/\D/g, "");
   const cleanLc116 = String(item.itemLC116 || "").replace(/\D/g, "").replace(/^0+/, "");
 
@@ -78,8 +160,7 @@ nbsMapping.forEach((item: any) => {
   const parts = cClassTrib.match(/\d{6}/g) ?? [];
   for (const part of parts) {
     if (!cClassTribLookupMap.has(part)) {
-      const group = String(item.itemLC116 || "").split(".")[0].padStart(2, "0");
-      cClassTribLookupMap.set(part, group);
+      cClassTribLookupMap.set(part, item.itemLC116);
     }
     if (!cClassTribDescricaoMap.has(part)) {
       cClassTribDescricaoMap.set(part, item.descricaoLC116 || "");
@@ -149,13 +230,13 @@ export function obterCategoriaPorCodigo(code: string): string | null {
 
   if (!itemGroup && clean.length >= 9) {
     const matched = nbsLookupMap.get(clean);
-    if (matched) itemGroup = matched.split(".")[0].padStart(2, "0");
+    if (matched) itemGroup = matched;
   }
 
   if (!itemGroup && clean.length >= 2 && clean.length <= 4) {
     const normalized = clean.replace(/^0+/, "");
     const matched = lc116LookupMap.get(normalized);
-    if (matched) itemGroup = matched.split(".")[0].padStart(2, "0");
+    if (matched) itemGroup = matched;
   }
 
   if (!itemGroup) {
@@ -292,23 +373,17 @@ export function categorizarServico(desc: string, code?: string, todasCategorias?
   if (code) {
     const clean = String(code).trim().replace(/\D/g, "");
     if (clean.length === 6) {
-      const group = cClassTribLookupMap.get(clean);
-      if (group && lc116CategoriasMap[group]) return lc116CategoriasMap[group];
+      const matched = cClassTribLookupMap.get(clean);
+      if (matched && lc116CategoriasMap[matched]) return lc116CategoriasMap[matched];
     }
     if (clean.length >= 9) {
       const matched = nbsLookupMap.get(clean);
-      if (matched) {
-        const group = matched.split(".")[0].padStart(2, "0");
-        if (lc116CategoriasMap[group]) return lc116CategoriasMap[group];
-      }
+      if (matched && lc116CategoriasMap[matched]) return lc116CategoriasMap[matched];
     }
     if (clean.length >= 2 && clean.length <= 4) {
       const normalized = clean.replace(/^0+/, "");
       const matched = lc116LookupMap.get(normalized);
-      if (matched) {
-        const group = matched.split(".")[0].padStart(2, "0");
-        if (lc116CategoriasMap[group]) return lc116CategoriasMap[group];
-      }
+      if (matched && lc116CategoriasMap[matched]) return lc116CategoriasMap[matched];
     }
 
     const cat = obterCategoriaPorCodigo(code);
