@@ -270,51 +270,57 @@ function categorizarServico(desc: string): string {
   // Mapeia códigos de serviço da LC 116/2003 e cTribNac para suas descrições/categorias
   const cleanCode = s.replace(/\D/g, "");
   if (/^\d+$/.test(cleanCode) && cleanCode.length > 0) {
-    if (cleanCode.startsWith("01") || cleanCode.startsWith("101") || cleanCode.startsWith("102") || cleanCode.startsWith("103") || cleanCode.startsWith("104") || cleanCode.startsWith("105") || cleanCode.startsWith("106") || cleanCode.startsWith("107") || cleanCode.startsWith("108")) {
-      s += " tecnologia ti software sistema informática";
+    if (cleanCode.startsWith("01") || cleanCode.startsWith("101") || cleanCode.startsWith("102") || cleanCode.startsWith("103") || cleanCode.startsWith("104") || cleanCode.startsWith("105") || cleanCode.startsWith("106") || cleanCode.startsWith("107") || cleanCode.startsWith("108") || cleanCode.startsWith("109")) {
+      s += " tecnologia ti software sistema informática internet cloud datacenter suporte";
     } else if (cleanCode.startsWith("03") || cleanCode.startsWith("301") || cleanCode.startsWith("302") || cleanCode.startsWith("303") || cleanCode.startsWith("304") || cleanCode.startsWith("305")) {
-      s += " locação aluguel";
-    } else if (cleanCode.startsWith("04") || cleanCode.startsWith("401") || cleanCode.startsWith("402") || cleanCode.startsWith("403") || cleanCode.startsWith("404") || cleanCode.startsWith("405") || cleanCode.startsWith("422") || cleanCode.startsWith("433")) {
-      s += " saúde hospitalar médico clinic exame";
-    } else if (cleanCode.startsWith("07") || cleanCode.startsWith("701") || cleanCode.startsWith("702") || cleanCode.startsWith("703") || cleanCode.startsWith("704") || cleanCode.startsWith("705")) {
-      s += " engenharia construção obra projeto";
-    } else if (cleanCode.startsWith("10") || cleanCode.startsWith("1001") || cleanCode.startsWith("1002") || cleanCode.startsWith("1003") || cleanCode.startsWith("1004") || cleanCode.startsWith("1005") || cleanCode.startsWith("1009") || cleanCode.startsWith("1010")) {
-      s += " publicidade marketing propaganda";
-    } else if (cleanCode.startsWith("11") || cleanCode.startsWith("1101") || cleanCode.startsWith("1102") || cleanCode.startsWith("1103") || cleanCode.startsWith("1104") || cleanCode.startsWith("1105")) {
-      s += " transporte logística frete entrega";
-    } else if (cleanCode.startsWith("14") || cleanCode.startsWith("1401") || cleanCode.startsWith("1402") || cleanCode.startsWith("1403") || cleanCode.startsWith("1404") || cleanCode.startsWith("1405") || cleanCode.startsWith("1406")) {
-      s += " manutenção reparos conserto";
-    } else if (cleanCode.startsWith("17") || cleanCode.startsWith("1701") || cleanCode.startsWith("1702") || cleanCode.startsWith("1703") || cleanCode.startsWith("1704") || cleanCode.startsWith("1705") || cleanCode.startsWith("1706")) {
-      s += " consultoria assessoria advocacia jurídica contábil";
-    } else if (cleanCode.startsWith("09") || cleanCode.startsWith("901") || cleanCode.startsWith("902") || cleanCode.startsWith("903")) {
-      s += " hospedagem turismo";
-    } else if (cleanCode.startsWith("12") || cleanCode.startsWith("1201") || cleanCode.startsWith("1202") || cleanCode.startsWith("1203")) {
-      s += " recreação lazer entretenimento";
-    } else if (cleanCode.startsWith("15") || cleanCode.startsWith("1501") || cleanCode.startsWith("1502") || cleanCode.startsWith("1503")) {
-      s += " assessoria financeira bancários";
+      s += " locação aluguel leasing bens moveis equipamentos";
+    } else if (cleanCode.startsWith("04") || cleanCode.startsWith("401") || cleanCode.startsWith("402") || cleanCode.startsWith("403") || cleanCode.startsWith("404") || cleanCode.startsWith("405") || cleanCode.startsWith("406") || cleanCode.startsWith("407") || cleanCode.startsWith("408") || cleanCode.startsWith("409") || cleanCode.startsWith("410") || cleanCode.startsWith("411") || cleanCode.startsWith("412") || cleanCode.startsWith("413") || cleanCode.startsWith("414") || cleanCode.startsWith("415") || cleanCode.startsWith("416") || cleanCode.startsWith("417") || cleanCode.startsWith("418") || cleanCode.startsWith("419") || cleanCode.startsWith("420") || cleanCode.startsWith("421") || cleanCode.startsWith("422") || cleanCode.startsWith("423")) {
+      s += " saúde hospitalar médico clinic exame laboratorio analise clinica fisioterapia enfermagem";
+    } else if (cleanCode.startsWith("07") || cleanCode.startsWith("701") || cleanCode.startsWith("702") || cleanCode.startsWith("703") || cleanCode.startsWith("704") || cleanCode.startsWith("705") || cleanCode.startsWith("706") || cleanCode.startsWith("707") || cleanCode.startsWith("708") || cleanCode.startsWith("709") || cleanCode.startsWith("710") || cleanCode.startsWith("711") || cleanCode.startsWith("712") || cleanCode.startsWith("713") || cleanCode.startsWith("714") || cleanCode.startsWith("715") || cleanCode.startsWith("716") || cleanCode.startsWith("717") || cleanCode.startsWith("718") || cleanCode.startsWith("719") || cleanCode.startsWith("720") || cleanCode.startsWith("721") || cleanCode.startsWith("722")) {
+      s += " engenharia construção obra projeto arquitetura demolição reforma";
+    } else if (cleanCode.startsWith("08") || cleanCode.startsWith("801") || cleanCode.startsWith("802")) {
+      s += " treinamento educação ensino curso instrução escola palestra capacitação";
+    } else if (cleanCode.startsWith("10") || cleanCode.startsWith("1001") || cleanCode.startsWith("1002") || cleanCode.startsWith("1003") || cleanCode.startsWith("1004") || cleanCode.startsWith("1005") || cleanCode.startsWith("1006") || cleanCode.startsWith("1007") || cleanCode.startsWith("1008") || cleanCode.startsWith("1009") || cleanCode.startsWith("1010")) {
+      s += " publicidade marketing propaganda mídia veiculação agenciamento publicitario";
+    } else if (cleanCode.startsWith("11") || cleanCode.startsWith("1101") || cleanCode.startsWith("1102") || cleanCode.startsWith("1103") || cleanCode.startsWith("1104") || cleanCode.startsWith("1105") || cleanCode.startsWith("1601") || cleanCode.startsWith("1602")) {
+      s += " transporte logística frete entrega fretamento carga correio";
+    } else if (cleanCode.startsWith("14") || cleanCode.startsWith("1401") || cleanCode.startsWith("1402") || cleanCode.startsWith("1403") || cleanCode.startsWith("1404") || cleanCode.startsWith("1405") || cleanCode.startsWith("1406") || cleanCode.startsWith("1407") || cleanCode.startsWith("1408") || cleanCode.startsWith("1409") || cleanCode.startsWith("1410") || cleanCode.startsWith("1411") || cleanCode.startsWith("1412") || cleanCode.startsWith("1413") || cleanCode.startsWith("1414")) {
+      s += " manutenção reparos conserto reforma instalação elevador ar condicionado";
+    } else if (cleanCode.startsWith("15") || cleanCode.startsWith("1501") || cleanCode.startsWith("1502") || cleanCode.startsWith("1503") || cleanCode.startsWith("1504") || cleanCode.startsWith("1505") || cleanCode.startsWith("1518")) {
+      s += " serviços financeiros bancários crédito cartão corretagem cobrança";
+    } else if (cleanCode.startsWith("17") || cleanCode.startsWith("1701") || cleanCode.startsWith("1702") || cleanCode.startsWith("1703") || cleanCode.startsWith("1704") || cleanCode.startsWith("1705") || cleanCode.startsWith("1706") || cleanCode.startsWith("1709") || cleanCode.startsWith("1710") || cleanCode.startsWith("1711") || cleanCode.startsWith("1712") || cleanCode.startsWith("1713") || cleanCode.startsWith("1714") || cleanCode.startsWith("1715") || cleanCode.startsWith("1716") || cleanCode.startsWith("1717") || cleanCode.startsWith("1718") || cleanCode.startsWith("1719") || cleanCode.startsWith("1720") || cleanCode.startsWith("1721") || cleanCode.startsWith("1722") || cleanCode.startsWith("1723") || cleanCode.startsWith("1724") || cleanCode.startsWith("1725")) {
+      s += " consultoria assessoria advocacia jurídica contábil auditoria rh recrutamento selecao recepcao apoio";
     } else if (cleanCode.startsWith("23") || cleanCode.startsWith("2301")) {
-      s += " programação planejamento de eventos";
+      s += " programação eventos organização produções congressos festas";
+    } else if (cleanCode.startsWith("21") || cleanCode.startsWith("2101")) {
+      s += " cartório tabelionato registros publicos";
+    } else if (cleanCode.startsWith("26") || cleanCode.startsWith("2601")) {
+      s += " entrega correspondencia correios expressa malote";
     }
   }
 
   if (!s.trim()) return "Outros";
   const rules: Array<[string, string[]]> = [
     ["Saúde / Hospitalar", ["hospital", "médic", "medic", "clínic", "clinic", "laboratóri", "laboratori", "exame", "enfermag", "fisioterap", "saúde", "saude"]],
-    ["Locação / Aluguel", ["locaç", "locac", "aluguel"]],
-    ["Manutenção e Reparos", ["manutenç", "manutenc", "reparo", "conserto", "assistência técnica", "assistencia tecnica"]],
-    ["Limpeza e Conservação", ["limpeza", "conservaç", "conservac", "higieniz"]],
-    ["Segurança e Vigilância", ["seguranç", "seguranc", "vigilânc", "vigilanc", "portaria"]],
-    ["Transporte e Logística", ["transporte", "frete", "logístic", "logistic", "entrega"]],
-    ["Consultoria e Assessoria", ["consultor", "assessor", "advoc", "jurídic", "juridic", "contábil", "contabil", "auditoria"]],
-    ["Tecnologia / TI", ["software", "sistema", "informátic", "informatic", "licença", "licenca", "hospedagem", "cloud", "suporte técnic", "suporte tecnic"]],
-    ["Treinamento e Educação", ["treinamento", "curso", "capacitaç", "capacitac", "ensino", "educação", "educacao"]],
-    ["Publicidade e Marketing", ["publicidade", "marketing", "propaganda", "mídia", "midia"]],
-    ["Engenharia e Construção", ["engenhar", "obra", "construç", "construc", "projeto"]],
-    ["Alimentação", ["alimentaç", "alimentac", "refeiç", "refeic", "restaurante", "lanche"]],
-    ["Hospedagem e Turismo", ["turismo", "hospedagem", "hotel", "pousada"]],
+    ["Locação / Aluguel", ["locaç", "locac", "aluguel", "leasing"]],
+    ["Manutenção e Reparos", ["manutenç", "manutenc", "reparo", "conserto", "assistência técnica", "assistencia tecnica", "reforma", "instalaç", "instalac"]],
+    ["Limpeza e Conservação", ["limpeza", "conservaç", "conservac", "higieniz", "jardinagem", "detetizac", "dedetizac", "desinsetizac"]],
+    ["Segurança e Vigilância", ["seguranç", "seguranc", "vigilânc", "vigilanc", "portaria", "monitoramento"]],
+    ["Transporte e Logística", ["transporte", "frete", "logístic", "logistic", "entrega", "fretamento", "moto boy", "motoboy", "correio", "malote"]],
+    ["Consultoria e Assessoria", ["consultor", "assessor", "auditoria", "conselho", "gestão", "gestao"]],
+    ["Tecnologia / TI", ["software", "sistema", "informátic", "informatic", "licença", "licenca", "hospedagem", "cloud", "suporte técnic", "suporte tecnic", "internet", "link", "telecom", "fibra optica"]],
+    ["Treinamento e Educação", ["treinamento", "curso", "capacitaç", "capacitac", "ensino", "educação", "educacao", "palestra", "escola"]],
+    ["Publicidade e Marketing", ["publicidade", "marketing", "propaganda", "mídia", "midia", "comunicacao", "veiculacao"]],
+    ["Engenharia e Construção", ["engenhar", "obra", "construç", "construc", "projeto", "arquitet", "topograf"]],
+    ["Alimentação", ["alimentaç", "alimentac", "refeiç", "refeic", "restaurante", "lanche", "refeicoes", "buffet", "catering"]],
+    ["Hospedagem e Turismo", ["turismo", "hospedagem", "hotel", "pousada", "viagem", "passagem aerea"]],
     ["Lazer e Recreação", ["lazer", "entretenimento", "recreação", "recreac"]],
-    ["Serviços Financeiros", ["financeiro", "bancário", "bancario", "crédito", "credito"]],
-    ["Eventos e Produções", ["evento", "produção", "produc", "planejamento"]],
+    ["Serviços Financeiros", ["financeiro", "bancário", "bancario", "crédito", "credito", "cobranca", "cobrança", "seguro", "corretagem"]],
+    ["Eventos e Produções", ["evento", "produção", "produc", "planejamento", "festa", "congresso"]],
+    ["Serviços Administrativos", ["recepção", "recepcao", "apoio", "digitador", "digitação", "digitacao", "atendimento", "telemarketing", "secretaria"]],
+    ["Lavanderia e Higienização", ["lavanderia", "lavagem", "passadoria", "higienização têxtil", "higienizacao textil", "lavar"]],
+    ["Serviços Jurídicos e Cartoriais", ["advog", "advoc", "jurídic", "juridic", "cartório", "cartorio", "tabeliã", "tabelia", "notaria"]],
+    ["Descarte de Resíduos", ["lixo", "resíduo", "residuo", "descarte", "tratamento de agua", "coleta de lixo", "incineracao", "biomedico"]],
   ];
   for (const [cat, keys] of rules) {
     if (keys.some((k) => s.includes(k))) return cat;
@@ -388,6 +394,7 @@ function Dashboard() {
   const [empresaFiltroTomadas, setEmpresaFiltroTomadas] = useState("__all__");
   const [searchTomadas, setSearchTomadas] = useState("");
   const [pageTomadas, setPageTomadas] = useState(1);
+  const [categoriaFiltroTomadas, setCategoriaFiltroTomadas] = useState<string | "__all__">("__all__");
   const fileRefTomadas = useRef<HTMLInputElement>(null);
   const PAGE_SIZE_TOMADAS = 20;
 
@@ -505,7 +512,7 @@ function Dashboard() {
 
   useEffect(() => {
     setPageTomadas(1);
-  }, [empresaFiltroTomadas, mesFiltroTomadas, anoFiltroTomadas, searchTomadas]);
+  }, [empresaFiltroTomadas, mesFiltroTomadas, anoFiltroTomadas, searchTomadas, categoriaFiltroTomadas]);
 
   const todasNotas = useLiveQuery(() => db.notas.toArray(), [], [] as NotaFiscal[]);
 
@@ -3312,7 +3319,7 @@ function Dashboard() {
             {/* ═══════════════════════════════════════════════════════════ */}
             {activeTab === "tomados" && (() => {
               // ── Derived data ─────────────────────────────────────────
-              const notasTomValidas = (todasNotasTomadas ?? []).filter((n) => {
+              const notasTomValidasSemCategoria = (todasNotasTomadas ?? []).filter((n) => {
                 if (n.status !== "válida") return false;
                 const ds = (n.dCompet || n.dhEmi || "").slice(0, 10);
                 if (mesFiltroTomadas !== "__all__" && ds.slice(5, 7) !== mesFiltroTomadas) return false;
@@ -3325,6 +3332,43 @@ function Dashboard() {
                   if (!matchFornecedor && !matchNFS) return false;
                 }
                 return true;
+              });
+
+              // Gráfico B — distribuição por categoria de serviço (derivada da descrição)
+              const servicoMap = new Map<string, number>();
+              notasTomValidasSemCategoria.forEach((n) => {
+                const key = categorizarServico(n.servico);
+                servicoMap.set(key, (servicoMap.get(key) ?? 0) + n.valor);
+              });
+              const SERV_COLORS = [
+                "#6366f1", // Indigo
+                "#14b8a6", // Teal
+                "#f59e0b", // Amber
+                "#ec4899", // Pink
+                "#8b5cf6", // Violet
+                "#ef4444", // Red
+                "#06b6d4", // Cyan
+                "#10b981", // Emerald
+                "#3b82f6", // Blue
+                "#64748b"  // Slate (for Outras)
+              ];
+              const servicoEntries = Array.from(servicoMap.entries()).sort(([,a],[,b]) => b-a);
+              const topServicos = servicoEntries.slice(0, 9);
+              const top9Keys = topServicos.map(([k]) => k);
+              const outrosServ = servicoEntries.slice(9).reduce((s,[,v]) => s+v, 0);
+              const servicoData = [
+                ...topServicos.map(([k,v],i)=>({name:k,value:v,fill:SERV_COLORS[i % 9]})), 
+                ...(outrosServ > 0 ? [{name:"Outras",value:outrosServ,fill:SERV_COLORS[9]}] : [])
+              ];
+
+              // Filtra notas por categoria ativa
+              const notasTomValidas = notasTomValidasSemCategoria.filter((n) => {
+                if (categoriaFiltroTomadas === "__all__") return true;
+                const cat = categorizarServico(n.servico);
+                if (categoriaFiltroTomadas === "Outras") {
+                  return !top9Keys.includes(cat);
+                }
+                return cat === categoriaFiltroTomadas;
               });
 
               const totalTomados = notasTomValidas.reduce((s, n) => s + n.valor, 0);
@@ -3352,33 +3396,6 @@ function Dashboard() {
                 label: ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"][parseInt(k.slice(5,7))-1] + "/" + k.slice(2,4),
                 valor: v,
               }));
-
-              // Gráfico B — distribuição por categoria de serviço (derivada da descrição)
-              const servicoMap = new Map<string, number>();
-              notasTomValidas.forEach((n) => {
-                const key = categorizarServico(n.servico);
-                servicoMap.set(key, (servicoMap.get(key) ?? 0) + n.valor);
-              });
-              const SERV_COLORS = [
-                "#6366f1", // Indigo
-                "#14b8a6", // Teal
-                "#f59e0b", // Amber
-                "#ec4899", // Pink
-                "#8b5cf6", // Violet
-                "#ef4444", // Red
-                "#06b6d4", // Cyan
-                "#10b981", // Emerald
-                "#3b82f6", // Blue
-                "#f97316", // Orange
-                "#64748b"  // Slate (for Outros)
-              ];
-              const servicoEntries = Array.from(servicoMap.entries()).sort(([,a],[,b]) => b-a);
-              const topServicos = servicoEntries.slice(0, 10);
-              const outrosServ = servicoEntries.slice(10).reduce((s,[,v]) => s+v, 0);
-              const servicoData = [
-                ...topServicos.map(([k,v],i)=>({name:k,value:v,fill:SERV_COLORS[i % SERV_COLORS.length]})), 
-                ...(outrosServ > 0 ? [{name:"Outros",value:outrosServ,fill:SERV_COLORS[10]}] : [])
-              ];
 
               // Gráfico C — top 8 fornecedores
               const fornMap = new Map<string, { nome: string; total: number }>();
@@ -3566,30 +3583,90 @@ function Dashboard() {
 
                     {/* Gráfico B — Distribuição por tipo de serviço */}
                     <div className="bg-card border border-border rounded-2xl p-5 shadow-xs">
-                      <h3 className="text-xs font-bold text-foreground mb-1">Por Tipo de Serviço</h3>
-                      <p className="text-[10px] text-muted-foreground mb-4">Distribuição por categoria de serviço</p>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="text-xs font-bold text-foreground mb-1">Por Tipo de Serviço</h3>
+                          <p className="text-[10px] text-muted-foreground mb-4">Distribuição por categoria de serviço</p>
+                        </div>
+                        {categoriaFiltroTomadas !== "__all__" && (
+                          <button
+                            onClick={() => {
+                              setCategoriaFiltroTomadas("__all__");
+                              setPageTomadas(1);
+                            }}
+                            className="text-[9px] font-bold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-350 cursor-pointer"
+                          >
+                            Limpar Filtro
+                          </button>
+                        )}
+                      </div>
                       <div className="h-[260px] relative flex items-center justify-center">
                         {servicoData.length === 0 ? <EmptyState /> : (
                           <ResponsiveContainer width="100%" height="100%">
                             <PieChart>
-                              <Pie data={servicoData} dataKey="value" nameKey="name" innerRadius={65} outerRadius={105} paddingAngle={3} stroke="var(--color-card)" strokeWidth={3}>
-                                {servicoData.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
+                              <Pie
+                                data={servicoData}
+                                dataKey="value"
+                                nameKey="name"
+                                innerRadius={65}
+                                outerRadius={105}
+                                paddingAngle={3}
+                                stroke="var(--color-card)"
+                                strokeWidth={3}
+                                onClick={(data) => {
+                                  if (data && data.name) {
+                                    const clickedName = data.name;
+                                    if (categoriaFiltroTomadas === clickedName) {
+                                      setCategoriaFiltroTomadas("__all__");
+                                    } else {
+                                      setCategoriaFiltroTomadas(clickedName);
+                                    }
+                                    setPageTomadas(1);
+                                  }
+                                }}
+                                className="cursor-pointer outline-none"
+                              >
+                                {servicoData.map((entry, i) => (
+                                  <Cell
+                                    key={i}
+                                    fill={entry.fill}
+                                    className="cursor-pointer outline-none focus:outline-none"
+                                  />
+                                ))}
                               </Pie>
                               <Tooltip formatter={(v) => fmtBRL(Number(v))} contentStyle={{ backgroundColor: "var(--color-popover)", borderColor: "var(--color-border)", borderRadius: 12, color: "var(--color-foreground)" }} />
                             </PieChart>
                           </ResponsiveContainer>
                         )}
                       </div>
-                      <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 mt-2 pt-2 border-t border-border/50">
-                        {servicoData.slice(0, 10).map((d,i) => (
-                          <div key={i} className="flex items-center justify-between text-[10px]">
-                            <span className="flex items-center gap-1.5 text-muted-foreground truncate max-w-[120px]" title={d.name}>
-                              <span className="h-1.5 w-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: d.fill }} />
-                              <span className="truncate">{d.name}</span>
-                            </span>
-                            <span className="font-bold text-foreground flex-shrink-0">{fmtBRL(d.value)}</span>
-                          </div>
-                        ))}
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-1 mt-2 pt-2 border-t border-border/50">
+                        {servicoData.map((d, i) => {
+                          const isSelected = categoriaFiltroTomadas === d.name;
+                          return (
+                            <button
+                              key={i}
+                              onClick={() => {
+                                if (isSelected) {
+                                  setCategoriaFiltroTomadas("__all__");
+                                } else {
+                                  setCategoriaFiltroTomadas(d.name);
+                                }
+                                setPageTomadas(1);
+                              }}
+                              className={`flex items-center justify-between text-[10px] p-1 px-1.5 rounded-lg transition-all text-left cursor-pointer hover:bg-muted/80 w-full ${
+                                isSelected
+                                  ? "bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 font-bold border border-indigo-500/25"
+                                  : "border border-transparent"
+                              }`}
+                            >
+                              <span className="flex items-center gap-1.5 text-muted-foreground truncate max-w-[110px]" title={d.name}>
+                                <span className="h-1.5 w-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: d.fill }} />
+                                <span className="truncate">{d.name}</span>
+                              </span>
+                              <span className="font-bold text-foreground flex-shrink-0 ml-1">{fmtBRL(d.value)}</span>
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
                   </div>
@@ -3642,10 +3719,26 @@ function Dashboard() {
                   {/* Tabela de Notas Tomadas */}
                   <div className="bg-card border border-border rounded-2xl shadow-xs overflow-hidden">
                     <div className="p-5 border-b border-border flex items-center justify-between gap-4 flex-wrap">
-                      <h3 className="text-xs font-bold text-foreground flex items-center gap-2">
-                        <FileText className="h-4 w-4 text-muted-foreground" />
-                        NFS-e Recebidas de Fornecedores ({notasTomValidas.length.toLocaleString("pt-BR")})
-                      </h3>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="text-xs font-bold text-foreground flex items-center gap-2">
+                          <FileText className="h-4 w-4 text-muted-foreground" />
+                          NFS-e Recebidas de Fornecedores ({notasTomValidas.length.toLocaleString("pt-BR")})
+                        </h3>
+                        {categoriaFiltroTomadas !== "__all__" && (
+                          <Badge variant="secondary" className="flex items-center gap-1.5 bg-indigo-500/10 text-indigo-700 hover:bg-indigo-500/20 text-[10px] px-2 py-0.5 rounded-full border border-indigo-500/20 transition-all font-semibold">
+                            Categoria: {categoriaFiltroTomadas}
+                            <button
+                              onClick={() => {
+                                setCategoriaFiltroTomadas("__all__");
+                                setPageTomadas(1);
+                              }}
+                              className="hover:bg-indigo-500/30 rounded-full p-0.5 text-indigo-700 transition-colors cursor-pointer"
+                            >
+                              <XCircle className="h-3 w-3" />
+                            </button>
+                          </Badge>
+                        )}
+                      </div>
                       
                       <div className="flex items-center gap-2.5 flex-wrap">
                         <div className="relative w-48 sm:w-64">
@@ -3677,6 +3770,7 @@ function Dashboard() {
                             <TableHead className="font-medium text-muted-foreground h-9">Competência</TableHead>
                             <TableHead className="font-medium text-muted-foreground h-9">CNPJ Prestador</TableHead>
                             <TableHead className="font-medium text-muted-foreground h-9">Fornecedor</TableHead>
+                            <TableHead className="font-medium text-muted-foreground h-9">Serviço / Categoria</TableHead>
                             <TableHead className="text-right font-medium text-muted-foreground h-9">Vlr. Bruto</TableHead>
                             <TableHead className="text-right font-medium text-muted-foreground h-9">Vlr. Líquido</TableHead>
                             <TableHead className="text-right font-medium text-muted-foreground h-9">Vlr. ISS</TableHead>
@@ -3691,7 +3785,7 @@ function Dashboard() {
                         <TableBody>
                           {paginatedTomadas.length === 0 ? (
                             <TableRow>
-                              <TableCell colSpan={14} className="text-center text-muted-foreground py-12 text-xs">
+                              <TableCell colSpan={15} className="text-center text-muted-foreground py-12 text-xs">
                                 {(todasNotasTomadas?.length ?? 0) === 0
                                   ? "Nenhum serviço tomado importado. Arraste um ZIP acima para começar."
                                   : "Nenhum resultado para os filtros selecionados."}
@@ -3709,6 +3803,10 @@ function Dashboard() {
                               <TableCell className="text-muted-foreground">{n.dCompet ? n.dCompet.slice(0,7) : "—"}</TableCell>
                               <TableCell className="font-mono text-[10px] text-muted-foreground">{n.cnpjPrestador}</TableCell>
                               <TableCell className="max-w-[140px] truncate font-medium" title={n.nomePrestador}>{n.nomePrestador}</TableCell>
+                              <TableCell className="max-w-[180px] truncate" title={n.servico}>
+                                <div className="font-medium text-foreground truncate">{n.servico || "—"}</div>
+                                <div className="text-[9px] text-indigo-600 dark:text-indigo-400 font-bold mt-0.5">{categorizarServico(n.servico)}</div>
+                              </TableCell>
                               <TableCell className="text-right font-bold">{fmtBRL(n.valor)}</TableCell>
                               <TableCell className="text-right text-muted-foreground">{fmtBRL(n.vlrLiquido)}</TableCell>
                               <TableCell className="text-right text-muted-foreground">{n.issRetido === "Sim" && n.vlrIssRet > 0 ? fmtBRL(n.vlrIssRet) : "—"}</TableCell>
