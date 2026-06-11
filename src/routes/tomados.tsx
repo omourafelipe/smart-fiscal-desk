@@ -20,7 +20,7 @@ import {
 } from "recharts";
 import { Calendar, Building2, ShoppingBag, Loader2, Trash2, FileText, XCircle, Search, ChevronLeft, ChevronRight, Download } from "lucide-react";
 import { toast } from "sonner";
-import { db, type NotaFiscalTomada, type CustomCategory, type CategoryOverride } from "@/lib/db";
+import { db, type NotaFiscalTomada } from "@/lib/db";
 import { parseNfseXmlTomada } from "@/lib/parseXml";
 import { useLayoutShell } from "@/components/layout/LayoutShell";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -29,7 +29,6 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { categorizarServico, lc116CategoriasMap, lc116SubItemCategoriasMap, obterGrupoSintetico } from "@/lib/category-utils";
-import { autoCadastrarCategoriasParaNovosCodigos } from "@/lib/category-suggester";
 
 const searchSchema = z.object({
   mes: z.string().optional().catch("__all__"),
@@ -122,26 +121,10 @@ function TomadosRouteComponent() {
   // ── Database query ──────────────────────────────────────────────
   const todasNotasTomadas = useLiveQuery(() => db.notasTomadas.toArray(), [], [] as NotaFiscalTomada[]);
 
-  // Load custom categories from IndexedDB
-  const customCategoriesObj = useLiveQuery(() => db.customCategories.toArray(), [], [] as CustomCategory[]);
-  const customCategories = useMemo(() => {
-    return (customCategoriesObj || []).map((c) => c.nome);
-  }, [customCategoriesObj]);
-
-  // Load category overrides from IndexedDB
-  const categoryOverridesObj = useLiveQuery(() => db.categoryOverrides.toArray(), [], [] as CategoryOverride[]);
-  const categoryOverrides = useMemo(() => {
-    const map: Record<string, string> = {};
-    (categoryOverridesObj || []).forEach((o) => {
-      map[o.codigo] = o.categoria;
-    });
-    return map;
-  }, [categoryOverridesObj]);
-
   const categorizarComOverride = useCallback((servicoDesc: string, code?: string) => {
-    const todas = [...Object.values(lc116SubItemCategoriasMap), ...customCategories];
-    return categorizarServico(servicoDesc, code, todas, categoryOverrides);
-  }, [categoryOverrides, customCategories]);
+    const todas = Object.values(lc116SubItemCategoriasMap);
+    return categorizarServico(servicoDesc, code, todas);
+  }, []);
 
   // File processors
   const processFilesTomadas = useCallback(async (files: FileList) => {
@@ -174,8 +157,6 @@ function TomadosRouteComponent() {
 
       if (batch.length > 0) {
         await db.notasTomadas.bulkPut(batch);
-        const uniqueImportedCodes = Array.from(new Set(batch.map(n => n.codTribNacional).filter(Boolean)));
-        await autoCadastrarCategoriasParaNovosCodigos(uniqueImportedCodes);
         addActivity("upload", `${batch.length} Tomadas Importadas`, `Importação de serviços tomados finalizada.`);
         toast.success(`${batch.length} nota(s) de serviço tomado importada(s).`);
       } else {
@@ -229,7 +210,7 @@ function TomadosRouteComponent() {
         cat || "Sem categoria",
         n.valor.toFixed(2),
         n.vlrLiquido.toFixed(2),
-        n.vlrIss.toFixed(2),
+        (n.vlrIss ?? 0).toFixed(2),
         n.issRetido,
         n.vlrIrrf.toFixed(2),
         n.vlrCsll.toFixed(2),
@@ -272,7 +253,7 @@ function TomadosRouteComponent() {
     const servicoMap = new Map<string, number>();
     notasTomValidasSemCategoria.forEach((n) => {
       const cat = categorizarComOverride(n.servico, n.codTribNacional) || "Sem categoria";
-      const grupo = obterGrupoSintetico(cat, customCategoriesObj || []);
+      const grupo = obterGrupoSintetico(cat);
       servicoMap.set(grupo, (servicoMap.get(grupo) ?? 0) + n.valor);
     });
 
@@ -286,19 +267,19 @@ function TomadosRouteComponent() {
     ];
 
     return { servicoData, top9Keys };
-  }, [notasTomValidasSemCategoria, categorizarComOverride, customCategoriesObj]);
+  }, [notasTomValidasSemCategoria, categorizarComOverride]);
 
   const notasTomValidas = useMemo(() => {
     return notasTomValidasSemCategoria.filter((n) => {
       if (categoriaFiltroTomadas === "__all__") return true;
       const cat = categorizarComOverride(n.servico, n.codTribNacional) || "Sem categoria";
-      const grupo = obterGrupoSintetico(cat, customCategoriesObj || []);
+      const grupo = obterGrupoSintetico(cat);
       if (categoriaFiltroTomadas === "Outras") {
         return !top9Keys.includes(grupo);
       }
       return grupo === categoriaFiltroTomadas;
     });
-  }, [notasTomValidasSemCategoria, categoriaFiltroTomadas, top9Keys, categorizarComOverride, customCategoriesObj]);
+  }, [notasTomValidasSemCategoria, categoriaFiltroTomadas, top9Keys, categorizarComOverride]);
 
   const totalTomados = useMemo(() => notasTomValidas.reduce((s, n) => s + n.valor, 0), [notasTomValidas]);
   const fornecedoresAtivos = useMemo(() => new Set(notasTomValidas.map((n) => n.cnpjPrestador)).size, [notasTomValidas]);

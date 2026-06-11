@@ -35,7 +35,7 @@ export function Topbar({ rightPanelOpen, setRightPanelOpen }: TopbarProps) {
   const setSearchCliente = (val: string) => {
     navigate({
       search: (prev: any) => ({ ...prev, searchCliente: val || undefined }),
-    });
+    } as any);
   };
 
   const getTitle = (path: string) => {
