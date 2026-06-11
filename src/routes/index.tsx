@@ -39,6 +39,7 @@ import { KpiCardNew } from "@/components/shared/KpiCardNew";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -70,6 +71,18 @@ export const Route = createFileRoute("/")({
 });
 
 const fmtBRL = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+const CustomTooltip = ({ active, payload }: any) => {
+  if (active && payload && payload.length) {
+    return (
+      <div className="bg-popover border border-border p-2.5 rounded-xl shadow-md text-[10px] font-medium text-foreground">
+        <p className="font-bold">{payload[0].name}</p>
+        <p className="text-indigo-600 dark:text-indigo-400 mt-0.5">{fmtBRL(Number(payload[0].value))}</p>
+      </div>
+    );
+  }
+  return null;
+};
 
 const formatarData = (dataStr: string) => {
   if (!dataStr) return "—";
@@ -141,10 +154,12 @@ function Dashboard() {
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [tipoClienteFiltro, setTipoClienteFiltro] = useState<string>("__all__");
 
   // Sync route filters change to page 1 reset
   useEffect(() => {
     setCurrentPage(1);
+    setTipoClienteFiltro("__all__");
   }, [mesFiltro, anoFiltro, empresaFiltro, cServFiltro, searchCliente]);
 
   const setMesFiltro = (val: string) =>
@@ -260,10 +275,25 @@ function Dashboard() {
     ];
   }, [notasAtivas]);
 
+  // Helper to determine PJ/PF category
+  const obterTipoCliente = useCallback((n: NotaFiscal) => {
+    const code = String(n.codTribNacional || "").replace(/^0+/, "");
+    if (code === "40301" || code === "040301") return "Outros";
+    const cleanKey = String(n.cnpjCpfCliente ?? "").replace(/\D/g, "");
+    const isPlural = (n.cliente || "").toUpperCase().includes("PLURAL GESTAO");
+    if (isPlural) return "Adesão";
+    if (cleanKey.length === 11) return "Individual/Familiar";
+    return "Empresarial";
+  }, []);
+
   // Sort and paginate notes
   const sortedNotas = useMemo(() => {
-    return [...notasFiltradas].sort((a, b) => (getDateField(b) || "").localeCompare(getDateField(a) || ""));
-  }, [notasFiltradas, getDateField]);
+    let list = [...notasFiltradas];
+    if (tipoClienteFiltro !== "__all__") {
+      list = list.filter((n) => obterTipoCliente(n) === tipoClienteFiltro);
+    }
+    return list.sort((a, b) => (getDateField(b) || "").localeCompare(getDateField(a) || ""));
+  }, [notasFiltradas, tipoClienteFiltro, obterTipoCliente, getDateField]);
 
   const paginatedNotas = useMemo(() => {
     return sortedNotas.slice((currentPage - 1) * 100, currentPage * 100);
@@ -515,7 +545,7 @@ function Dashboard() {
       </div>
 
       {/* METRICS / KPI GRID */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCardNew
           label="Faturamento"
           value={fmtBRL(faturamento)}
@@ -547,14 +577,6 @@ function Dashboard() {
           isPositive={notasAtivasTrend.isPositive}
           subtext="notas fiscais com status ativo"
           tone="amber"
-        />
-        <KpiCardNew
-          label="Cancelamento / Substituição"
-          value={`${cancelRate.toFixed(1)}%`}
-          trendText={cancelRateTrend.text}
-          isPositive={!cancelRateTrend.isPositive}
-          subtext={`${fmtBRL(valorCancelado)} estornados`}
-          tone="rose"
         />
       </div>
 
@@ -741,22 +763,20 @@ function Dashboard() {
                       paddingAngle={3}
                       stroke="var(--color-card)"
                       strokeWidth={3}
+                      onClick={(data) => {
+                        if (data && data.name) {
+                          setTipoClienteFiltro((prev) => (prev === data.name ? "__all__" : data.name));
+                          setCurrentPage(1);
+                        }
+                      }}
+                      className="cursor-pointer outline-none focus:outline-none"
                     >
                       {pjPfData.map((entry, index) => {
                         const colors = ["#6366f1", "#14b8a6", "#ec4899"];
                         return <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />;
                       })}
                     </Pie>
-                    <Tooltip
-                      formatter={(v) => fmtBRL(Number(v))}
-                      contentStyle={{
-                        backgroundColor: "var(--color-popover)",
-                        borderColor: "var(--color-border)",
-                        borderRadius: 12,
-                        color: "var(--color-foreground)",
-                        boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.05)",
-                      }}
-                    />
+                    <Tooltip content={<CustomTooltip />} />
                   </PieChart>
                 </ResponsiveContainer>
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
@@ -815,6 +835,13 @@ function Dashboard() {
                       paddingAngle={3}
                       stroke="var(--color-card)"
                       strokeWidth={3}
+                      onClick={(data) => {
+                        if (data && data.name) {
+                          const filterVal = data.name === "Planos de Saúde" ? "042201" : "040301";
+                          setCServFiltro(cServFiltro === filterVal ? "__all__" : filterVal);
+                        }
+                      }}
+                      className="cursor-pointer outline-none focus:outline-none"
                     >
                       {comparativoServicosData
                         .filter((d) => d.value > 0)
@@ -822,16 +849,7 @@ function Dashboard() {
                           <Cell key={i} fill={entry.fill} />
                         ))}
                     </Pie>
-                    <Tooltip
-                      formatter={(v) => fmtBRL(Number(v))}
-                      contentStyle={{
-                        backgroundColor: "var(--color-popover)",
-                        borderColor: "var(--color-border)",
-                        borderRadius: 12,
-                        color: "var(--color-foreground)",
-                        boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.05)",
-                      }}
-                    />
+                    <Tooltip content={<CustomTooltip />} />
                   </PieChart>
                 </ResponsiveContainer>
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
@@ -901,10 +919,25 @@ function Dashboard() {
       {/* NFS-e PRIMARY TABLE LIST */}
       <div className="bg-card border border-border rounded-2xl shadow-xs overflow-hidden transition-colors duration-300">
         <div className="p-5 border-b border-border flex items-center justify-between gap-4 flex-wrap">
-          <h3 className="text-xs font-bold text-foreground flex items-center gap-2">
-            <FileText className="h-4 w-4 text-muted-foreground" />
-            Notas Fiscais Emitidas ({notasFiltradas.length.toLocaleString("pt-BR")})
-          </h3>
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <h3 className="text-xs font-bold text-foreground flex items-center gap-2">
+              <FileText className="h-4 w-4 text-muted-foreground" />
+              Notas Fiscais Emitidas ({sortedNotas.length.toLocaleString("pt-BR")})
+            </h3>
+            {tipoClienteFiltro !== "__all__" && (
+              <Badge variant="secondary" className="gap-1 bg-indigo-50 text-indigo-700 border-indigo-200/60 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-900/50 px-2 py-0.5 rounded-md text-[10px] font-semibold flex items-center">
+                Filtro: {tipoClienteFiltro}
+                <button
+                  onClick={() => {
+                    setTipoClienteFiltro("__all__");
+                  }}
+                  className="hover:bg-indigo-500/30 rounded-full p-0.5 text-indigo-700 dark:text-indigo-300 transition-colors cursor-pointer ml-1 font-bold focus:outline-none"
+                >
+                  ×
+                </button>
+              </Badge>
+            )}
+          </div>
 
           <div className="flex items-center gap-2.5 flex-wrap">
             <div className="relative w-48 sm:w-64">
@@ -995,9 +1028,9 @@ function Dashboard() {
                     <TableCell className="text-right font-mono text-[10px] text-muted-foreground">{fmtBRL(n.vlrInss ?? 0)}</TableCell>
                     <TableCell
                       className="text-xs text-muted-foreground max-w-[200px] truncate"
-                      title={n.codTribNacional ? `${n.codTribNacional} - ${getServicoDescricao(n.codTribNacional)}` : "—"}
+                      title={n.codTribNacional ? getServicoDescricao(n.codTribNacional) : "—"}
                     >
-                      {n.codTribNacional ? `${n.codTribNacional} - ${getServicoDescricao(n.codTribNacional)}` : "—"}
+                      {n.codTribNacional ? getServicoDescricao(n.codTribNacional) : "—"}
                     </TableCell>
                   </TableRow>
                 ))

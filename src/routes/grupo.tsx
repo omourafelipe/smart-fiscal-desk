@@ -497,8 +497,8 @@ function GrupoRouteComponent() {
                       </div>
                     </TableCell>
                     <TableCell className="text-right font-mono text-xs font-bold text-foreground">{fmtBRL(n.valor)}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate" title={n.codTribNacional ? `${n.codTribNacional} - ${getServicoDescricao(n.codTribNacional)}` : "—"}>
-                      {n.codTribNacional ? `${n.codTribNacional} - ${getServicoDescricao(n.codTribNacional)}` : "—"}
+                    <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate" title={n.codTribNacional ? getServicoDescricao(n.codTribNacional) : "—"}>
+                      {n.codTribNacional ? getServicoDescricao(n.codTribNacional) : "—"}
                     </TableCell>
                   </TableRow>
                 ))

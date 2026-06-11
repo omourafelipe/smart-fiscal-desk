@@ -18,7 +18,7 @@ import {
   Bar,
   Legend,
 } from "recharts";
-import { Calendar, Building2, ShoppingBag, Loader2, Trash2, FileText, XCircle, Search, ChevronLeft, ChevronRight } from "lucide-react";
+import { Calendar, Building2, ShoppingBag, Loader2, Trash2, FileText, XCircle, Search, ChevronLeft, ChevronRight, Download } from "lucide-react";
 import { toast } from "sonner";
 import { db, type NotaFiscalTomada, type CustomCategory, type CategoryOverride } from "@/lib/db";
 import { parseNfseXmlTomada } from "@/lib/parseXml";
@@ -194,6 +194,60 @@ function TomadosRouteComponent() {
     e.preventDefault();
     setDragOverTomadas(false);
     if (e.dataTransfer.files?.length) processFilesTomadas(e.dataTransfer.files);
+  };
+
+  const exportCsvTomadas = () => {
+    const headers = [
+      "Número NFS",
+      "Situação",
+      "Data Emissão",
+      "Competência",
+      "CNPJ Prestador",
+      "Fornecedor",
+      "Serviço",
+      "Categoria",
+      "Vlr. Bruto",
+      "Vlr. Líquido",
+      "Vlr. ISS",
+      "ISS Retido?",
+      "IRRF",
+      "CSLL",
+      "PIS",
+      "COFINS",
+      "INSS",
+    ];
+    const rows = notasTomValidas.map((n) => {
+      const cat = categorizarComOverride(n.servico, n.codTribNacional);
+      return [
+        n.nNFSe,
+        n.status === "válida" ? "Válida" : "Cancelada",
+        formatarData(n.dhEmi),
+        n.dCompet ? n.dCompet.slice(0, 7) : "—",
+        formatarCnpjCpf(n.cnpjPrestador),
+        n.nomePrestador,
+        n.servico,
+        cat || "Sem categoria",
+        n.valor.toFixed(2),
+        n.vlrLiquido.toFixed(2),
+        n.vlrIss.toFixed(2),
+        n.issRetido,
+        n.vlrIrrf.toFixed(2),
+        n.vlrCsll.toFixed(2),
+        n.vlrPis.toFixed(2),
+        n.vlrCofins.toFixed(2),
+        n.vlrInss.toFixed(2),
+      ];
+    });
+    const csv = [headers, ...rows]
+      .map((r) => r.map((c) => `"${String(c ?? "").replace(/"/g, '""')}"`).join(";"))
+      .join("\n");
+    const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `tomadas_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   // ── Derived data ─────────────────────────────────────────
@@ -647,26 +701,35 @@ function TomadosRouteComponent() {
             </div>
             
             {(todasNotasTomadas?.length ?? 0) > 0 && (
-              <button
-                onClick={async () => {
-                  if (confirm("Limpar toda a base de notas tomadas?")) {
-                    await db.notasTomadas.clear();
-                    toast.success("Base de serviços tomados limpa.");
-                  }
-                }}
-                className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer"
-              >
-                <Trash2 className="h-3.5 w-3.5" /> Limpar Base
-              </button>
+              <>
+                <button
+                  onClick={exportCsvTomadas}
+                  className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition-colors cursor-pointer"
+                >
+                  <Download className="h-3.5 w-3.5" /> Exportar CSV
+                </button>
+                <button
+                  onClick={async () => {
+                    if (confirm("Limpar toda a base de notas tomadas?")) {
+                      await db.notasTomadas.clear();
+                      toast.success("Base de serviços tomados limpa.");
+                    }
+                  }}
+                  className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer"
+                >
+                  <Trash2 className="h-3.5 w-3.5" /> Limpar Base
+                </button>
+              </>
             )}
           </div>
         </div>
         <div className="overflow-x-auto">
           <Table className="min-w-[1200px]">
-            <TableHeader className="bg-muted/30">
+             <TableHeader className="bg-muted/30">
               <TableRow className="border-b border-border">
                 <TableHead className="font-medium text-muted-foreground h-9">Situação</TableHead>
                 <TableHead className="font-medium text-muted-foreground h-9">Nº NFS-e</TableHead>
+                <TableHead className="font-medium text-muted-foreground h-9">Emissão</TableHead>
                 <TableHead className="font-medium text-muted-foreground h-9">Competência</TableHead>
                 <TableHead className="font-medium text-muted-foreground h-9">CNPJ Prestador</TableHead>
                 <TableHead className="font-medium text-muted-foreground h-9">Fornecedor</TableHead>
@@ -685,7 +748,7 @@ function TomadosRouteComponent() {
             <TableBody>
               {paginatedTomadas.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={15} className="text-center text-muted-foreground py-12 text-xs">
+                  <TableCell colSpan={16} className="text-center text-muted-foreground py-12 text-xs">
                     {(todasNotasTomadas?.length ?? 0) === 0
                       ? "Nenhum serviço tomado importado. Arraste um ZIP acima para começar."
                       : "Nenhum resultado para os filtros selecionados."}
@@ -702,6 +765,7 @@ function TomadosRouteComponent() {
                       </span>
                     </TableCell>
                     <TableCell className="font-mono text-[10px]">{n.nNFSe}</TableCell>
+                    <TableCell className="text-xs text-foreground/90 whitespace-nowrap">{formatarData(n.dhEmi)}</TableCell>
                     <TableCell className="text-muted-foreground">{n.dCompet ? n.dCompet.slice(0,7) : "—"}</TableCell>
                     <TableCell className="font-mono text-[10px] text-muted-foreground">{n.cnpjPrestador}</TableCell>
                     <TableCell className="max-w-[140px] truncate font-medium" title={n.nomePrestador}>{n.nomePrestador}</TableCell>
