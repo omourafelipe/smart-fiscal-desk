@@ -305,46 +305,81 @@ const lc116CategoriasMap: Record<string, string> = {
   "40": "Obras de Arte e Restauração",
 };
 
+// ── Mapa 1: NBS (9 dígitos numéricos) → itemLC116
 const nbsLookupMap = new Map<string, string>();
+// ── Mapa 2: itemLC116 sem zeros à esquerda (ex: "101") → itemLC116
 const lc116LookupMap = new Map<string, string>();
+// ── Mapa 3: cClassTrib (6 dígitos, campo cTribNac do Padrão Nacional) → grupo LC116
+//    Um cClassTrib pode cobrir vários grupos; guardamos o primeiro (mais específico)
+const cClassTribLookupMap = new Map<string, string>();
 
-// Popula os mapas com os dados importados de nbsMapping
 nbsMapping.forEach((item: any) => {
   const cleanNbs = String(item.nbs || "").replace(/\D/g, "");
   const cleanLc116 = String(item.itemLC116 || "").replace(/\D/g, "").replace(/^0+/, "");
-  
-  if (cleanNbs) {
+
+  if (cleanNbs && !nbsLookupMap.has(cleanNbs)) {
     nbsLookupMap.set(cleanNbs, item.itemLC116);
   }
-  if (cleanLc116) {
+  if (cleanLc116 && !lc116LookupMap.has(cleanLc116)) {
     lc116LookupMap.set(cleanLc116, item.itemLC116);
+  }
+
+  // Popula cClassTribLookupMap: cada código de 6 dígitos que aparece em cClassTrib
+  const cClassTrib = String(item.cClassTrib || "");
+  const parts = cClassTrib.match(/\d{6}/g) ?? [];
+  for (const part of parts) {
+    if (!cClassTribLookupMap.has(part)) {
+      // Usa o grupo (primeiros 2 dígitos do itemLC116, com zero à esquerda)
+      const group = String(item.itemLC116 || "").split(".")[0].padStart(2, "0");
+      cClassTribLookupMap.set(part, group);
+    }
   }
 });
 
+/**
+ * Converte um código de serviço (qualquer formato) no nome da categoria LC 116.
+ *
+ * Hierarquia de lookup:
+ *  1. 6 dígitos exatos → cClassTribLookupMap (tag <cTribNac> do Padrão Nacional)
+ *  2. 9+ dígitos       → nbsLookupMap (código NBS completo)
+ *  3. 2–4 dígitos      → lc116LookupMap (itemLC116 como "0101" ou "101")
+ *  4. Fallback heurístico por tamanho (código municipal sem separador)
+ */
 function obterCategoriaPorCodigo(code: string): string | null {
   const clean = String(code).trim().replace(/\D/g, "");
   if (!clean) return null;
 
-  let matchedLc116 = nbsLookupMap.get(clean);
-  if (!matchedLc116) {
-    const cleanLc116 = clean.replace(/^0+/, "");
-    matchedLc116 = lc116LookupMap.get(cleanLc116);
+  let itemGroup = "";
+
+  // 1. cTribNac do Padrão Nacional (6 dígitos exatos)
+  if (clean.length === 6) {
+    const group = cClassTribLookupMap.get(clean);
+    if (group) itemGroup = group;
   }
 
-  let itemGroup = "";
-  if (matchedLc116) {
-    itemGroup = matchedLc116.split(".")[0].padStart(2, "0");
-  } else {
-    if (clean.length >= 6) {
-      itemGroup = clean.slice(0, 2);
-    } else if (clean.length === 3) {
-      itemGroup = "0" + clean.slice(0, 1);
-    } else if (clean.length === 4) {
+  // 2. NBS (9 ou mais dígitos)
+  if (!itemGroup && clean.length >= 9) {
+    const matched = nbsLookupMap.get(clean);
+    if (matched) itemGroup = matched.split(".")[0].padStart(2, "0");
+  }
+
+  // 3. itemLC116 direto (2–4 dígitos, ex: "0101" → "101" normalizado)
+  if (!itemGroup && clean.length >= 2 && clean.length <= 4) {
+    const normalized = clean.replace(/^0+/, "");
+    const matched = lc116LookupMap.get(normalized);
+    if (matched) itemGroup = matched.split(".")[0].padStart(2, "0");
+  }
+
+  // 4. Fallback heurístico para códigos municipais (5–8 dígitos sem formato padrão)
+  if (!itemGroup) {
+    if (clean.length >= 5 && clean.length <= 8) {
+      // Tenta os 2 primeiros dígitos como grupo (ex: "14001" → grupo "14")
       const firstTwo = clean.slice(0, 2);
       const val = parseInt(firstTwo, 10);
       if (val >= 1 && val <= 40) {
-        itemGroup = firstTwo;
+        itemGroup = firstTwo.padStart(2, "0");
       } else {
+        // Tenta o primeiro dígito como grupo (ex: "701" → grupo "07")
         itemGroup = "0" + clean.slice(0, 1);
       }
     }
@@ -357,24 +392,87 @@ function obterCategoriaPorCodigo(code: string): string | null {
   return null;
 }
 
+/**
+ * Fallback: tenta inferir a categoria a partir de palavras-chave na descrição do serviço.
+ * Usado apenas quando nenhum código (cTribNac, NBS, municipal) está disponível ou não foi
+ * reconhecido pela tabela de referência.
+ *
+ * As regras usam os nomes do lc116CategoriasMap para garantir consistência.
+ */
 function obterCategoriaPorDescricao(desc: string): string {
-  const s = (desc || "").toLowerCase().trim();
+  const s = normalizeString(desc || "").toLowerCase();
   if (!s) return "Serviços Diversos";
 
+  // Cada entrada: [categoria_do_lc116CategoriasMap, [palavras-chave]]
   const rules: Array<[string, string[]]> = [
-    ["Saúde e Assistência Médica", ["hospital", "médic", "medic", "clínic", "clinic", "laboratóri", "laboratori", "exame", "enfermag", "fisioterap", "saúde", "saude"]],
-    ["Locação e Cessão de Direito", ["locaç", "locac", "aluguel", "leasing"]],
-    ["Manutenção e Assistência Técnica", ["manutenç", "manutenc", "reparo", "conserto", "assistência técnica", "assistencia tecnica", "reforma", "instalaç", "instalac"]],
-    ["Transporte e Logística", ["transporte", "frete", "logístic", "logistic", "entrega", "fretamento", "moto boy", "motoboy", "correio", "malote"]],
-    ["Consultoria, Assessoria e RH", ["consultor", "assessor", "auditoria", "conselho", "gestão", "gestao"]],
-    ["Informática e TI", ["software", "sistema", "informátic", "informatic", "licença", "licenca", "hospedagem", "cloud", "suporte técnic", "suporte tecnic", "internet", "link", "telecom", "fibra optica"]],
-    ["Treinamento e Educação", ["treinamento", "curso", "capacitaç", "capacitac", "ensino", "educação", "educacao", "palestra", "escola"]],
-    ["Publicidade e Marketing", ["publicidade", "marketing", "propaganda", "mídia", "midia", "comunicacao", "veiculacao"]],
-    ["Engenharia e Construção Civil", ["engenhar", "obra", "construç", "construc", "projeto", "arquitet", "topograf", "limpeza", "conservaç", "conservac", "higieniz", "jardinagem"]],
-    ["Eventos e Produções", ["evento", "produção", "produc", "planejamento", "festa", "congresso", "lazer", "entretenimento", "recreação", "recreac"]],
-    ["Serviços Financeiros", ["financeiro", "bancário", "bancario", "crédito", "credito", "cobranca", "cobrança", "seguro", "corretagem"]],
-    ["Serviços Jurídicos e Cartoriais", ["advog", "advoc", "jurídic", "juridic", "cartório", "cartorio", "tabeliã", "tabelia", "notaria"]],
-    ["Serviços de Coleta e Tratamento de Resíduos", ["lixo", "resíduo", "residuo", "descarte", "tratamento de agua", "coleta de lixo", "incineracao", "biomedico"]],
+    // 01 — Informática e TI
+    ["Informática e TI", ["software", "sistema", "informatica", "informático", "licenca", "licença", "hospedagem", "cloud", "saas", "paas", "iaas", "suporte tecnico", "internet", "telecom", "fibra optica", "data center", "servidor", "rede", "ti ", "tecnologia da informacao", "processamento de dados", "banco de dados", "programacao", "programação", "desenvolvimento de aplicativo", "desenvolvimento de sistema"]],
+    // 02 — Pesquisa e Desenvolvimento
+    ["Pesquisa e Desenvolvimento", ["pesquisa", "desenvolvimento cientifico", "p&d", "p & d", "inovacao", "inovação", "laboratorio de pesquisa"]],
+    // 03 — Locação e Cessão de Direito
+    ["Locação e Cessão de Direito", ["locacao", "locação", "aluguel", "leasing", "arrendamento", "cessao de direito", "cessão de direito", "sublocacao", "direito de uso"]],
+    // 04 — Saúde e Assistência Médica
+    ["Saúde e Assistência Médica", ["hospital", "médico", "medico", "clínica", "clinica", "laboratorial", "exame", "enfermagem", "fisioterapia", "fonoaudiologia", "saude", "saúde", "radiologia", "tomografia", "quimioterapia", "radioterapia", "odontolog", "cirurgia", "ortopedia", "psiquiatria", "psicologia", "nutrição", "nutricao", "ambulatorio", "plano de saude", "convenio medico"]],
+    // 05 — Medicina Veterinária
+    ["Medicina Veterinária", ["veterinaria", "veterinário", "veterinária", "animal", "pet shop", "banho e tosa", "zootecnia"]],
+    // 06 — Cuidados Pessoais e Estética
+    ["Cuidados Pessoais e Estética", ["estetica", "estética", "salão", "salao", "cabeleireiro", "manicure", "pedicure", "spa", "massagem", "barbearia", "beleza"]],
+    // 07 — Engenharia e Construção Civil
+    ["Engenharia e Construção Civil", ["engenharia", "construção", "construcao", "obra", "reforma", "arquitetura", "topografia", "instalacao", "instalação", "limpeza", "conservacao", "higienizacao", "jardinagem", "pintura", "hidraulica", "elétrica", "eletrica", "dedetizacao", "saneamento", "pavimentacao", "terraplanagem", "fundacao"]],
+    // 08 — Treinamento e Educação
+    ["Treinamento e Educação", ["treinamento", "curso", "capacitacao", "capacitação", "ensino", "educacao", "educação", "palestra", "escola", "faculdade", "universidade", "aula", "tutorial", "formacao", "formação", "workshop", "seminario"]],
+    // 09 — Hospedagem e Turismo
+    ["Hospedagem e Turismo", ["hotel", "hospedagem", "hostel", "pousada", "turismo", "viagem", "pacote turistico", "agencia de viagem", "resort", "excursao"]],
+    // 10 — Publicidade e Marketing
+    ["Publicidade e Marketing", ["publicidade", "marketing", "propaganda", "midia", "mídia", "comunicacao", "comunicação", "veiculacao", "veiculação", "anuncio", "anúncio", "campanha", "criacao publicitaria", "impressao grafica", "grafica", "gráfica"]],
+    // 11 — Transporte e Logística
+    ["Transporte e Logística", ["transporte", "frete", "logistica", "logística", "entrega", "fretamento", "motoboy", "moto boy", "correio", "malote", "mudanca", "mudança", "courier", "despacho aduaneiro", "armazenagem", "estocagem", "carga"]],
+    // 12 — Lazer e Recreação
+    ["Lazer e Recreação", ["lazer", "recreacao", "recreação", "esporte", "academia", "ginasio", "ginásio", "natacao", "natação", "futebol", "quadra esportiva", "parque", "divertimento", "entretenimento"]],
+    // 13 — Produção e Fonografia
+    ["Produção e Fonografia", ["producao audiovisual", "producao musical", "fonografia", "gravacao", "gravação", "estudio", "estúdio", "video", "vídeo", "filme", "cinema", "fotografia", "imagem", "streaming de audio", "streaming de video"]],
+    // 14 — Manutenção e Assistência Técnica
+    ["Manutenção e Assistência Técnica", ["manutencao", "manutenção", "reparo", "conserto", "assistencia tecnica", "assistência técnica", "calibracao", "calibração"]],
+    // 15 — Serviços Financeiros
+    ["Serviços Financeiros", ["financeiro", "bancario", "bancário", "credito", "crédito", "cobranca", "cobrança", "seguro", "corretagem", "cambio", "câmbio", "fundo de investimento", "factoring", "leasing financeiro", "previdencia", "previdência"]],
+    // 16 — Transporte de Natureza Municipal
+    ["Transporte de Natureza Municipal", ["taxi", "táxi", "uber", "99", "transporte municipal", "van escolar", "transporte escolar"]],
+    // 17 — Consultoria, Assessoria e RH
+    ["Consultoria, Assessoria e RH", ["consultoria", "assessoria", "auditoria", "conselho", "gestao", "gestão", "recursos humanos", "recrutamento", "selecao", "seleção", "headhunter", "coaching", "mentoria", "contabilidade", "contador"]],
+    // 18 — Regulação de Sinistros e Afins
+    ["Regulação de Sinistros e Afins", ["regulacao de sinistro", "regulação de sinistro", "vistoria", "perito", "pericia", "perícia"]],
+    // 19 — Serviços de Distribuição e Venda
+    ["Serviços de Distribuição e Venda", ["distribuicao", "distribuição", "venda", "representacao comercial", "representação comercial", "comissao de venda", "comissão de venda"]],
+    // 20 — Serviços Portuários e Aeroportuários
+    ["Serviços Portuários e Aeroportuários", ["portuario", "portuário", "aeroporto", "aeroportuario", "hangar", "rampa", "terminal de carga", "estivagem"]],
+    // 21 — Serviços Jurídicos e Cartoriais
+    ["Serviços Jurídicos e Cartoriais", ["advocacia", "advogado", "juridico", "jurídico", "cartorio", "cartório", "tabeliao", "tabelião", "notarial", "registro civil", "escritura"]],
+    // 22 — Serviços de Auxílio a Edificações
+    ["Serviços de Auxílio a Edificações", ["impermeabilizacao", "impermeabilização", "estrutural", "vistoria de imovel", "laudo tecnico", "avaliacao de imovel"]],
+    // 23 — Eventos e Produções
+    ["Eventos e Produções", ["evento", "festa", "congresso", "convencao", "convenção", "fair", "show", "espetaculo", "espetáculo", "cerimonial", "organização de evento"]],
+    // 24 — Serviços de Chaveiros e Afins
+    ["Serviços de Chaveiros e Afins", ["chaveiro", "chaveiros", "copia de chave", "cópia de chave", "seguranca patrimonial"]],
+    // 25 — Serviços Funerários
+    ["Serviços Funerários", ["funeraria", "funerária", "funeral", "sepultamento", "cremacao", "cremação", "obito", "óbito", "plano funerario"]],
+    // 26 — Serviços de Coleta e Tratamento de Resíduos
+    ["Serviços de Coleta e Tratamento de Resíduos", ["residuo", "resíduo", "lixo", "descarte", "coleta de lixo", "incineracao", "esgoto", "tratamento de agua", "biomedico", "biomédico", "reciclagem", "saneamento ambiental"]],
+    // 27 — Serviços de Artistas e Modelos
+    ["Serviços de Artistas e Modelos", ["artista", "modelo", "ator", "atriz", "musico", "músico", "cantor", "dançarino", "dançarina", "bailarino"]],
+    // 28 — Serviços de Desenho Industrial
+    ["Serviços de Desenho Industrial", ["design industrial", "desenho industrial", "produto industrial", "modelagem 3d"]],
+    // 29 — Serviços de Vigilância e Segurança
+    ["Serviços de Vigilância e Segurança", ["vigilancia", "vigilância", "seguranca", "segurança", "monitoramento", "alarme", "cftv", "rastreamento veicular"]],
+    // 30 — Serviços de Transporte de Valores
+    ["Serviços de Transporte de Valores", ["transporte de valores", "carro forte", "malote de numerario", "escolta"]],
+    // 31 — Serviços de Instrução e Treinamento
+    ["Serviços de Instrução e Treinamento", ["instrucao", "instrução", "treinamento fisico", "personal trainer", "educacao fisica", "educação física"]],
+    // 32 — Serviços de Desenhos e Artes Visuais
+    ["Serviços de Desenhos e Artes Visuais", ["design grafico", "design gráfico", "ilustracao", "ilustração", "arte visual", "animacao", "animação"]],
+    // 33 — Serviços de Despachantes e Afins
+    ["Serviços de Despachantes e Afins", ["despachante", "despacho", "documentacao veicular", "documentação veicular", "transferencia de veiculo"]],
+    // 35 — Serviços de Reportagem e Assessoria de Imprensa
+    ["Serviços de Reportagem e Assessoria de Imprensa", ["jornalismo", "reportagem", "assessoria de imprensa", "comunicacao institucional", "relacoes publicas", "relações públicas"]],
   ];
 
   for (const [cat, keys] of rules) {
@@ -384,15 +482,16 @@ function obterCategoriaPorDescricao(desc: string): string {
   return "Serviços Diversos";
 }
 
+/**
+ * Ponto de entrada da categorização de NFS-e.
+ *
+ * Prioridade:
+ *  1. Lookup pelo código (cTribNac / NBS / municipal) na tabela de referência
+ *  2. Fallback por palavras-chave na descrição do serviço
+ */
 function categorizarServico(desc: string, code?: string): string {
   if (code) {
     const cat = obterCategoriaPorCodigo(code);
-    if (cat) return cat;
-  }
-
-  const cleanCodeFromDesc = (desc || "").split(/\s+/)[0]?.replace(/\D/g, "");
-  if (cleanCodeFromDesc && cleanCodeFromDesc.length >= 3) {
-    const cat = obterCategoriaPorCodigo(cleanCodeFromDesc);
     if (cat) return cat;
   }
 
