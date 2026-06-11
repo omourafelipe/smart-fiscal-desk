@@ -10,6 +10,7 @@ import {
   obterCategoriaPorCodigo,
   obterCategoriaMaisProxima,
 } from "@/lib/category-utils";
+import { gerarSugestoesCategorias } from "@/lib/category-suggester";
 import { useLayoutShell } from "@/components/layout/LayoutShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -55,6 +56,7 @@ function CategoriasRouteComponent() {
   const [showCriarForm, setShowCriarForm] = useState(false);
   const [searchCat, setSearchCat] = useState("");
   const [selectedCodes, setSelectedCodes] = useState<Set<string>>(new Set());
+  const [ignoredSuggestions, setIgnoredSuggestions] = useState<Set<string>>(new Set());
 
   // Database notes queries
   const todasNotas = useLiveQuery(() => db.notas.toArray(), [], []);
@@ -101,6 +103,12 @@ function CategoriasRouteComponent() {
     }
     return [...codigosMap.values()].sort((a, b) => b.count - a.count);
   }, [todasNotas, todasNotasTomadas, todasCategorias, categoryOverrides]);
+
+  // Calculate dynamic category suggestions (excluding ignored items)
+  const sugestoes = useMemo(() => {
+    const rawSug = gerarSugestoesCategorias(uniqueCodes, categoryOverrides, todasCategorias);
+    return rawSug.filter((s) => !ignoredSuggestions.has(s.nomeSugerido.toLowerCase()));
+  }, [uniqueCodes, categoryOverrides, todasCategorias, ignoredSuggestions]);
 
   // Filtered rows for code mappings table
   const linhasFiltradas = useMemo(() => {
@@ -308,6 +316,78 @@ function CategoriasRouteComponent() {
           )}
         </div>
       </div>
+
+      {/* PAINEL DE SUGESTÕES DE CATEGORIAS */}
+      {sugestoes.length > 0 && (
+        <div className="bg-gradient-to-r from-indigo-50/50 to-purple-50/30 dark:from-indigo-950/20 dark:to-purple-950/10 border border-indigo-200/50 dark:border-indigo-900/40 p-5 rounded-2xl shadow-xs space-y-3.5 transition-colors duration-300">
+          <div className="flex items-center gap-2">
+            <span className="h-5 w-5 rounded-lg bg-indigo-500/10 dark:bg-indigo-500/20 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+              <Sparkles className="h-3.5 w-3.5" />
+            </span>
+            <div>
+              <h2 className="text-xs font-bold text-foreground">💡 Sugestões de Novas Categorias</h2>
+              <p className="text-[9px] text-muted-foreground mt-0.5">
+                Detectamos descrições de serviços nas notas fiscais que não pertencem a nenhuma categoria atual. Deseja criá-las e associar os códigos?
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+            {sugestoes.map((sug) => (
+              <div
+                key={sug.nomeSugerido}
+                className="bg-card/75 dark:bg-card/45 backdrop-blur-xs border border-border/80 dark:border-border/40 p-4 rounded-xl flex flex-col justify-between gap-3 hover:shadow-xs transition-all duration-200"
+              >
+                <div>
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="text-xs font-bold text-foreground pr-2 leading-tight">
+                      {sug.nomeSugerido}
+                    </span>
+                    <Badge variant="outline" className="text-[9px] px-1.5 py-0.5 rounded-md border-indigo-500/20 bg-indigo-500/5 text-indigo-700 dark:text-indigo-300 flex-shrink-0">
+                      {sug.totalNotas} nota{sug.totalNotas > 1 ? "s" : ""}
+                    </Badge>
+                  </div>
+                  <p className="text-[9px] text-muted-foreground mt-1.5 line-clamp-2 leading-normal" title={sug.descricaoExemplo}>
+                    Exemplo: <span className="font-mono text-foreground/80">{sug.codigos[0]}</span> - {sug.descricaoExemplo}
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-1.5 pt-1.5 border-t border-border/30">
+                  <Button
+                    onClick={async () => {
+                      const success = await addCustomCategory(sug.nomeSugerido);
+                      if (success) {
+                        const batch = sug.codigos.map((code) => ({ codigo: code, categoria: sug.nomeSugerido }));
+                        await db.categoryOverrides.bulkPut(batch);
+                        addActivity("update", "Sugestão Aceita", `Categoria "${sug.nomeSugerido}" criada e associada a ${sug.codigos.length} códigos.`);
+                        toast.success(`Categoria "${sug.nomeSugerido}" criada e associada.`);
+                      }
+                    }}
+                    size="sm"
+                    className="h-7 text-[10px] rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold cursor-pointer w-full flex items-center justify-center gap-1"
+                  >
+                    ⚡ Criar e Associar
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      setIgnoredSuggestions((prev) => {
+                        const next = new Set(prev);
+                        next.add(sug.nomeSugerido.toLowerCase());
+                        return next;
+                      });
+                    }}
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-[10px] rounded-lg text-muted-foreground hover:text-foreground cursor-pointer px-2 flex-shrink-0"
+                  >
+                    Ignorar
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* KPI Stats Section */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
