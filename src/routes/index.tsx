@@ -311,7 +311,7 @@ const lc116LookupMap = new Map<string, string>();
 // Popula os mapas com os dados importados de nbsMapping
 nbsMapping.forEach((item: any) => {
   const cleanNbs = String(item.nbs || "").replace(/\D/g, "");
-  const cleanLc116 = String(item.itemLC116 || "").replace(/\D/g, "");
+  const cleanLc116 = String(item.itemLC116 || "").replace(/\D/g, "").replace(/^0+/, "");
   
   if (cleanNbs) {
     nbsLookupMap.set(cleanNbs, item.itemLC116);
@@ -327,7 +327,8 @@ function obterCategoriaPorCodigo(code: string): string | null {
 
   let matchedLc116 = nbsLookupMap.get(clean);
   if (!matchedLc116) {
-    matchedLc116 = lc116LookupMap.get(clean);
+    const cleanLc116 = clean.replace(/^0+/, "");
+    matchedLc116 = lc116LookupMap.get(cleanLc116);
   }
 
   let itemGroup = "";
@@ -2112,7 +2113,7 @@ function Dashboard() {
               </div>
 
               {/* METRICS / KPI GRID (ByeWind style: clean card layout, light pastel colors, trend arrows) */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
                 <KpiCardNew
                   label="Faturamento"
                   value={fmtBRL(faturamento)}
@@ -3581,33 +3582,43 @@ function Dashboard() {
                   </div>
 
                   {/* KPI Cards */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
                     {([
                       { label: "Total de Serviços Tomados", value: fmtBRL(totalTomados), sub: "valor bruto consolidado", color: "text-teal-600 dark:text-teal-400", bg: "bg-teal-500/10" },
                       { label: "Fornecedores Ativos", value: fornecedoresAtivos.toLocaleString("pt-BR"), sub: "prestadores distintos no período", color: "text-indigo-600 dark:text-indigo-400", bg: "bg-indigo-500/10" },
                       { label: "Notas Recebidas", value: notasTomValidas.length.toLocaleString("pt-BR"), sub: "NFS-e válidas do período", color: "text-purple-600 dark:text-purple-400", bg: "bg-purple-500/10" },
                       { label: "Ticket Médio / Fornecedor", value: fmtBRL(ticketMedioFornecedor), sub: "valor médio contratado por fornecedor", color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-500/10" },
                       { label: "Total de Retenções", value: fmtBRL(totalRetencoes), sub: "obrigações de retenção na fonte", color: "text-rose-600 dark:text-rose-400", bg: "bg-rose-500/10" },
-                    ] as const).map((kpi, i) => (
-                      <div key={i} className="p-4 sm:p-5 rounded-2xl border bg-card flex flex-col justify-between shadow-xs border-border transition-all hover:-translate-y-0.5">
-                        <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">{kpi.label}</p>
-                            <p className="text-lg sm:text-xl font-extrabold text-foreground mt-1.5">{kpi.value}</p>
+                    ] as const).map((kpi, i) => {
+                      const isLong = kpi.value.length > 12;
+                      const isVeryLong = kpi.value.length > 16;
+                      const valueFontSize = isVeryLong
+                        ? "text-xs sm:text-sm font-bold tracking-tighter"
+                        : isLong
+                          ? "text-sm sm:text-base font-extrabold tracking-tighter"
+                          : "text-base sm:text-lg md:text-xl font-extrabold tracking-tight";
+
+                      return (
+                        <div key={i} className="p-4 sm:p-5 xl:p-4 2xl:p-5 rounded-2xl border bg-card flex flex-col justify-between shadow-xs border-border transition-all duration-300 hover:-translate-y-0.5">
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">{kpi.label}</p>
+                              <p className={`${valueFontSize} text-foreground mt-1.5`}>{kpi.value}</p>
+                            </div>
+                            <div className={`h-8 w-8 rounded-lg ${kpi.bg} ${kpi.color} flex items-center justify-center flex-shrink-0`}>
+                              <ShoppingBag className="h-4 w-4" />
+                            </div>
                           </div>
-                          <div className={`h-8 w-8 rounded-lg ${kpi.bg} ${kpi.color} flex items-center justify-center flex-shrink-0`}>
-                            <ShoppingBag className="h-4 w-4" />
-                          </div>
+                          <p className="text-[10px] text-muted-foreground mt-3">{kpi.sub}</p>
                         </div>
-                        <p className="text-[10px] text-muted-foreground mt-3">{kpi.sub}</p>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
 
                   {/* Painel de Retenções */}
                   <div className="bg-card border border-border rounded-2xl p-5 shadow-xs">
                     <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-4">Obrigações de Retenção na Fonte</h3>
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
                       {([
                         { label: "ISS Retido", value: issRetidoTomadaTotal, hint: "Retido pelo tomador (Samel)", color: "text-indigo-600 dark:text-indigo-400", bg: "bg-indigo-500/10" },
                         { label: "IRRF", value: irrfTotal, hint: "Imposto de Renda Retido na Fonte", color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-500/10" },

@@ -245,7 +245,7 @@ export function parseNfseXml(xml: string): NotaFiscal | null {
         "",
     ).trim();
     const municipal = getMunicipalCode(inf);
-    const codTribNacional = nbs || cTribNac || municipal;
+    const codTribNacional = cTribNac || nbs || municipal;
 
     let dCompet = String(
       pick(inf, ["DPS", "infDPS", "dCompet"]) ??
@@ -371,7 +371,7 @@ export function parseNfseXmlTomada(
         "",
     ).trim();
     const municipal = getMunicipalCode(inf);
-    const codTribNacional = nbs || cTribNac || municipal;
+    const codTribNacional = cTribNac || nbs || municipal;
 
     // ISS — responsabilidade do tomador de reter quando aplicável
     const issRetidoFlag = getIssRetido(inf);
