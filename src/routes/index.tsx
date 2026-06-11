@@ -553,7 +553,40 @@ function Dashboard() {
   };
 
   const [rightPanelOpen, setRightPanelOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<"dashboard" | "conciliation" | "grupo" | "tomados">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "conciliation" | "grupo" | "tomados" | "categorias">("dashboard");
+
+  // ── Overrides manuais de categoria (código → categoria) persistidos em localStorage
+  const [categoryOverrides, setCategoryOverrides] = useState<Record<string, string>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("categoryOverrides") || "{}");
+    } catch {
+      return {};
+    }
+  });
+
+  const saveCategoryOverride = (code: string, categoria: string) => {
+    setCategoryOverrides((prev) => {
+      const next = { ...prev, [code]: categoria };
+      localStorage.setItem("categoryOverrides", JSON.stringify(next));
+      return next;
+    });
+    toast.success(`Categoria do código "${code}" alterada para "${categoria}".`);
+  };
+
+  const removeCategoryOverride = (code: string) => {
+    setCategoryOverrides((prev) => {
+      const next = { ...prev };
+      delete next[code];
+      localStorage.setItem("categoryOverrides", JSON.stringify(next));
+      return next;
+    });
+  };
+
+  // Versão que aplica overrides manuais antes da categorização automática
+  const categorizarComOverride = (desc: string, code?: string): string => {
+    if (code && categoryOverrides[code]) return categoryOverrides[code];
+    return categorizarServico(desc, code);
+  };
 
   // ── Serviços Tomados state ──────────────────────────────────────────────
   const todasNotasTomadas = useLiveQuery(() => db.notasTomadas.toArray(), [], [] as NotaFiscalTomada[]);
@@ -1902,6 +1935,16 @@ function Dashboard() {
                   </span>
                 )}
               </button>
+              <button
+                onClick={() => setActiveTab("categorias")}
+                className={`flex items-center justify-between px-3 py-2 text-xs font-medium rounded-xl transition-all w-full text-left ${
+                  activeTab === "categorias" ? "text-foreground font-semibold" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <Filter className="h-4 w-4" /> Categorias
+                </div>
+              </button>
             </div>
 
             {/* Quick Actions Category */}
@@ -2054,6 +2097,14 @@ function Dashboard() {
                 }`}
               >
                 Validador (.xlsx)
+              </button>
+              <button
+                onClick={() => setActiveTab("categorias")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  activeTab === "categorias" ? "bg-foreground text-background shadow-sm" : "bg-muted text-muted-foreground hover:bg-muted/80"
+                }`}
+              >
+                Categorias
               </button>
             </div>
           </div>
@@ -3508,7 +3559,7 @@ function Dashboard() {
               // Gráfico B — distribuição por categoria de serviço (derivada da descrição)
               const servicoMap = new Map<string, number>();
               notasTomValidasSemCategoria.forEach((n) => {
-                const key = categorizarServico(n.servico, n.codTribNacional);
+                const key = categorizarComOverride(n.servico, n.codTribNacional);
                 servicoMap.set(key, (servicoMap.get(key) ?? 0) + n.valor);
               });
               const SERV_COLORS = [
@@ -4025,6 +4076,170 @@ function Dashboard() {
                 </div>
               );
             })()}
+
+            {/* ═══════════════════════════════════════════════════════════════
+                 TAB: CATEGORIAS DE SERVIÇO
+            ═══════════════════════════════════════════════════════════════ */}
+            <TabsContent value="categorias" className="space-y-6 mt-0 outline-none">
+              {(() => {
+                // Coleta todos os códigos únicos presentes nas notas (emitidas + tomadas)
+                const codigosMap = new Map<string, { codigo: string; descricao: string; catAuto: string; count: number }>();
+                const todasCombinadas = [
+                  ...(todasNotas || []).map((n) => ({ code: n.codTribNacional, desc: n.servico })),
+                  ...(todasNotasTomadas || []).map((n) => ({ code: n.codTribNacional, desc: n.servico })),
+                ];
+                for (const { code, desc } of todasCombinadas) {
+                  if (!code) continue;
+                  if (!codigosMap.has(code)) {
+                    codigosMap.set(code, {
+                      codigo: code,
+                      descricao: desc || "—",
+                      catAuto: categorizarServico(desc, code),
+                      count: 1,
+                    });
+                  } else {
+                    codigosMap.get(code)!.count++;
+                  }
+                }
+                const linhas = [...codigosMap.values()].sort((a, b) => b.count - a.count);
+                const todasCategorias = Object.values(lc116CategoriasMap).sort();
+
+                const [searchCat, setSearchCat] = useState("");
+                const linhasFiltradas = linhas.filter(
+                  (l) =>
+                    !searchCat ||
+                    l.codigo.toLowerCase().includes(searchCat.toLowerCase()) ||
+                    l.descricao.toLowerCase().includes(searchCat.toLowerCase()) ||
+                    l.catAuto.toLowerCase().includes(searchCat.toLowerCase())
+                );
+
+                return (
+                  <div className="space-y-6">
+                    {/* Header */}
+                    <div className="bg-card p-5 rounded-2xl border border-border shadow-xs">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div>
+                          <h1 className="text-xl font-bold tracking-tight text-foreground">Categorias de Serviço</h1>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Relação dos códigos encontrados nas NFS-e e suas categorias. Edite para corrigir a classificação.
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {Object.keys(categoryOverrides).length > 0 && (
+                            <span className="text-[10px] bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 px-2 py-1 rounded-lg font-semibold">
+                              {Object.keys(categoryOverrides).length} override(s) manual(is)
+                            </span>
+                          )}
+                          <div className="relative">
+                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                            <input
+                              type="text"
+                              placeholder="Filtrar..."
+                              value={searchCat}
+                              onChange={(e) => setSearchCat(e.target.value)}
+                              className="pl-8 pr-3 h-8 text-xs rounded-xl border border-border bg-muted/40 outline-none focus:ring-2 focus:ring-indigo-500/30 w-48"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* KPIs rápidos */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      {([ 
+                        { label: "Códigos únicos", value: linhas.length, tone: "blue" as const },
+                        { label: "Com override manual", value: Object.keys(categoryOverrides).length, tone: "purple" as const },
+                        { label: "Notas emitidas", value: todasNotas?.length ?? 0, tone: "green" as const },
+                        { label: "Notas tomadas", value: todasNotasTomadas?.length ?? 0, tone: "amber" as const },
+                      ]).map((k) => (
+                        <div key={k.label} className="bg-card border border-border rounded-2xl p-4 shadow-xs">
+                          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">{k.label}</p>
+                          <p className="text-2xl font-extrabold text-foreground mt-1">{k.value.toLocaleString("pt-BR")}</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Tabela */}
+                    {linhasFiltradas.length === 0 ? (
+                      <div className="bg-card border border-border rounded-2xl p-12 text-center">
+                        <p className="text-sm text-muted-foreground">
+                          {linhas.length === 0
+                            ? "Nenhuma NFS-e importada ainda. Importe arquivos XML para ver os códigos de serviço."
+                            : "Nenhum resultado para o filtro aplicado."}
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-xs">
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="border-b border-border bg-muted/40">
+                                <th className="text-left px-4 py-3 font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">Código</th>
+                                <th className="text-left px-4 py-3 font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">Descrição (1ª NF)</th>
+                                <th className="text-left px-4 py-3 font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">Categoria Automática</th>
+                                <th className="text-left px-4 py-3 font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">Categoria Efetiva</th>
+                                <th className="text-right px-4 py-3 font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">NF-e</th>
+                                <th className="text-center px-4 py-3 font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">Ações</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-border">
+                              {linhasFiltradas.map((linha) => {
+                                const hasOverride = !!categoryOverrides[linha.codigo];
+                                const catEfetiva = categoryOverrides[linha.codigo] || linha.catAuto;
+                                return (
+                                  <tr key={linha.codigo} className={`hover:bg-muted/30 transition-colors ${hasOverride ? "bg-indigo-500/[0.03] dark:bg-indigo-500/[0.05]" : ""}`}>
+                                    <td className="px-4 py-3">
+                                      <span className="font-mono text-[10px] bg-muted border border-border px-1.5 py-0.5 rounded-md">{linha.codigo}</span>
+                                    </td>
+                                    <td className="px-4 py-3 max-w-[220px]">
+                                      <span className="truncate block text-muted-foreground" title={linha.descricao}>{linha.descricao}</span>
+                                    </td>
+                                    <td className="px-4 py-3">
+                                      <span className="text-muted-foreground">{linha.catAuto}</span>
+                                    </td>
+                                    <td className="px-4 py-3">
+                                      <select
+                                        value={catEfetiva}
+                                        onChange={(e) => saveCategoryOverride(linha.codigo, e.target.value)}
+                                        className={`h-7 px-2 rounded-lg border text-xs outline-none focus:ring-2 focus:ring-indigo-500/30 bg-card cursor-pointer ${
+                                          hasOverride
+                                            ? "border-indigo-400 dark:border-indigo-600 text-indigo-700 dark:text-indigo-300 font-semibold"
+                                            : "border-border text-foreground"
+                                        }`}
+                                      >
+                                        {todasCategorias.map((cat) => (
+                                          <option key={cat} value={cat}>{cat}</option>
+                                        ))}
+                                        <option value="Serviços Diversos">Serviços Diversos</option>
+                                      </select>
+                                    </td>
+                                    <td className="px-4 py-3 text-right font-mono text-muted-foreground">{linha.count.toLocaleString("pt-BR")}</td>
+                                    <td className="px-4 py-3 text-center">
+                                      {hasOverride && (
+                                        <button
+                                          onClick={() => removeCategoryOverride(linha.codigo)}
+                                          title="Restaurar categoria automática"
+                                          className="text-[10px] text-rose-500 hover:text-rose-700 dark:hover:text-rose-400 underline underline-offset-2 transition-colors"
+                                        >
+                                          Restaurar
+                                        </button>
+                                      )}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                        <div className="px-4 py-3 border-t border-border text-[10px] text-muted-foreground">
+                          {linhasFiltradas.length.toLocaleString("pt-BR")} código(s) de serviço encontrados
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </TabsContent>
 
           </Tabs>
 
