@@ -1,46 +1,22 @@
-# Ajustes no Dashboard de NFS-e Recebidas
+Objetivo: fazer a página `/tomados` voltar a carregar normalmente após o upload do ZIP e garantir que o processamento das notas tomadas finalize sem derrubar a rota.
 
-## 1. Tabela "NFS-e Recebidas de Fornecedores"
-- **Remover** a coluna **Tomador** (cabeçalho ~linha 3494 + célula ~linha 3526).
-- **Adicionar** a coluna **Vlr. ISS** entre "Vlr. Líquido" e "ISS Retido?", exibindo `n.vlrIssRet` quando `issRetido === "Sim"`, `—` caso contrário (mesmo padrão das demais retenções).
-- `colSpan` da linha vazia continua 14 (uma removida, uma adicionada).
+1. Corrigir a quebra de importação
+- Ajustar o módulo `src/lib/category-utils.ts` para garantir que o export `classificarServicoLocal` esteja disponível de forma consistente para todas as rotas que o importam.
+- Revisar os imports relacionados em `/tomados` e `/categorias` para evitar incompatibilidade entre export nomeado e consumo do bundle.
 
-## 2. Regra de "ISS Retido"
-Em `src/lib/parseXml.ts`, função `getIssRetido()`:
-- Retornar `"Sim"` **apenas** quando `tpRetISSQN ∈ {"1", "3"}`:
-  - `1` → Retenção do ISSQN
-  - `3` → Retenção Simples (Simples Nacional)
-- Remover o fallback heurístico atual (`vISSRet > 0 → "Sim"`) e a checagem por `RT`. Sem `tpRetISSQN` explícito = "Não".
-- A regra vale tanto para `parseNfseXml` (emitidas) quanto para `parseNfseXmlTomada` (recebidas).
+2. Validar o fluxo do `/tomados`
+- Revisar o processamento do upload em `src/routes/tomados.tsx`, especialmente o trecho que lê ZIP/XML e chama a classificação por categoria.
+- Confirmar que a rota continua renderizando mesmo quando nenhum XML elegível é encontrado, exibindo aviso ao usuário sem cair na tela de erro.
 
-Consequência: notas já gravadas no IndexedDB mantêm a marcação antiga até serem reimportadas — o usuário pode usar o botão "Limpar Base" e reprocessar os ZIPs.
+3. Verificar efeitos colaterais na renderização
+- Conferir se a correção elimina o erro de carregamento da página e também estabiliza a hidratação/layout dessa rota.
+- Manter o comportamento atual do dashboard e dos filtros, alterando apenas o que estiver causando a falha.
 
-## 3. Gráfico "Por Tipo de Serviço" (aba Recebidas)
-Substituir o agrupamento por `codTribNacional` por **categorias gerais derivadas da descrição do serviço** (`n.servico` = `xDescServ`).
+4. Validar no preview
+- Reabrir `/tomados` e confirmar que a tela carrega.
+- Validar o cenário de upload para garantir que o erro não reaparece ao final do processamento.
 
-Helper `categorizarServico(desc)` — match case-insensitive, primeira regra vence:
-
-| Categoria | Palavras-chave |
-|---|---|
-| Saúde / Hospitalar | hospital, médic, clínic, laboratóri, exame, enfermag, fisioterap, saúde |
-| Locação / Aluguel | locaç, aluguel |
-| Manutenção e Reparos | manutenç, reparo, conserto, assistência técnica |
-| Limpeza e Conservação | limpeza, conservaç, higieniz |
-| Segurança e Vigilância | seguranç, vigilânc, portaria |
-| Transporte e Logística | transporte, frete, logístic, entrega |
-| Consultoria e Assessoria | consultor, assessor, advoc, jurídic, contábil, auditoria |
-| Tecnologia / TI | software, sistema, informátic, licença, hospedagem, cloud, suporte técnic |
-| Treinamento e Educação | treinamento, curso, capacitaç, ensino, educação |
-| Publicidade e Marketing | publicidade, marketing, propaganda, mídia |
-| Engenharia e Construção | engenhar, obra, construç, projeto |
-| Alimentação | alimentaç, refeiç, restaurante, lanche |
-| Outros | (fallback) |
-
-Aplicar como chave em `servicoMap` (linhas ~3204-3213). Atualizar subtítulo do card para "Distribuição por categoria de serviço".
-
-## Arquivos afetados
-- `src/lib/parseXml.ts` — endurecer `getIssRetido()`.
-- `src/routes/index.tsx` — tabela tomadas (cabeçalho + célula) e cálculo do gráfico de serviços.
-
-## Fora do escopo
-- Recalcular `issRetido` retroativamente nas notas já persistidas. Se quiser um botão "Recalcular ISS" que reprocessa o `raw` salvo, me diga e incluo.
+Detalhes técnicos
+- O sinal mais forte no momento é este erro de runtime: `The requested module '/src/lib/category-utils.ts' does not provide an export named 'classificarServicoLocal'`.
+- Isso indica falha de módulo ES em tempo de execução: a rota quebra antes ou durante a re-renderização após o upload.
+- A correção deve ficar restrita aos arquivos de classificação/rota afetados, sem mexer na lógica fiscal além do necessário para restaurar o fluxo.
