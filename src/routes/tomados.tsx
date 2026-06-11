@@ -20,7 +20,7 @@ import {
 } from "recharts";
 import { Calendar, Building2, ShoppingBag, Loader2, Trash2, FileText, XCircle, Search, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
-import { db, type NotaFiscalTomada } from "@/lib/db";
+import { db, type NotaFiscalTomada, type CustomCategory, type CategoryOverride } from "@/lib/db";
 import { parseNfseXmlTomada } from "@/lib/parseXml";
 import { useLayoutShell } from "@/components/layout/LayoutShell";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -121,27 +121,25 @@ function TomadosRouteComponent() {
   // ── Database query ──────────────────────────────────────────────
   const todasNotasTomadas = useLiveQuery(() => db.notasTomadas.toArray(), [], [] as NotaFiscalTomada[]);
 
-  // Local overrides from localStorage
-  const categoryOverrides = useMemo<Record<string, string>>(() => {
-    try {
-      return JSON.parse(localStorage.getItem("categoryOverrides") || "{}");
-    } catch {
-      return {};
-    }
-  }, []);
+  // Load custom categories from IndexedDB
+  const customCategoriesObj = useLiveQuery(() => db.customCategories.toArray(), [], [] as CustomCategory[]);
+  const customCategories = useMemo(() => {
+    return (customCategoriesObj || []).map((c) => c.nome);
+  }, [customCategoriesObj]);
 
-  const customCategories = useMemo<string[]>(() => {
-    try {
-      return JSON.parse(localStorage.getItem("customCategories") || "[]");
-    } catch {
-      return [];
-    }
-  }, []);
+  // Load category overrides from IndexedDB
+  const categoryOverridesObj = useLiveQuery(() => db.categoryOverrides.toArray(), [], [] as CategoryOverride[]);
+  const categoryOverrides = useMemo(() => {
+    const map: Record<string, string> = {};
+    (categoryOverridesObj || []).forEach((o) => {
+      map[o.codigo] = o.categoria;
+    });
+    return map;
+  }, [categoryOverridesObj]);
 
   const categorizarComOverride = useCallback((servicoDesc: string, code?: string) => {
-    if (code && categoryOverrides[code]) return categoryOverrides[code];
     const todas = [...Object.values(lc116CategoriasMap), ...customCategories];
-    return categorizarServico(servicoDesc, code, todas);
+    return categorizarServico(servicoDesc, code, todas, categoryOverrides);
   }, [categoryOverrides, customCategories]);
 
   // File processors
@@ -237,13 +235,13 @@ function TomadosRouteComponent() {
   const notasTomValidas = useMemo(() => {
     return notasTomValidasSemCategoria.filter((n) => {
       if (categoriaFiltroTomadas === "__all__") return true;
-      const cat = categorizarServico(n.servico, n.codTribNacional);
+      const cat = categorizarComOverride(n.servico, n.codTribNacional);
       if (categoriaFiltroTomadas === "Outras") {
         return !top9Keys.includes(cat);
       }
       return cat === categoriaFiltroTomadas;
     });
-  }, [notasTomValidasSemCategoria, categoriaFiltroTomadas, top9Keys]);
+  }, [notasTomValidasSemCategoria, categoriaFiltroTomadas, top9Keys, categorizarComOverride]);
 
   const totalTomados = useMemo(() => notasTomValidas.reduce((s, n) => s + n.valor, 0), [notasTomValidas]);
   const fornecedoresAtivos = useMemo(() => new Set(notasTomValidas.map((n) => n.cnpjPrestador)).size, [notasTomValidas]);

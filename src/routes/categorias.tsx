@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useMemo, useCallback } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { z } from "zod";
-import { db } from "@/lib/db";
+import { db, type CustomCategory, type CategoryOverride } from "@/lib/db";
 import {
   categorizarServico,
   lc116CategoriasMap,
@@ -35,22 +35,21 @@ function CategoriasRouteComponent() {
   const navigate = useNavigate({ from: Route.id });
   const { addActivity } = useLayoutShell();
 
-  // State overrides and custom categories loaded from localStorage
-  const [categoryOverrides, setCategoryOverrides] = useState<Record<string, string>>(() => {
-    try {
-      return JSON.parse(localStorage.getItem("categoryOverrides") || "{}");
-    } catch {
-      return {};
-    }
-  });
+  // Load custom categories from IndexedDB
+  const customCategoriesObj = useLiveQuery(() => db.customCategories.toArray(), [], [] as CustomCategory[]);
+  const customCategories = useMemo(() => {
+    return (customCategoriesObj || []).map((c) => c.nome);
+  }, [customCategoriesObj]);
 
-  const [customCategories, setCustomCategories] = useState<string[]>(() => {
-    try {
-      return JSON.parse(localStorage.getItem("customCategories") || "[]");
-    } catch {
-      return [];
-    }
-  });
+  // Load category overrides from IndexedDB
+  const categoryOverridesObj = useLiveQuery(() => db.categoryOverrides.toArray(), [], [] as CategoryOverride[]);
+  const categoryOverrides = useMemo(() => {
+    const map: Record<string, string> = {};
+    (categoryOverridesObj || []).forEach((o) => {
+      map[o.codigo] = o.categoria;
+    });
+    return map;
+  }, [categoryOverridesObj]);
 
   const [novaCategoriaNome, setNovaCategoriaNome] = useState("");
   const [showCriarForm, setShowCriarForm] = useState(false);
@@ -78,9 +77,9 @@ function CategoriasRouteComponent() {
       if (!code) continue;
       if (!codigosMap.has(code)) {
         const officialDesc = getServicoDescricao(code);
-        let catAuto = categorizarServico(desc, code, todasCategorias);
+        let catAuto = categorizarServico(desc, code, todasCategorias, categoryOverrides);
         if (catAuto === "Serviços Diversos") {
-          const catOfficial = categorizarServico(officialDesc, code, todasCategorias);
+          const catOfficial = categorizarServico(officialDesc, code, todasCategorias, categoryOverrides);
           if (catOfficial !== "Serviços Diversos") {
             catAuto = catOfficial;
           } else {
@@ -101,7 +100,7 @@ function CategoriasRouteComponent() {
       }
     }
     return [...codigosMap.values()].sort((a, b) => b.count - a.count);
-  }, [todasNotas, todasNotasTomadas, todasCategorias]);
+  }, [todasNotas, todasNotasTomadas, todasCategorias, categoryOverrides]);
 
   // Filtered rows for code mappings table
   const linhasFiltradas = useMemo(() => {
@@ -115,28 +114,19 @@ function CategoriasRouteComponent() {
     );
   }, [uniqueCodes, searchCat, categoryOverrides]);
 
-  const saveCategoryOverride = (code: string, categoria: string) => {
-    setCategoryOverrides((prev) => {
-      const next = { ...prev, [code]: categoria };
-      localStorage.setItem("categoryOverrides", JSON.stringify(next));
-      return next;
-    });
+  const saveCategoryOverride = async (code: string, categoria: string) => {
+    await db.categoryOverrides.put({ codigo: code, categoria });
     addActivity("update", "Override de Categoria", `Código "${code}" mapeado para "${categoria}".`);
     toast.success(`Categoria do código "${code}" alterada para "${categoria}".`);
   };
 
-  const removeCategoryOverride = (code: string) => {
-    setCategoryOverrides((prev) => {
-      const next = { ...prev };
-      delete next[code];
-      localStorage.setItem("categoryOverrides", JSON.stringify(next));
-      return next;
-    });
+  const removeCategoryOverride = async (code: string) => {
+    await db.categoryOverrides.delete(code);
     addActivity("update", "Override Removido", `Restaurada categoria padrão do código "${code}".`);
     toast.success(`Override do código "${code}" removido.`);
   };
 
-  const addCustomCategory = (nome: string) => {
+  const addCustomCategory = async (nome: string) => {
     const cleanNome = nome.trim();
     if (!cleanNome) return false;
     if (customCategories.length >= 100) {
@@ -150,46 +140,31 @@ function CategoriasRouteComponent() {
       return false;
     }
 
-    setCustomCategories((prev) => {
-      const next = [...prev, cleanNome];
-      localStorage.setItem("customCategories", JSON.stringify(next));
-      return next;
-    });
+    await db.customCategories.put({ id: cleanNome, nome: cleanNome });
     addActivity("update", "Nova Categoria", `Categoria customizada "${cleanNome}" criada.`);
     toast.success(`Categoria "${cleanNome}" criada com sucesso!`);
     return true;
   };
 
-  const removeCustomCategory = (nome: string) => {
-    setCustomCategories((prev) => {
-      const next = prev.filter(c => c !== nome);
-      localStorage.setItem("customCategories", JSON.stringify(next));
-      return next;
-    });
-    // Cleanup overrides pointing to this category
-    setCategoryOverrides((prev) => {
-      let changed = false;
-      const next = { ...prev };
-      for (const [code, cat] of Object.entries(next)) {
-        if (cat === nome) {
-          delete next[code];
-          changed = true;
-        }
-      }
-      if (changed) {
-        localStorage.setItem("categoryOverrides", JSON.stringify(next));
-      }
-      return next;
-    });
+  const removeCustomCategory = async (nome: string) => {
+    await db.customCategories.delete(nome);
+
+    // Cleanup overrides pointing to this category in Dexie
+    const overrides = await db.categoryOverrides.toArray();
+    const toDelete = overrides.filter((o) => o.categoria === nome).map((o) => o.codigo);
+    if (toDelete.length > 0) {
+      await Promise.all(toDelete.map((code) => db.categoryOverrides.delete(code)));
+    }
+
     addActivity("update", "Categoria Removida", `Categoria customizada "${nome}" excluída.`);
     toast.success(`Categoria "${nome}" removida.`);
   };
 
-  const autoCategorizeSelected = (codes: string[]) => {
+  const autoCategorizeSelected = async (codes: string[]) => {
     let successCount = 0;
-    const nextOverrides = { ...categoryOverrides };
+    const batch = [];
 
-    codes.forEach((code) => {
+    for (const code of codes) {
       const desc = getServicoDescricao(code);
       let matched = obterCategoriaPorCodigo(code);
       if (!matched) {
@@ -200,14 +175,13 @@ function CategoriasRouteComponent() {
       }
 
       if (matched) {
-        nextOverrides[code] = matched;
+        batch.push({ codigo: code, categoria: matched });
         successCount++;
       }
-    });
+    }
 
-    if (successCount > 0) {
-      setCategoryOverrides(nextOverrides);
-      localStorage.setItem("categoryOverrides", JSON.stringify(nextOverrides));
+    if (batch.length > 0) {
+      await db.categoryOverrides.bulkPut(batch);
       addActivity("update", "Auto-Categorização Lote", `${successCount} códigos classificados em lote.`);
       toast.success(`${successCount} código(s) categorizado(s) automaticamente com base na descrição.`);
     } else {
@@ -268,10 +242,12 @@ function CategoriasRouteComponent() {
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                if (addCustomCategory(novaCategoriaNome)) {
-                  setNovaCategoriaNome("");
-                  setShowCriarForm(false);
-                }
+                addCustomCategory(novaCategoriaNome).then((success) => {
+                  if (success) {
+                    setNovaCategoriaNome("");
+                    setShowCriarForm(false);
+                  }
+                });
               }}
               className="flex flex-col gap-2 pt-3 border-t border-border/60 animate-in fade-in slide-in-from-top-2 duration-200"
             >

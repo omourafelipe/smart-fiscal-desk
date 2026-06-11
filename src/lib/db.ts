@@ -60,9 +60,21 @@ export interface NotaFiscalTomada {
   raw?: string;
 }
 
+export interface CustomCategory {
+  id: string; // Nome da categoria como ID (ex: "Consultoria")
+  nome: string;
+}
+
+export interface CategoryOverride {
+  codigo: string; // codTribNacional (ex: "42201")
+  categoria: string; // Nome da categoria mapeada
+}
+
 class NfseDB extends Dexie {
   notas!: Table<NotaFiscal, string>;
   notasTomadas!: Table<NotaFiscalTomada, string>;
+  customCategories!: Table<CustomCategory, string>;
+  categoryOverrides!: Table<CategoryOverride, string>;
 
   constructor() {
     super("nfse-dashboard");
@@ -86,6 +98,35 @@ class NfseDB extends Dexie {
         "id, cnpjTomador, cnpjPrestador, nomePrestador, dhEmi, status, chave, codTribNacional",
     }).upgrade(() => {
       // Criação da tabela notasTomadas — nenhuma migração de dados necessária
+    });
+    this.version(6).stores({
+      notas:
+        "id, cnpjPrestador, nomePrestador, dhEmi, status, chave, cnpjCpfCliente, codTribNacional",
+      notasTomadas:
+        "id, cnpjTomador, cnpjPrestador, nomePrestador, dhEmi, status, chave, codTribNacional",
+      customCategories: "id, nome",
+      categoryOverrides: "codigo, categoria",
+    }).upgrade(async (tx) => {
+      try {
+        if (typeof window !== "undefined") {
+          const storedCustom = localStorage.getItem("customCategories");
+          if (storedCustom) {
+            const arr = JSON.parse(storedCustom) as string[];
+            for (const cat of arr) {
+              await tx.table("customCategories").put({ id: cat, nome: cat });
+            }
+          }
+          const storedOverrides = localStorage.getItem("categoryOverrides");
+          if (storedOverrides) {
+            const obj = JSON.parse(storedOverrides) as Record<string, string>;
+            for (const [codigo, categoria] of Object.entries(obj)) {
+              await tx.table("categoryOverrides").put({ codigo, categoria });
+            }
+          }
+        }
+      } catch (e) {
+        console.error("Erro ao migrar dados de localStorage para Dexie:", e);
+      }
     });
   }
 }

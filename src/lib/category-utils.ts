@@ -265,17 +265,30 @@ export function obterCategoriaMaisProxima(desc: string, categoriasDisponiveis: s
   return maxScore > 0 ? bestCat : "Serviços Diversos";
 }
 
-export function categorizarServico(desc: string, code?: string, todasCategorias?: string[]): string {
-  if (desc) {
-    const cat = obterCategoriaPorDescricao(desc);
+export function categorizarServico(desc: string, code?: string, todasCategorias?: string[], overrides?: Record<string, string>): string {
+  // 1. Verifica override manual primeiro
+  if (code && overrides && overrides[code]) {
+    return overrides[code];
+  }
+
+  // 2. Busca descrição oficial na nbs_mapping.json
+  let officialDesc = "";
+  if (code) {
+    officialDesc = getServicoDescricao(code);
+  }
+
+  // 3. Roda correspondência de regras de palavras-chave sobre a descrição oficial da nbs_mapping
+  if (officialDesc && officialDesc !== "Sem descrição" && !officialDesc.startsWith("Outros (")) {
+    const cat = obterCategoriaPorDescricao(officialDesc);
     if (cat && cat !== "Serviços Diversos") return cat;
 
     if (todasCategorias) {
-      const closest = obterCategoriaMaisProxima(desc, todasCategorias);
+      const closest = obterCategoriaMaisProxima(officialDesc, todasCategorias);
       if (closest && closest !== "Serviços Diversos") return closest;
     }
   }
 
+  // 4. Mapeamento clássico por faixas/códigos de serviço se descrição oficial não resolveu
   if (code) {
     const clean = String(code).trim().replace(/\D/g, "");
     if (clean.length === 6) {
@@ -297,11 +310,20 @@ export function categorizarServico(desc: string, code?: string, todasCategorias?
         if (lc116CategoriasMap[group]) return lc116CategoriasMap[group];
       }
     }
-  }
 
-  if (code) {
     const cat = obterCategoriaPorCodigo(code);
     if (cat) return cat;
+  }
+
+  // 5. Fallback final na descrição livre preenchida no XML pelo prestador
+  if (desc) {
+    const cat = obterCategoriaPorDescricao(desc);
+    if (cat && cat !== "Serviços Diversos") return cat;
+
+    if (todasCategorias) {
+      const closest = obterCategoriaMaisProxima(desc, todasCategorias);
+      if (closest && closest !== "Serviços Diversos") return closest;
+    }
   }
 
   return "Serviços Diversos";
