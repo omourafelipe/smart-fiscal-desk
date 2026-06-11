@@ -428,7 +428,7 @@ function obterCategoriaPorCodigo(code: string): string | null {
       // Tenta os 2 primeiros dígitos como grupo (ex: "14001" → grupo "14")
       const firstTwo = clean.slice(0, 2);
       const val = parseInt(firstTwo, 10);
-      if (val >= 1 && val <= 40) {
+      if (val >= 1 && val <= 100) {
         itemGroup = firstTwo.padStart(2, "0");
       } else {
         // Tenta o primeiro dígito como grupo (ex: "701" → grupo "07")
@@ -735,6 +735,10 @@ function Dashboard() {
   const addCustomCategory = (nome: string) => {
     const cleanNome = nome.trim();
     if (!cleanNome) return false;
+    if (customCategories.length >= 100) {
+      toast.error("Limite de 100 categorias personalizadas atingido!");
+      return false;
+    }
     const exists = [...Object.values(lc116CategoriasMap), ...customCategories]
       .some(cat => cat.toLowerCase() === cleanNome.toLowerCase() || cleanNome.toLowerCase() === "serviços diversos");
     if (exists) {
