@@ -28,7 +28,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { categorizarServico, lc116CategoriasMap } from "@/lib/category-utils";
+import { categorizarServico, lc116CategoriasMap, lc116SubItemCategoriasMap, obterGrupoSintetico } from "@/lib/category-utils";
 import { autoCadastrarCategoriasParaNovosCodigos } from "@/lib/category-suggester";
 
 const searchSchema = z.object({
@@ -139,7 +139,7 @@ function TomadosRouteComponent() {
   }, [categoryOverridesObj]);
 
   const categorizarComOverride = useCallback((servicoDesc: string, code?: string) => {
-    const todas = [...Object.values(lc116CategoriasMap), ...customCategories];
+    const todas = [...Object.values(lc116SubItemCategoriasMap), ...customCategories];
     return categorizarServico(servicoDesc, code, todas, categoryOverrides);
   }, [categoryOverrides, customCategories]);
 
@@ -271,8 +271,9 @@ function TomadosRouteComponent() {
   const { servicoData, top9Keys } = useMemo(() => {
     const servicoMap = new Map<string, number>();
     notasTomValidasSemCategoria.forEach((n) => {
-      const key = categorizarComOverride(n.servico, n.codTribNacional) || "Sem categoria";
-      servicoMap.set(key, (servicoMap.get(key) ?? 0) + n.valor);
+      const cat = categorizarComOverride(n.servico, n.codTribNacional) || "Sem categoria";
+      const grupo = obterGrupoSintetico(cat, customCategoriesObj || []);
+      servicoMap.set(grupo, (servicoMap.get(grupo) ?? 0) + n.valor);
     });
 
     const servicoEntries = Array.from(servicoMap.entries()).sort(([, a], [, b]) => b - a);
@@ -285,18 +286,19 @@ function TomadosRouteComponent() {
     ];
 
     return { servicoData, top9Keys };
-  }, [notasTomValidasSemCategoria, categorizarComOverride]);
+  }, [notasTomValidasSemCategoria, categorizarComOverride, customCategoriesObj]);
 
   const notasTomValidas = useMemo(() => {
     return notasTomValidasSemCategoria.filter((n) => {
       if (categoriaFiltroTomadas === "__all__") return true;
       const cat = categorizarComOverride(n.servico, n.codTribNacional) || "Sem categoria";
+      const grupo = obterGrupoSintetico(cat, customCategoriesObj || []);
       if (categoriaFiltroTomadas === "Outras") {
-        return !top9Keys.includes(cat);
+        return !top9Keys.includes(grupo);
       }
-      return cat === categoriaFiltroTomadas;
+      return grupo === categoriaFiltroTomadas;
     });
-  }, [notasTomValidasSemCategoria, categoriaFiltroTomadas, top9Keys, categorizarComOverride]);
+  }, [notasTomValidasSemCategoria, categoriaFiltroTomadas, top9Keys, categorizarComOverride, customCategoriesObj]);
 
   const totalTomados = useMemo(() => notasTomValidas.reduce((s, n) => s + n.valor, 0), [notasTomValidas]);
   const fornecedoresAtivos = useMemo(() => new Set(notasTomValidas.map((n) => n.cnpjPrestador)).size, [notasTomValidas]);

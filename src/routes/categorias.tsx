@@ -6,9 +6,11 @@ import { db, type CustomCategory, type CategoryOverride } from "@/lib/db";
 import {
   categorizarServico,
   lc116CategoriasMap,
+  lc116SubItemCategoriasMap,
   getServicoDescricao,
   obterCategoriaPorCodigo,
   obterCategoriaMaisProxima,
+  obterGrupoSintetico,
 } from "@/lib/category-utils";
 import { gerarSugestoesCategorias } from "@/lib/category-suggester";
 import { useLayoutShell } from "@/components/layout/LayoutShell";
@@ -53,6 +55,7 @@ function CategoriasRouteComponent() {
   }, [categoryOverridesObj]);
 
   const [novaCategoriaNome, setNovaCategoriaNome] = useState("");
+  const [novaCategoriaGrupo, setNovaCategoriaGrupo] = useState("Serviços Diversos");
   const [showCriarForm, setShowCriarForm] = useState(false);
   const [searchCat, setSearchCat] = useState("");
   const [selectedCodes, setSelectedCodes] = useState<Set<string>>(new Set());
@@ -62,10 +65,27 @@ function CategoriasRouteComponent() {
   const todasNotas = useLiveQuery(() => db.notas.toArray(), [], []);
   const todasNotasTomadas = useLiveQuery(() => db.notasTomadas.toArray(), [], []);
 
-  // Combined categories list (Official 40 + Custom categories)
+  // Combined categories list (Official 196 + Custom categories)
   const todasCategorias = useMemo(() => {
-    return [...Object.values(lc116CategoriasMap), ...customCategories].sort();
+    return [...Object.values(lc116SubItemCategoriasMap), ...customCategories].sort();
   }, [customCategories]);
+
+  // Group categories by synthetic group for visual grouping in dropdowns
+  const categoriasAgrupadas = useMemo(() => {
+    const grupos: Record<string, string[]> = {};
+    todasCategorias.forEach((cat) => {
+      const grupo = obterGrupoSintetico(cat, customCategoriesObj || []);
+      if (!grupos[grupo]) {
+        grupos[grupo] = [];
+      }
+      grupos[grupo].push(cat);
+    });
+    return Object.entries(grupos).sort(([a], [b]) => {
+      if (a === "Serviços Diversos") return 1;
+      if (b === "Serviços Diversos") return -1;
+      return a.localeCompare(b);
+    });
+  }, [todasCategorias, customCategoriesObj]);
 
   // Map service codes from all notes
   const uniqueCodes = useMemo(() => {
@@ -134,22 +154,23 @@ function CategoriasRouteComponent() {
     toast.success(`Override do código "${code}" removido.`);
   };
 
-  const addCustomCategory = async (nome: string) => {
+  const addCustomCategory = async (nome: string, grupo?: string) => {
     const cleanNome = nome.trim();
     if (!cleanNome) return false;
     if (customCategories.length >= 100) {
       toast.error("Limite de 100 categorias personalizadas atingido!");
       return false;
     }
-    const exists = [...Object.values(lc116CategoriasMap), ...customCategories]
+    const exists = [...Object.values(lc116SubItemCategoriasMap), ...customCategories]
       .some(cat => cat.toLowerCase() === cleanNome.toLowerCase() || cleanNome.toLowerCase() === "serviços diversos");
     if (exists) {
       toast.error("Esta categoria já existe!");
       return false;
     }
 
-    await db.customCategories.put({ id: cleanNome, nome: cleanNome });
-    addActivity("update", "Nova Categoria", `Categoria customizada "${cleanNome}" criada.`);
+    const grupoSintetico = grupo || "Serviços Diversos";
+    await db.customCategories.put({ id: cleanNome, nome: cleanNome, grupoSintetico });
+    addActivity("update", "Nova Categoria", `Categoria customizada "${cleanNome}" criada no grupo "${grupoSintetico}".`);
     toast.success(`Categoria "${cleanNome}" criada com sucesso!`);
     return true;
   };
@@ -250,16 +271,17 @@ function CategoriasRouteComponent() {
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                addCustomCategory(novaCategoriaNome).then((success) => {
+                addCustomCategory(novaCategoriaNome, novaCategoriaGrupo).then((success) => {
                   if (success) {
                     setNovaCategoriaNome("");
+                    setNovaCategoriaGrupo("Serviços Diversos");
                     setShowCriarForm(false);
                   }
                 });
               }}
               className="flex flex-col gap-2 pt-3 border-t border-border/60 animate-in fade-in slide-in-from-top-2 duration-200"
             >
-              <div className="flex items-center gap-2">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                 <div className="flex-1 max-w-sm">
                   <Input
                     type="text"
@@ -270,42 +292,66 @@ function CategoriasRouteComponent() {
                     autoFocus
                   />
                 </div>
-                <Button type="submit" size="sm" className="h-8 rounded-xl text-xs cursor-pointer">
-                  Criar Categoria
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setShowCriarForm(false);
-                    setNovaCategoriaNome("");
-                  }}
-                  className="h-8 rounded-xl text-xs cursor-pointer text-muted-foreground"
-                >
-                  Cancelar
-                </Button>
+                <div className="w-full sm:w-64">
+                  <select
+                    value={novaCategoriaGrupo}
+                    onChange={(e) => setNovaCategoriaGrupo(e.target.value)}
+                    className="h-8 w-full px-2 text-xs rounded-xl border border-border bg-card outline-none focus:ring-2 focus:ring-indigo-500/30 text-foreground font-medium cursor-pointer"
+                  >
+                    <option value="Serviços Diversos">Grupo: Serviços Diversos (Padrão)</option>
+                    {Object.entries(lc116CategoriasMap)
+                      .filter(([k]) => !k.includes("."))
+                      .sort(([, a], [, b]) => a.localeCompare(b))
+                      .map(([code, name]) => (
+                        <option key={code} value={name}>
+                          Grupo: {name}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button type="submit" size="sm" className="h-8 rounded-xl text-xs cursor-pointer">
+                    Criar Categoria
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setShowCriarForm(false);
+                      setNovaCategoriaNome("");
+                      setNovaCategoriaGrupo("Serviços Diversos");
+                    }}
+                    className="h-8 rounded-xl text-xs cursor-pointer text-muted-foreground"
+                  >
+                    Cancelar
+                  </Button>
+                </div>
               </div>
               <p className="text-[10px] text-muted-foreground">
-                Crie categorias personalizadas além dos 40 itens padrão da LC 116 (Limite máximo de 100 categorias personalizadas).
+                Crie categorias personalizadas e associe-as a um grupo sintético para exibição nos gráficos e relatórios consolidados.
               </p>
             </form>
           )}
 
-          {customCategories.length > 0 && (
+          {customCategoriesObj && customCategoriesObj.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mt-1 pt-3 border-t border-border/50">
-              <span className="text-[10px] text-muted-foreground self-center mr-1">Categorias criadas ({customCategories.length}/100):</span>
-              {customCategories.map((cat) => (
+              <span className="text-[10px] text-muted-foreground self-center mr-1">Categorias criadas ({customCategoriesObj.length}/100):</span>
+              {customCategoriesObj.map((cat) => (
                 <Badge
-                  key={cat}
+                  key={cat.id}
                   variant="outline"
-                  className="text-[10px] px-2 py-0.5 rounded-md gap-1 bg-indigo-500/[0.02] border-indigo-500/10 text-indigo-700 dark:text-indigo-300 flex items-center"
+                  className="text-[10px] px-2 py-0.5 rounded-md gap-1.5 bg-indigo-500/[0.02] border-indigo-500/10 text-indigo-700 dark:text-indigo-300 flex items-center"
+                  title={`Grupo Sintético: ${cat.grupoSintetico || "Serviços Diversos"}`}
                 >
-                  {cat}
+                  <span className="font-semibold">{cat.nome}</span>
+                  <span className="text-[8px] opacity-70 bg-indigo-500/10 px-1 py-0.2 rounded font-normal">
+                    {cat.grupoSintetico || "Serviços Diversos"}
+                  </span>
                   <button
                     type="button"
-                    onClick={() => removeCustomCategory(cat)}
-                    className="hover:text-rose-500 cursor-pointer font-bold focus:outline-none ml-1 text-xs"
+                    onClick={() => removeCustomCategory(cat.nome)}
+                    className="hover:text-rose-500 cursor-pointer font-bold focus:outline-none text-xs ml-0.5"
                     title="Excluir esta categoria"
                   >
                     ×
@@ -493,10 +539,14 @@ function CategoriasRouteComponent() {
                               : "border-border text-foreground/90"
                           }`}
                         >
-                          {todasCategorias.map((cat) => (
-                            <option key={cat} value={cat}>
-                              {cat}
-                            </option>
+                          {categoriasAgrupadas.map(([grupo, cats]) => (
+                            <optgroup key={grupo} label={grupo}>
+                              {cats.map((cat) => (
+                                <option key={cat} value={cat}>
+                                  {cat}
+                                </option>
+                              ))}
+                            </optgroup>
                           ))}
                           <option value="">Sem categoria</option>
                         </select>

@@ -1,46 +1,50 @@
 import nbsMapping from "./nbs_mapping.json";
 
+// Mapas de Agrupamento Sintético e Analítico
+export const lc116SubItemCategoriasMap: Record<string, string> = {};
+export const categoriaParaGrupoSinteticoMap = new Map<string, string>();
+
 // Dicionário com mapeamento dos 40 itens oficiais da LC 116 para seus nomes legíveis (sem prefixo numérico)
 export const lc116CategoriasMap: Record<string, string> = {
   "01": "Informática e TI",
   "02": "Pesquisa e Desenvolvimento",
-  "03": "Locação e Cessão de Direito",
+  "03": "Locação e Cessão de Direitos",
   "04": "Saúde e Assistência Médica",
   "05": "Medicina Veterinária",
   "06": "Cuidados Pessoais e Estética",
   "07": "Engenharia e Construção Civil",
-  "08": "Treinamento e Educação",
+  "08": "Educação e Treinamentos",
   "09": "Hospedagem e Turismo",
-  "10": "Publicidade e Marketing",
-  "11": "Transporte e Logística",
-  "12": "Lazer e Recreação",
-  "13": "Produção e Fonografia",
+  "10": "Agenciamento e Intermediação",
+  "11": "Guarda, Vigilância e Armazenamento",
+  "12": "Lazer e Entretenimento",
+  "13": "Fotografia e Fonografia",
   "14": "Manutenção e Assistência Técnica",
   "15": "Serviços Financeiros",
   "16": "Transporte de Natureza Municipal",
-  "17": "Consultoria, Assessoria e RH",
-  "18": "Regulação de Sinistros e Afins",
-  "19": "Serviços de Distribuição e Venda",
-  "20": "Serviços Portuários e Aeroportuários",
-  "21": "Serviços Jurídicos e Cartoriais",
-  "22": "Serviços de Auxílio a Edificações",
-  "23": "Eventos e Produções",
-  "24": "Serviços de Chaveiros e Afins",
+  "17": "Apoio Técnico, Administrativo e Comercial",
+  "18": "Seguros e Regulação de Sinistros",
+  "19": "Distribuição de Apostas e Loterias",
+  "20": "Portos, Aeroportos e Terminais",
+  "21": "Serviços Cartoriais e Registros",
+  "22": "Exploração de Rodovias",
+  "23": "Programação Visual e Desenho Industrial",
+  "24": "Chaveiros, Carimbos e Placas",
   "25": "Serviços Funerários",
-  "26": "Serviços de Coleta e Tratamento de Resíduos",
-  "27": "Serviços de Artistas e Modelos",
-  "28": "Serviços de Desenho Industrial",
-  "29": "Serviços de Vigilância e Segurança",
-  "30": "Serviços de Transporte de Valores",
-  "31": "Serviços de Instrução e Treinamento",
-  "32": "Serviços de Desenhos e Artes Visuais",
-  "33": "Serviços de Despachantes e Afins",
-  "34": "Serviços de Investigações e Detetives",
-  "35": "Serviços de Reportagem e Assessoria de Imprensa",
-  "36": "Serviços de Meteorologia",
-  "37": "Serviços de Artistas Plásticos",
-  "38": "Serviços de Museologia",
-  "39": "Serviços de Ourivesaria",
+  "26": "Coleta e Entrega de Encomendas",
+  "27": "Assistência Social",
+  "28": "Avaliação de Bens",
+  "29": "Biblioteconomia",
+  "30": "Biologia, Biotecnologia e Química",
+  "31": "Serviços Técnicos Industriais",
+  "32": "Desenhos Técnicos",
+  "33": "Desembaraço Aduaneiro e Despachantes",
+  "34": "Investigações Particulares",
+  "35": "Jornalismo, Reportagem e Imprensa",
+  "36": "Meteorologia",
+  "37": "Artistas, Atletas e Modelos",
+  "38": "Museologia",
+  "39": "Ourivesaria e Lapidação",
   "40": "Obras de Arte e Restauração",
 };
 
@@ -130,12 +134,23 @@ export function obterNomeCategoriaDeSubitem(desc: string): string {
   return words.join(" ");
 }
 
-// Inicializa o mapa lc116CategoriasMap dinamicamente com os 200 subitens do nbs_mapping
+// Inicializa os mapas dinamicamente com os 200 subitens do nbs_mapping
 nbsMapping.forEach((item: any) => {
   if (item.itemLC116 && item.descricaoLC116) {
     const cleanName = obterNomeCategoriaDeSubitem(item.descricaoLC116);
-    if (cleanName && !lc116CategoriasMap[item.itemLC116]) {
-      lc116CategoriasMap[item.itemLC116] = cleanName;
+    if (cleanName) {
+      if (!lc116CategoriasMap[item.itemLC116]) {
+        lc116CategoriasMap[item.itemLC116] = cleanName;
+      }
+      if (!lc116SubItemCategoriasMap[item.itemLC116]) {
+        lc116SubItemCategoriasMap[item.itemLC116] = cleanName;
+      }
+
+      const parentGroupCode = item.itemLC116.split(".")[0].padStart(2, "0");
+      const parentGroupName = lc116CategoriasMap[parentGroupCode];
+      if (parentGroupName) {
+        categoriaParaGrupoSinteticoMap.set(cleanName.toLowerCase(), parentGroupName);
+      }
     }
   }
 
@@ -167,6 +182,30 @@ nbsMapping.forEach((item: any) => {
     }
   }
 });
+
+// Mapeia os 40 nomes de grupos macro originais para si mesmos no mapa sintético
+Object.values(lc116CategoriasMap).forEach((groupName) => {
+  categoriaParaGrupoSinteticoMap.set(groupName.toLowerCase(), groupName);
+});
+
+// Função para obter o grupo sintético correspondente a uma categoria (oficial ou personalizada)
+export function obterGrupoSintetico(categoria: string, customCategories?: Array<{ nome: string; grupoSintetico?: string }>): string {
+  if (!categoria) return "Sem categoria";
+  const key = categoria.trim().toLowerCase();
+
+  if (categoriaParaGrupoSinteticoMap.has(key)) {
+    return categoriaParaGrupoSinteticoMap.get(key)!;
+  }
+
+  if (customCategories) {
+    const matched = customCategories.find((c) => c.nome.toLowerCase() === key);
+    if (matched && matched.grupoSintetico) {
+      return matched.grupoSintetico;
+    }
+  }
+
+  return "Serviços Diversos";
+}
 
 export function normalizeString(str: string): string {
   return str

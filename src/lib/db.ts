@@ -63,6 +63,7 @@ export interface NotaFiscalTomada {
 export interface CustomCategory {
   id: string; // Nome da categoria como ID (ex: "Consultoria")
   nome: string;
+  grupoSintetico?: string;
 }
 
 export interface CategoryOverride {
