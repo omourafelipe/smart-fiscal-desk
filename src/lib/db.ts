@@ -71,11 +71,48 @@ export interface CategoryOverride {
   categoria: string; // Nome da categoria mapeada
 }
 
+export interface ServiceClassification {
+  codigo: string;             // Código da nota (codTribNacional)
+  categoriaExecutiva: string; // Nível 1
+  grupoOperacional: string;   // Nível 2
+  codigoLc116: string;        // Nível 3
+  descricaoLc116: string;
+  codigoNbs: string;
+  descricaoNbs: string;
+  origem: "Manual" | "Automática LC 116" | "Automática NBS" | "Similaridade" | "Não Classificada";
+  confianca: number;          // 0 a 100
+  metodo: string;             // Ex: "Regra Manual", "LC 116/NBS", etc.
+  dataClassificacao: string;  // ISO
+  conflito: boolean;          // Flag de conflito entre código e texto da nota
+  ausenteOficial: boolean;    // Flag de código ausente no nbs_mapping
+}
+
+export interface CategoryRule {
+  id?: number;
+  tipo: "codigo" | "descricao";
+  chave: string;
+  categoriaExecutiva: string;
+  grupoOperacional: string;
+}
+
+export interface AuditLog {
+  id?: number;
+  codigo: string;
+  classificacaoAnterior: string; // "Executiva > Grupo"
+  classificacaoNova: string;     // "Executiva > Grupo"
+  usuario: string;
+  dataHora: string;              // ISO
+  justificativa?: string;
+}
+
 class NfseDB extends Dexie {
   notas!: Table<NotaFiscal, string>;
   notasTomadas!: Table<NotaFiscalTomada, string>;
   customCategories!: Table<CustomCategory, string>;
   categoryOverrides!: Table<CategoryOverride, string>;
+  serviceClassifications!: Table<ServiceClassification, string>;
+  categoryRules!: Table<CategoryRule, number>;
+  auditLogs!: Table<AuditLog, number>;
 
   constructor() {
     super("nfse-dashboard");
@@ -128,6 +165,17 @@ class NfseDB extends Dexie {
       } catch (e) {
         console.error("Erro ao migrar dados de localStorage para Dexie:", e);
       }
+    });
+    this.version(7).stores({
+      notas:
+        "id, cnpjPrestador, nomePrestador, dhEmi, status, chave, cnpjCpfCliente, codTribNacional",
+      notasTomadas:
+        "id, cnpjTomador, cnpjPrestador, nomePrestador, dhEmi, status, chave, codTribNacional",
+      customCategories: "id, nome",
+      categoryOverrides: "codigo, categoria",
+      serviceClassifications: "codigo, categoriaExecutiva, grupoOperacional, origem, confianca",
+      categoryRules: "++id, tipo, chave",
+      auditLogs: "++id, codigo, dataHora",
     });
   }
 }

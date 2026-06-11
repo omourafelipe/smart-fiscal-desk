@@ -1,4 +1,5 @@
 import nbsMapping from "./nbs_mapping.json";
+import { type CategoryRule, type ServiceClassification } from "./db";
 
 // Mapas de Agrupamento Sintético e Analítico
 export const lc116SubItemCategoriasMap: Record<string, string> = {};
@@ -378,55 +379,477 @@ export function obterCategoriaMaisProxima(desc: string, categoriasDisponiveis: s
   return maxScore > 0 ? bestCat : "";
 }
 
+export const MAPEAMENTO_PADRAO_LC116: Record<string, { executiva: string; operacional: string }> = {
+  "01.01": { executiva: "Tecnologia", operacional: "Desenvolvimento de Software" },
+  "01.02": { executiva: "Tecnologia", operacional: "Desenvolvimento de Software" },
+  "01.03": { executiva: "Tecnologia", operacional: "Hospedagem e Cloud" },
+  "01.04": { executiva: "Tecnologia", operacional: "Desenvolvimento de Software" },
+  "01.05": { executiva: "Tecnologia", operacional: "Licenciamento de Software" },
+  "01.06": { executiva: "Tecnologia", operacional: "Consultoria em TI" },
+  "01.07": { executiva: "Tecnologia", operacional: "Suporte Técnico" },
+  "01.08": { executiva: "Tecnologia", operacional: "Licenciamento de Software" },
+  "01.09": { executiva: "Tecnologia", operacional: "Hospedagem e Cloud" },
+  
+  "02.01": { executiva: "Tecnologia", operacional: "Pesquisa e Desenvolvimento" },
+  
+  "03.02": { executiva: "Outros Serviços", operacional: "Cessão de Direitos" },
+  "03.03": { executiva: "Outros Serviços", operacional: "Locação de Bens" },
+  "03.04": { executiva: "Outros Serviços", operacional: "Locação de Bens" },
+  "03.05": { executiva: "Outros Serviços", operacional: "Locação de Bens" },
+
+  "04.01": { executiva: "Saúde", operacional: "Atendimento Clínico" },
+  "04.02": { executiva: "Saúde", operacional: "Exames Laboratoriais" },
+  "04.03": { executiva: "Saúde", operacional: "Serviços Hospitalares" },
+  "04.04": { executiva: "Saúde", operacional: "Serviços Hospitalares" },
+  "04.05": { executiva: "Saúde", operacional: "Atendimento Clínico" },
+  "04.06": { executiva: "Saúde", operacional: "Serviços de Enfermagem" },
+  "04.08": { executiva: "Saúde", operacional: "Exames Laboratoriais" },
+  "04.10": { executiva: "Saúde", operacional: "Atendimento Clínico" },
+
+  "05.01": { executiva: "Outros Serviços", operacional: "Medicina Veterinária" },
+  "06.01": { executiva: "Outros Serviços", operacional: "Estética e Cuidados Pessoais" },
+
+  "07.01": { executiva: "Engenharia", operacional: "Projetos Estruturais" },
+  "07.02": { executiva: "Construção Civil", operacional: "Execução de Obras" },
+  "07.03": { executiva: "Engenharia", operacional: "Consultoria de Engenharia" },
+  "07.04": { executiva: "Construção Civil", operacional: "Execução de Obras" },
+  "07.05": { executiva: "Engenharia", operacional: "Projetos Estruturais" },
+  "07.06": { executiva: "Construção Civil", operacional: "Reformas" },
+  "07.09": { executiva: "Administração", operacional: "Limpeza e Conservação" },
+  "07.10": { executiva: "Administração", operacional: "Limpeza e Conservação" },
+  "07.11": { executiva: "Administração", operacional: "Segurança e Vigilância" },
+
+  "08.01": { executiva: "Educação", operacional: "Treinamentos e Cursos" },
+  "08.02": { executiva: "Educação", operacional: "Treinamentos e Cursos" },
+
+  "09.01": { executiva: "Outros Serviços", operacional: "Hospedagem e Viagens" },
+  "10.01": { executiva: "Administração", operacional: "Intermediação de Negócios" },
+  "10.02": { executiva: "Administração", operacional: "Intermediação de Negócios" },
+  "10.05": { executiva: "Administração", operacional: "Intermediação de Negócios" },
+
+  "11.01": { executiva: "Administração", operacional: "Segurança e Vigilância" },
+  "11.02": { executiva: "Administração", operacional: "Segurança e Vigilância" },
+  "11.04": { executiva: "Administração", operacional: "Limpeza e Conservação" },
+
+  "12.01": { executiva: "Outros Serviços", operacional: "Lazer e Recreação" },
+  "13.01": { executiva: "Outros Serviços", operacional: "Produção Audiovisual" },
+  "14.01": { executiva: "Outros Serviços", operacional: "Assistência Técnica" },
+  "14.02": { executiva: "Outros Serviços", operacional: "Assistência Técnica" },
+
+  "15.01": { executiva: "Serviços Financeiros", operacional: "Operações Financeiras" },
+  "15.09": { executiva: "Serviços Financeiros", operacional: "Gestão de Recursos" },
+
+  "16.01": { executiva: "Logística", operacional: "Transporte de Passageiros" },
+  "16.02": { executiva: "Logística", operacional: "Transporte de Passageiros" },
+
+  "17.06": { executiva: "Marketing", operacional: "Propaganda e Publicidade" },
+  "17.12": { executiva: "Administração", operacional: "Serviços Contábeis" },
+  "17.14": { executiva: "Jurídico", operacional: "Assessoria Jurídica" },
+  "17.16": { executiva: "Consultoria", operacional: "Consultoria Empresarial" },
+  "17.19": { executiva: "Consultoria", operacional: "Consultoria Tributária" },
+  "17.25": { executiva: "Marketing", operacional: "Propaganda e Publicidade" },
+
+  "18.01": { executiva: "Serviços Financeiros", operacional: "Seguros e Previdência" },
+  "21.01": { executiva: "Jurídico", operacional: "Serviços Notariais e Registros" },
+  "26.01": { executiva: "Logística", operacional: "Transporte Rodoviário" },
+};
+
+export const MAPEAMENTO_PREFIXO_LC116: Record<string, { executiva: string; operacional: string }> = {
+  "01": { executiva: "Tecnologia", operacional: "Serviços de TI" },
+  "02": { executiva: "Tecnologia", operacional: "Pesquisa e Desenvolvimento" },
+  "03": { executiva: "Outros Serviços", operacional: "Cessão e Locação" },
+  "04": { executiva: "Saúde", operacional: "Serviços Médicos" },
+  "05": { executiva: "Outros Serviços", operacional: "Medicina Veterinária" },
+  "06": { executiva: "Outros Serviços", operacional: "Estética e Beleza" },
+  "07": { executiva: "Construção Civil", operacional: "Serviços de Construção" },
+  "08": { executiva: "Educação", operacional: "Treinamentos e Cursos" },
+  "09": { executiva: "Outros Serviços", operacional: "Turismo e Hospedagem" },
+  "10": { executiva: "Administração", operacional: "Intermediação de Negócios" },
+  "11": { executiva: "Administração", operacional: "Segurança e Guarda" },
+  "12": { executiva: "Outros Serviços", operacional: "Lazer e Recreação" },
+  "13": { executiva: "Outros Serviços", operacional: "Produção Audiovisual" },
+  "14": { executiva: "Outros Serviços", operacional: "Manutenção e Suporte" },
+  "15": { executiva: "Serviços Financeiros", operacional: "Operações Financeiras" },
+  "16": { executiva: "Logística", operacional: "Transporte de Passageiros" },
+  "17": { executiva: "Administração", operacional: "Serviços de Apoio" },
+  "18": { executiva: "Serviços Financeiros", operacional: "Seguros e Previdência" },
+  "19": { executiva: "Outros Serviços", operacional: "Loterias e Apostas" },
+  "20": { executiva: "Logística", operacional: "Serviços Portuários" },
+  "21": { executiva: "Jurídico", operacional: "Serviços Notariais" },
+  "22": { executiva: "Logística", operacional: "Concessão de Rodovias" },
+  "23": { executiva: "Marketing", operacional: "Design e Programação Visual" },
+  "24": { executiva: "Outros Serviços", operacional: "Chaveiros e Placas" },
+  "25": { executiva: "Outros Serviços", operacional: "Serviços Funerários" },
+  "26": { executiva: "Logística", operacional: "Serviços de Entrega" },
+  "27": { executiva: "Saúde", operacional: "Assistência Social" },
+  "28": { executiva: "Outros Serviços", operacional: "Avaliação de Bens" },
+  "29": { executiva: "Outros Serviços", operacional: "Biblioteconomia" },
+  "30": { executiva: "Tecnologia", operacional: "Biotecnologia e Química" },
+  "31": { executiva: "Engenharia", operacional: "Serviços Técnicos Industriais" },
+  "32": { executiva: "Engenharia", operacional: "Desenhos Técnicos" },
+  "33": { executiva: "Logística", operacional: "Desembaraço Aduaneiro" },
+  "34": { executiva: "Jurídico", operacional: "Investigações Particulares" },
+  "35": { executiva: "Marketing", operacional: "Jornalismo e Imprensa" },
+  "36": { executiva: "Outros Serviços", operacional: "Meteorologia" },
+  "37": { executiva: "Outros Serviços", operacional: "Artistas e Modelos" },
+  "38": { executiva: "Outros Serviços", operacional: "Museologia" },
+  "39": { executiva: "Outros Serviços", operacional: "Ourivesaria e Lapidação" },
+  "40": { executiva: "Outros Serviços", operacional: "Obras de Arte e Restauro" },
+};
+
+export function resolverServicoFiscal(codigo: string) {
+  const clean = String(codigo).trim().replace(/\D/g, "");
+  let itemLC116 = "";
+  let descricaoLC116 = "";
+  let nbs = "";
+  let descricaoNbs = "";
+
+  if (clean) {
+    let found = nbsMapping.find((item: any) => {
+      const itemCleanNbs = String(item.nbs || "").replace(/\D/g, "");
+      return itemCleanNbs && itemCleanNbs === clean;
+    });
+
+    if (!found && clean.length === 6) {
+      found = nbsMapping.find((item: any) => {
+        const itemClassTrib = String(item.cClassTrib || "");
+        return itemClassTrib.includes(clean);
+      });
+    }
+
+    if (!found) {
+      found = nbsMapping.find((item: any) => {
+        const itemCleanLc = String(item.itemLC116 || "").replace(/\D/g, "").replace(/^0+/, "");
+        const cleanLc = clean.replace(/^0+/, "");
+        return itemCleanLc && itemCleanLc === cleanLc;
+      });
+    }
+
+    if (found) {
+      itemLC116 = found.itemLC116 || "";
+      descricaoLC116 = found.descricaoLC116 || "";
+      nbs = found.nbs || "";
+      descricaoNbs = found.descricaoNbs || "";
+    } else {
+      if (clean.length === 6) {
+        const firstTwo = clean.slice(0, 2);
+        const nextTwo = clean.slice(2, 4);
+        itemLC116 = `${firstTwo}.${nextTwo}`;
+        descricaoLC116 = "Sem descrição oficial (Código Nacional)";
+      } else if (clean.length >= 9) {
+        nbs = codigo;
+        descricaoNbs = "Sem descrição oficial (NBS)";
+        const matchedLc = nbsLookupMap.get(clean);
+        if (matchedLc) {
+          itemLC116 = matchedLc;
+          descricaoLC116 = lc116DescricaoMap.get(matchedLc.replace(/\D/g, "").replace(/^0+/, "")) || "";
+        }
+      } else {
+        const parts = codigo.split(".");
+        if (parts.length === 2) {
+          itemLC116 = codigo;
+        } else {
+          const padded = clean.padStart(4, "0");
+          itemLC116 = `${padded.slice(0, 2)}.${padded.slice(2, 4)}`;
+        }
+        const cleanLcNormalized = itemLC116.replace(/\D/g, "").replace(/^0+/, "");
+        descricaoLC116 = lc116DescricaoMap.get(cleanLcNormalized) || "Sem descrição oficial";
+      }
+    }
+  }
+
+  return { itemLC116, descricaoLC116, nbs, descricaoNbs };
+}
+
+export function calcularJaccard(desc1: string, desc2: string): number {
+  const stopWords = new Set(["de", "do", "da", "em", "para", "com", "ou", "e", "um", "uma", "os", "as", "a", "o", "ao", "se", "por", "sobre", "relativos", "servicos"]);
+  const tokens1 = new Set(
+    normalizeString(desc1 || "")
+      .split(/[\s,./()\-]+/)
+      .map(w => w.trim())
+      .filter(w => w.length > 2 && !stopWords.has(w))
+  );
+  const tokens2 = new Set(
+    normalizeString(desc2 || "")
+      .split(/[\s,./()\-]+/)
+      .map(w => w.trim())
+      .filter(w => w.length > 2 && !stopWords.has(w))
+  );
+
+  if (tokens1.size === 0 || tokens2.size === 0) return 0;
+
+  let intersection = 0;
+  for (const token of tokens1) {
+    if (tokens2.has(token)) {
+      intersection++;
+    }
+  }
+
+  const union = tokens1.size + tokens2.size - intersection;
+  return intersection / union;
+}
+
+export function classificarServicoLocal(
+  codigo: string,
+  descNota: string,
+  regras: CategoryRule[]
+): ServiceClassification {
+  const cleanCode = String(codigo).trim().replace(/\D/g, "");
+  const normDesc = descNota ? normalizeString(descNota) : "";
+
+  const { itemLC116, descricaoLC116, nbs, descricaoNbs } = resolverServicoFiscal(codigo);
+  const ausenteOficial = !itemLC116 && !nbs;
+
+  let categoriaExecutiva = "Outros Serviços";
+  let grupoOperacional = "Outros Serviços";
+  let origem: ServiceClassification["origem"] = "Não Classificada";
+  let confianca = 50;
+  let metodo = "Outros Serviços";
+  let conflito = false;
+
+  // -- Prioridade 1: Regras Personalizadas do Usuário --
+  let regraAplicada = regras.find(r => r.tipo === "codigo" && String(r.chave).trim().replace(/\D/g, "") === cleanCode);
+  if (!regraAplicada && itemLC116) {
+    regraAplicada = regras.find(r => r.tipo === "codigo" && String(r.chave).trim() === itemLC116);
+  }
+  if (!regraAplicada && normDesc) {
+    regraAplicada = regras.find(r => r.tipo === "descricao" && normDesc.includes(normalizeString(r.chave)));
+  }
+
+  if (regraAplicada) {
+    return {
+      codigo,
+      categoriaExecutiva: regraAplicada.categoriaExecutiva,
+      grupoOperacional: regraAplicada.grupoOperacional,
+      codigoLc116: itemLC116 || (cleanCode.length <= 4 ? codigo : ""),
+      descricaoLc116,
+      codigoNbs: nbs || (cleanCode.length >= 9 ? codigo : ""),
+      descricaoNbs,
+      origem: "Manual",
+      confianca: 100,
+      metodo: "Regra Manual",
+      dataClassificacao: new Date().toISOString(),
+      conflito: false,
+      ausenteOficial,
+    };
+  }
+
+  // -- Prioridade 2: Mapeamento Oficial LC 116 + NBS --
+  let mapeado = false;
+  
+  if (itemLC116 && MAPEAMENTO_PADRAO_LC116[itemLC116]) {
+    categoriaExecutiva = MAPEAMENTO_PADRAO_LC116[itemLC116].executiva;
+    grupoOperacional = MAPEAMENTO_PADRAO_LC116[itemLC116].operacional;
+    origem = "Automática LC 116";
+    confianca = 98;
+    metodo = "LC 116/NBS";
+    mapeado = true;
+  }
+  
+  if (!mapeado && itemLC116) {
+    const prefix = itemLC116.split(".")[0].padStart(2, "0");
+    if (MAPEAMENTO_PREFIXO_LC116[prefix]) {
+      categoriaExecutiva = MAPEAMENTO_PREFIXO_LC116[prefix].executiva;
+      grupoOperacional = MAPEAMENTO_PREFIXO_LC116[prefix].operacional;
+      origem = "Automática LC 116";
+      confianca = 98;
+      metodo = "LC 116/NBS";
+      mapeado = true;
+    }
+  }
+  
+  if (!mapeado && nbs) {
+    const cleanNbs = nbs.replace(/\D/g, "");
+    const mappedLc = nbsLookupMap.get(cleanNbs);
+    if (mappedLc && MAPEAMENTO_PADRAO_LC116[mappedLc]) {
+      categoriaExecutiva = MAPEAMENTO_PADRAO_LC116[mappedLc].executiva;
+      grupoOperacional = MAPEAMENTO_PADRAO_LC116[mappedLc].operacional;
+      origem = "Automática NBS";
+      confianca = 98;
+      metodo = "LC 116/NBS";
+      mapeado = true;
+    }
+  }
+
+  // -- Prioridade 3: Inferência por similaridade textual --
+  let inferredExecutiva = "";
+  let inferredGrupo = "";
+  let inferredConfidence = 0;
+
+  if (normDesc) {
+    const keywordsRules = [
+      {
+        executiva: "Saúde",
+        grupos: [
+          { nome: "Serviços Hospitalares", keywords: ["hospital", "clinica", "sanatorio", "pronto socorro", "leito", "samel", "sus", "cirurg", "internacao"] },
+          { nome: "Exames Laboratoriais", keywords: ["exame", "laboratorio", "analise clinica", "imagem", "radiologia", "sangue", "urina", "patologia", "ressonancia", "tomografia", "ultrasson", "raio x"] },
+          { nome: "Atendimento Clínico", keywords: ["consulta", "medico", "enfermagem", "fisioterapia", "odontolog", "psicolog", "nutric"] }
+        ]
+      },
+      {
+        executiva: "Tecnologia",
+        grupos: [
+          { nome: "Desenvolvimento de Software", keywords: ["desenvolvimento", "software", "sistema", "programacao", "programador", "aplicativo", "app", "customizacao", "api", "codigo fonte"] },
+          { nome: "Hospedagem e Cloud", keywords: ["cloud", "hospedagem", "aws", "azure", "servidor", "saas", "banco de dados", "backup", "datacenter", "hospedar"] },
+          { nome: "Licenciamento de Software", keywords: ["licenca", "licenciamento", "direito de uso", "cessao de uso", "subscricao"] },
+          { nome: "Suporte Técnico", keywords: ["suporte tecnico", "suporte de ti", "manutencao de ti", "helpdesk", "chamado"] }
+        ]
+      },
+      {
+        executiva: "Consultoria",
+        grupos: [
+          { nome: "Consultoria Tributária", keywords: ["tributo", "fiscal", "tributaria", "imposto", "revisao fiscal", "planejamento tributario", "icms", "iss"] },
+          { nome: "Consultoria Empresarial", keywords: ["consultoria", "assessoria", "gestao", "auditoria", "rh", "processos", "estrategia", "treinamento", "mentoria"] }
+        ]
+      },
+      {
+        executiva: "Educação",
+        grupos: [
+          { nome: "Treinamentos e Cursos", keywords: ["treinamento", "curso", "escola", "palestra", "aula", "workshop", "ensino", "capacitacao", "ead"] }
+        ]
+      },
+      {
+        executiva: "Engenharia",
+        grupos: [
+          { nome: "Projetos Estruturais", keywords: ["projeto estrutural", "projeto", "calculo estrutural", "fundacoes", "concreto", "arquitetura", "planta", "topografia"] }
+        ]
+      },
+      {
+        executiva: "Jurídico",
+        grupos: [
+          { nome: "Assessoria Jurídica", keywords: ["juridico", "advogado", "advocacia", "processo judicial", "contrato", "legal", "parecer", "defesa"] }
+        ]
+      },
+      {
+        executiva: "Construção Civil",
+        grupos: [
+          { nome: "Execução de Obras", keywords: ["obra", "construcao", "reforma", "alvenaria", "pintura", "eletrica", "hidraulica", "instalacao", "pedreiro", "azulejo", "telhado"] }
+        ]
+      },
+      {
+        executiva: "Serviços Financeiros",
+        grupos: [
+          { nome: "Operações Financeiras", keywords: ["financeiro", "banco", "credito", "cobranca", "seguro", "investimento", "leasing", "cambio", "factoring"] }
+        ]
+      },
+      {
+        executiva: "Marketing",
+        grupos: [
+          { nome: "Propaganda e Publicidade", keywords: ["propaganda", "publicidade", "marketing", "anuncio", "mídia", "divulgacao", "google ads", "facebook ads", "panfleto", "banner"] }
+        ]
+      },
+      {
+        executiva: "Logística",
+        grupos: [
+          { nome: "Transporte Rodoviário", keywords: ["rodoviario", "frete", "carga", "transporte de carga", "entrega", "logistica", "transportadora", "caminhao"] }
+        ]
+      },
+      {
+        executiva: "Administração",
+        grupos: [
+          { nome: "Serviços Contábeis", keywords: ["contabilidade", "contador", "contabil", "balanco", "escrituracao"] },
+          { nome: "Limpeza e Conservação", keywords: ["limpeza", "conservacao", "faxina", "jardinagem", "zeladoria", "portaria", "vigia"] },
+          { nome: "Serviços de Apoio", keywords: ["auxilio", "apoio", "digitacao", "atendimento", "secretaria", "recepcao"] }
+        ]
+      }
+    ];
+
+    let bestScore = 0;
+    for (const catRule of keywordsRules) {
+      for (const gr of catRule.grupos) {
+        let matches = 0;
+        for (const kw of gr.keywords) {
+          if (normDesc.includes(kw)) {
+            matches++;
+          }
+        }
+        if (matches > 0) {
+          const score = matches * 10;
+          if (score > bestScore) {
+            bestScore = score;
+            inferredExecutiva = catRule.executiva;
+            inferredGrupo = gr.nome;
+            inferredConfidence = 85;
+          }
+        }
+      }
+    }
+
+    if (!inferredExecutiva) {
+      let bestJaccard = 0;
+      let matchedItem: any = null;
+
+      for (const item of nbsMapping) {
+        const descOficial = item.descricaoNbs || item.descricaoLC116 || "";
+        if (descOficial) {
+          const jc = calcularJaccard(descNota, descOficial);
+          if (jc > bestJaccard) {
+            bestJaccard = jc;
+            matchedItem = item;
+          }
+        }
+      }
+
+      if (bestJaccard > 0.15 && matchedItem) {
+        const matchedLc = matchedItem.itemLC116;
+        if (matchedLc && MAPEAMENTO_PADRAO_LC116[matchedLc]) {
+          inferredExecutiva = MAPEAMENTO_PADRAO_LC116[matchedLc].executiva;
+          inferredGrupo = MAPEAMENTO_PADRAO_LC116[matchedLc].operacional;
+        } else {
+          const prefix = String(matchedLc || "").split(".")[0].padStart(2, "0");
+          if (MAPEAMENTO_PREFIXO_LC116[prefix]) {
+            inferredExecutiva = MAPEAMENTO_PREFIXO_LC116[prefix].executiva;
+            inferredGrupo = MAPEAMENTO_PREFIXO_LC116[prefix].operacional;
+          }
+        }
+        inferredConfidence = 85;
+      }
+    }
+  }
+
+  if (!mapeado && inferredExecutiva) {
+    categoriaExecutiva = inferredExecutiva;
+    grupoOperacional = inferredGrupo || inferredExecutiva;
+    origem = "Similaridade";
+    confianca = inferredConfidence || 85;
+    metodo = "Similaridade Textual";
+  }
+
+  if (mapeado && inferredExecutiva && inferredExecutiva !== categoriaExecutiva) {
+    conflito = true;
+  }
+
+  if (itemLC116 && nbs) {
+    const cleanNbs = nbs.replace(/\D/g, "");
+    const mappedLc = nbsLookupMap.get(cleanNbs);
+    if (mappedLc && mappedLc !== itemLC116) {
+      const catLc = MAPEAMENTO_PADRAO_LC116[itemLC116]?.executiva;
+      const catNbs = MAPEAMENTO_PADRAO_LC116[mappedLc]?.executiva;
+      if (catLc && catNbs && catLc !== catNbs) {
+        conflito = true;
+      }
+    }
+  }
+
+  return {
+    codigo,
+    categoriaExecutiva,
+    grupoOperacional,
+    codigoLc116: itemLC116 || (cleanCode.length <= 4 ? codigo : ""),
+    descricaoLc116,
+    codigoNbs: nbs || (cleanCode.length >= 9 ? codigo : ""),
+    descricaoNbs,
+    origem,
+    confianca,
+    metodo,
+    dataClassificacao: new Date().toISOString(),
+    conflito,
+    ausenteOficial,
+  };
+}
+
 export function categorizarServico(desc: string, code?: string, todasCategorias?: string[]): string {
-  // 1. Busca descrição oficial na nbs_mapping.json
-  let officialDesc = "";
-  if (code) {
-    officialDesc = getServicoDescricao(code);
-  }
-
-  // 2. Roda correspondência de regras de palavras-chave sobre a descrição oficial da nbs_mapping
-  if (officialDesc && officialDesc !== "Sem descrição" && !officialDesc.startsWith("Outros (")) {
-    const cat = obterCategoriaPorDescricao(officialDesc);
-    if (cat && cat !== "") return cat;
-
-    if (todasCategorias) {
-      const closest = obterCategoriaMaisProxima(officialDesc, todasCategorias);
-      if (closest && closest !== "") return closest;
-    }
-  }
-
-  // 3. Mapeamento clássico por faixas/códigos de serviço se descrição oficial não resolveu
-  if (code) {
-    const clean = String(code).trim().replace(/\D/g, "");
-    if (clean.length === 6) {
-      const matched = cClassTribLookupMap.get(clean);
-      if (matched && lc116CategoriasMap[matched]) return lc116CategoriasMap[matched];
-    }
-    if (clean.length >= 9) {
-      const matched = nbsLookupMap.get(clean);
-      if (matched && lc116CategoriasMap[matched]) return lc116CategoriasMap[matched];
-    }
-    if (clean.length >= 2 && clean.length <= 4) {
-      const normalized = clean.replace(/^0+/, "");
-      const matched = lc116LookupMap.get(normalized);
-      if (matched && lc116CategoriasMap[matched]) return lc116CategoriasMap[matched];
-    }
-
-    const cat = obterCategoriaPorCodigo(code);
-    if (cat) return cat;
-  }
-
-  // 4. Fallback final na descrição livre preenchida no XML pelo prestador
-  if (desc) {
-    const cat = obterCategoriaPorDescricao(desc);
-    if (cat && cat !== "") return cat;
-
-    if (todasCategorias) {
-      const closest = obterCategoriaMaisProxima(desc, todasCategorias);
-      if (closest && closest !== "") return closest;
-    }
-  }
-
-  return "";
+  if (!code) return "";
+  const result = classificarServicoLocal(code, desc, []);
+  return result.categoriaExecutiva || "Outros Serviços";
 }
