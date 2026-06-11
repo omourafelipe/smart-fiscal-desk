@@ -264,42 +264,42 @@ const mesesOpcoes = [
  * Classifica uma descrição de serviço (xDescServ) em uma categoria geral.
  * Match case-insensitive; primeira regra a casar vence.
  */
-function categorizarServico(desc: string): string {
+function categorizarServico(desc: string, code?: string): string {
   let s = (desc || "").toLowerCase();
   
   // Mapeia códigos de serviço da LC 116/2003 e cTribNac para suas descrições/categorias
-  const cleanCode = s.replace(/\D/g, "");
+  const cleanCode = (code || desc || "").replace(/\D/g, "");
   if (/^\d+$/.test(cleanCode) && cleanCode.length > 0) {
     if (cleanCode.startsWith("01") || cleanCode.startsWith("101") || cleanCode.startsWith("102") || cleanCode.startsWith("103") || cleanCode.startsWith("104") || cleanCode.startsWith("105") || cleanCode.startsWith("106") || cleanCode.startsWith("107") || cleanCode.startsWith("108") || cleanCode.startsWith("109")) {
-      s += " tecnologia ti software sistema informática internet cloud datacenter suporte";
+      return "Tecnologia / TI";
     } else if (cleanCode.startsWith("03") || cleanCode.startsWith("301") || cleanCode.startsWith("302") || cleanCode.startsWith("303") || cleanCode.startsWith("304") || cleanCode.startsWith("305")) {
-      s += " locação aluguel leasing bens moveis equipamentos";
+      return "Locação / Aluguel";
     } else if (cleanCode.startsWith("04") || cleanCode.startsWith("401") || cleanCode.startsWith("402") || cleanCode.startsWith("403") || cleanCode.startsWith("404") || cleanCode.startsWith("405") || cleanCode.startsWith("406") || cleanCode.startsWith("407") || cleanCode.startsWith("408") || cleanCode.startsWith("409") || cleanCode.startsWith("410") || cleanCode.startsWith("411") || cleanCode.startsWith("412") || cleanCode.startsWith("413") || cleanCode.startsWith("414") || cleanCode.startsWith("415") || cleanCode.startsWith("416") || cleanCode.startsWith("417") || cleanCode.startsWith("418") || cleanCode.startsWith("419") || cleanCode.startsWith("420") || cleanCode.startsWith("421") || cleanCode.startsWith("422") || cleanCode.startsWith("423")) {
-      s += " saúde hospitalar médico clinic exame laboratorio analise clinica fisioterapia enfermagem";
+      return "Saúde / Hospitalar";
     } else if (cleanCode.startsWith("07") || cleanCode.startsWith("701") || cleanCode.startsWith("702") || cleanCode.startsWith("703") || cleanCode.startsWith("704") || cleanCode.startsWith("705") || cleanCode.startsWith("706") || cleanCode.startsWith("707") || cleanCode.startsWith("708") || cleanCode.startsWith("709") || cleanCode.startsWith("710") || cleanCode.startsWith("711") || cleanCode.startsWith("712") || cleanCode.startsWith("713") || cleanCode.startsWith("714") || cleanCode.startsWith("715") || cleanCode.startsWith("716") || cleanCode.startsWith("717") || cleanCode.startsWith("718") || cleanCode.startsWith("719") || cleanCode.startsWith("720") || cleanCode.startsWith("721") || cleanCode.startsWith("722")) {
-      s += " engenharia construção obra projeto arquitetura demolição reforma";
+      return "Engenharia e Construção";
     } else if (cleanCode.startsWith("08") || cleanCode.startsWith("801") || cleanCode.startsWith("802")) {
-      s += " treinamento educação ensino curso instrução escola palestra capacitação";
+      return "Treinamento e Educação";
     } else if (cleanCode.startsWith("10") || cleanCode.startsWith("1001") || cleanCode.startsWith("1002") || cleanCode.startsWith("1003") || cleanCode.startsWith("1004") || cleanCode.startsWith("1005") || cleanCode.startsWith("1006") || cleanCode.startsWith("1007") || cleanCode.startsWith("1008") || cleanCode.startsWith("1009") || cleanCode.startsWith("1010")) {
-      s += " publicidade marketing propaganda mídia veiculação agenciamento publicitario";
+      return "Publicidade e Marketing";
     } else if (cleanCode.startsWith("11") || cleanCode.startsWith("1101") || cleanCode.startsWith("1102") || cleanCode.startsWith("1103") || cleanCode.startsWith("1104") || cleanCode.startsWith("1105") || cleanCode.startsWith("1601") || cleanCode.startsWith("1602")) {
-      s += " transporte logística frete entrega fretamento carga correio";
+      return "Transporte e Logística";
     } else if (cleanCode.startsWith("14") || cleanCode.startsWith("1401") || cleanCode.startsWith("1402") || cleanCode.startsWith("1403") || cleanCode.startsWith("1404") || cleanCode.startsWith("1405") || cleanCode.startsWith("1406") || cleanCode.startsWith("1407") || cleanCode.startsWith("1408") || cleanCode.startsWith("1409") || cleanCode.startsWith("1410") || cleanCode.startsWith("1411") || cleanCode.startsWith("1412") || cleanCode.startsWith("1413") || cleanCode.startsWith("1414")) {
-      s += " manutenção reparos conserto reforma instalação elevador ar condicionado";
+      return "Manutenção e Reparos";
     } else if (cleanCode.startsWith("15") || cleanCode.startsWith("1501") || cleanCode.startsWith("1502") || cleanCode.startsWith("1503") || cleanCode.startsWith("1504") || cleanCode.startsWith("1505") || cleanCode.startsWith("1518")) {
-      s += " serviços financeiros bancários crédito cartão corretagem cobrança";
+      return "Serviços Financeiros";
     } else if (cleanCode.startsWith("17") || cleanCode.startsWith("1701") || cleanCode.startsWith("1702") || cleanCode.startsWith("1703") || cleanCode.startsWith("1704") || cleanCode.startsWith("1705") || cleanCode.startsWith("1706") || cleanCode.startsWith("1709") || cleanCode.startsWith("1710") || cleanCode.startsWith("1711") || cleanCode.startsWith("1712") || cleanCode.startsWith("1713") || cleanCode.startsWith("1714") || cleanCode.startsWith("1715") || cleanCode.startsWith("1716") || cleanCode.startsWith("1717") || cleanCode.startsWith("1718") || cleanCode.startsWith("1719") || cleanCode.startsWith("1720") || cleanCode.startsWith("1721") || cleanCode.startsWith("1722") || cleanCode.startsWith("1723") || cleanCode.startsWith("1724") || cleanCode.startsWith("1725")) {
-      s += " consultoria assessoria advocacia jurídica contábil auditoria rh recrutamento selecao recepcao apoio";
+      return "Consultoria e Assessoria";
     } else if (cleanCode.startsWith("23") || cleanCode.startsWith("2301")) {
-      s += " programação eventos organização produções congressos festas";
+      return "Eventos e Produções";
     } else if (cleanCode.startsWith("21") || cleanCode.startsWith("2101")) {
-      s += " cartório tabelionato registros publicos";
+      return "Serviços Jurídicos e Cartoriais";
     } else if (cleanCode.startsWith("26") || cleanCode.startsWith("2601")) {
-      s += " entrega correspondencia correios expressa malote";
+      return "Transporte e Logística";
     }
   }
 
-  if (!s.trim()) return "Outros";
+  if (!s.trim()) return "Serviços Diversos";
   const rules: Array<[string, string[]]> = [
     ["Saúde / Hospitalar", ["hospital", "médic", "medic", "clínic", "clinic", "laboratóri", "laboratori", "exame", "enfermag", "fisioterap", "saúde", "saude"]],
     ["Locação / Aluguel", ["locaç", "locac", "aluguel", "leasing"]],
@@ -325,7 +325,7 @@ function categorizarServico(desc: string): string {
   for (const [cat, keys] of rules) {
     if (keys.some((k) => s.includes(k))) return cat;
   }
-  return "Outros";
+  return "Serviços Diversos";
 }
 
 function Dashboard() {
@@ -3337,7 +3337,7 @@ function Dashboard() {
               // Gráfico B — distribuição por categoria de serviço (derivada da descrição)
               const servicoMap = new Map<string, number>();
               notasTomValidasSemCategoria.forEach((n) => {
-                const key = categorizarServico(n.servico);
+                const key = categorizarServico(n.servico, n.codTribNacional);
                 servicoMap.set(key, (servicoMap.get(key) ?? 0) + n.valor);
               });
               const SERV_COLORS = [
@@ -3364,7 +3364,7 @@ function Dashboard() {
               // Filtra notas por categoria ativa
               const notasTomValidas = notasTomValidasSemCategoria.filter((n) => {
                 if (categoriaFiltroTomadas === "__all__") return true;
-                const cat = categorizarServico(n.servico);
+                const cat = categorizarServico(n.servico, n.codTribNacional);
                 if (categoriaFiltroTomadas === "Outras") {
                   return !top9Keys.includes(cat);
                 }
@@ -3805,7 +3805,7 @@ function Dashboard() {
                               <TableCell className="max-w-[140px] truncate font-medium" title={n.nomePrestador}>{n.nomePrestador}</TableCell>
                               <TableCell className="max-w-[180px] truncate" title={n.servico}>
                                 <div className="font-medium text-foreground truncate">{n.servico || "—"}</div>
-                                <div className="text-[9px] text-indigo-600 dark:text-indigo-400 font-bold mt-0.5">{categorizarServico(n.servico)}</div>
+                                <div className="text-[9px] text-indigo-600 dark:text-indigo-400 font-bold mt-0.5">{categorizarServico(n.servico, n.codTribNacional)}</div>
                               </TableCell>
                               <TableCell className="text-right font-bold">{fmtBRL(n.valor)}</TableCell>
                               <TableCell className="text-right text-muted-foreground">{fmtBRL(n.vlrLiquido)}</TableCell>
