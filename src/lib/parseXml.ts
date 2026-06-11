@@ -342,6 +342,7 @@ export function parseNfseXmlTomada(
     const vlrIssRet = issRetidoFlag === "Sim"
       ? (vlrIssRetRaw > 0 ? vlrIssRetRaw : vlrIssQN)
       : 0;
+    const vlrIss = vlrIssRet > 0 ? vlrIssRet : vlrIssQN;
 
     // Retenções federais
     const vlrCsll = getNumberFallback(inf, [
@@ -408,6 +409,7 @@ export function parseNfseXmlTomada(
       chave,
       issRetido: issRetidoFlag,
       vlrIssRet,
+      vlrIss,
       vlrIrrf,
       vlrCsll,
       vlrPis,

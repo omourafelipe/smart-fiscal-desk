@@ -47,6 +47,16 @@ const ISS_SYNONYMS = [
   "iss recolher",
   "iss a recolher",
   "issqn a recolher",
+  "soma de vlr. issqn",
+  "soma de vlr issqn",
+  "vlr. issqn",
+  "vlr issqn",
+  "valor issqn",
+  "valor iss",
+  "vlr. iss",
+  "vlr iss",
+  "issqn",
+  "iss",
 ];
 
 export function normalizeString(s: string): string {
@@ -113,7 +123,11 @@ export function detectColumns(headers: string[]): { keyColumn?: string; statusCo
   }
   if (!issColumn) {
     issColumn = headers.find(
-      (h) => normalizeString(h).includes("retido") || normalizeString(h).includes("retenc"),
+      (h) =>
+        normalizeString(h).includes("retido") ||
+        normalizeString(h).includes("retenc") ||
+        normalizeString(h).includes("iss") ||
+        normalizeString(h).includes("issqn"),
     );
   }
 
@@ -185,6 +199,21 @@ export function parseExcelIssRetido(value: unknown): "Sim" | "Não" {
   const norm = normalizeString(String(value));
   if (!norm) return "Não";
 
+  // Mapeamentos específicos baseados no relatório do usuário (imagem)
+  if (norm === "retencaodoissqn" || norm === "retencaosimples") {
+    return "Sim";
+  }
+  if (
+    norm === "issqnarecolher" ||
+    norm === "issqnsuspenso" ||
+    norm === "nincidestfixoopisenta" ||
+    norm === "naoincidencia" ||
+    norm === "recolhimentofora" ||
+    norm === "simplesnacional"
+  ) {
+    return "Não";
+  }
+
   // Termos que indicam explicitamente NÃO retido (verificar PRIMEIRO para evitar falsos positivos)
   // Ex: "ISSQN a Recolher", "Não Retido", "Recolher"
   const noTerms = [
@@ -198,6 +227,7 @@ export function parseExcelIssRetido(value: unknown): "Sim" | "Não" {
     "false",
     "0",
     "nao",
+    "simplesnacional", // "Simples Nacional" é recolhido pelo prestador
   ];
   for (const term of noTerms) {
     if (norm === term || norm.startsWith(term) || norm.includes(term)) return "Não";
@@ -209,6 +239,7 @@ export function parseExcelIssRetido(value: unknown): "Sim" | "Não" {
   const yesTerms = [
     "retencaodoissqn", // "Retenção do ISSQN"
     "retencaoissqn",   // "Retenção ISSQN"
+    "retencaosimples", // "Retenção Simples"
     "retencao",        // "Retenção"
     "retido",          // "Retido"
     "sim",
@@ -217,7 +248,11 @@ export function parseExcelIssRetido(value: unknown): "Sim" | "Não" {
     "1",
   ];
   for (const term of yesTerms) {
-    if (norm === term || norm.startsWith(term) || norm.includes(normalizeString(term))) return "Sim";
+    if (term === "sim") {
+      if (norm === "sim") return "Sim";
+    } else {
+      if (norm === term || norm.startsWith(term) || norm.includes(term)) return "Sim";
+    }
   }
 
   return "Não";

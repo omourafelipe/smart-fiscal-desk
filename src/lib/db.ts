@@ -50,6 +50,7 @@ export interface NotaFiscalTomada {
   // ISS — responsabilidade de retenção do tomador
   issRetido: string;        // "Sim" | "Não"
   vlrIssRet: number;        // ISS retido pelo tomador (obrigação da Samel)
+  vlrIss?: number;          // Valor total de ISS da nota
   // Retenções federais obrigatórias (IN 1.234/2012)
   vlrIrrf: number;
   vlrCsll: number;

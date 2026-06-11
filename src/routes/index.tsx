@@ -481,6 +481,7 @@ function Dashboard() {
     alreadyCorrect: 0,
     notFound: 0,
   });
+  const [conciliationTarget, setConciliationTarget] = useState<"emitidas" | "tomadas">("emitidas");
 
   const [empresaFiltro, setEmpresaFiltro] = useState<string>("__all__");
   const [mesFiltro, setMesFiltro] = useState<string>(() => {
@@ -1304,6 +1305,8 @@ function Dashboard() {
       sCol: string,
       iCol: string,
       localNotas: NotaFiscal[],
+      localNotasTomadas: NotaFiscalTomada[],
+      target: "emitidas" | "tomadas",
     ) => {
       setIsXlsxProcessing(true);
       const results: ConciliationResult[] = [];
@@ -1312,58 +1315,114 @@ function Dashboard() {
       let alreadyCorrect = 0;
       let notFound = 0;
 
-      // Create a fast map of normalized chave to local note
-      const localMap = new Map<string, NotaFiscal>();
-      localNotas.forEach((n) => {
-        if (n.chave) {
-          localMap.set(n.chave, n);
+      if (target === "emitidas") {
+        // Create a fast map of normalized chave to local note
+        const localMap = new Map<string, NotaFiscal>();
+        localNotas.forEach((n) => {
+          if (n.chave) {
+            localMap.set(n.chave, n);
+          }
+        });
+
+        for (let idx = 0; idx < rows.length; idx++) {
+          const row = rows[idx];
+          const rawKey = String(row[kCol] ?? "").trim();
+          const key = rawKey.replace(/\D/g, "");
+          if (!key) continue;
+
+          const rawStatus = String(row[sCol] ?? "").trim();
+          let statusExcel = parseExcelStatus(rawStatus);
+
+          const rawIssRetido = iCol ? String(row[iCol] ?? "").trim() : "";
+          const issRetidoExcel = iCol ? parseExcelIssRetido(rawIssRetido) : "Não";
+
+          const local = localMap.get(key);
+
+          const statusChanged = local ? local.status !== statusExcel : false;
+          const issRetidoLocal = local ? (local.issRetido === "Sim" ? "Sim" : "Não") : "—";
+          const issRetidoChanged = local && iCol ? issRetidoLocal !== issRetidoExcel : false;
+
+          const res: ConciliationResult = {
+            rowNumber: idx + 2,
+            rawKey,
+            normalizedKey: key,
+            nNFSe: local?.nNFSe || "—",
+            prestador: local?.nomePrestador || "—",
+            rawStatus,
+            statusExcel,
+            statusLocal: local ? local.status : "nao_encontrado",
+            statusChanged,
+            notaId: local?.id,
+            rawIssRetido,
+            issRetidoExcel,
+            issRetidoLocal,
+            issRetidoChanged,
+          };
+
+          if (!local) {
+            notFound++;
+          } else if (res.statusChanged || res.issRetidoChanged) {
+            updated++;
+          } else {
+            alreadyCorrect++;
+          }
+
+          results.push(res);
         }
-      });
+      } else {
+        // target === "tomadas"
+        const localMap = new Map<string, NotaFiscalTomada>();
+        localNotasTomadas.forEach((n) => {
+          if (n.chave) {
+            localMap.set(n.chave, n);
+          }
+        });
 
-      for (let idx = 0; idx < rows.length; idx++) {
-        const row = rows[idx];
-        const rawKey = String(row[kCol] ?? "").trim();
-        const key = rawKey.replace(/\D/g, "");
-        if (!key) continue;
+        for (let idx = 0; idx < rows.length; idx++) {
+          const row = rows[idx];
+          const rawKey = String(row[kCol] ?? "").trim();
+          const key = rawKey.replace(/\D/g, "");
+          if (!key) continue;
 
-        const rawStatus = String(row[sCol] ?? "").trim();
-        let statusExcel = parseExcelStatus(rawStatus);
+          const rawStatus = String(row[sCol] ?? "").trim();
+          let statusExcel = parseExcelStatus(rawStatus);
 
-        const rawIssRetido = iCol ? String(row[iCol] ?? "").trim() : "";
-        const issRetidoExcel = iCol ? parseExcelIssRetido(rawIssRetido) : "Não";
+          const rawIssRetido = iCol ? String(row[iCol] ?? "").trim() : "";
+          const issRetidoExcel = iCol ? parseExcelIssRetido(rawIssRetido) : "Não";
 
-        const local = localMap.get(key);
+          const local = localMap.get(key);
 
-        const statusChanged = local ? local.status !== statusExcel : false;
-        const issRetidoLocal = local ? (local.issRetido === "Sim" ? "Sim" : "Não") : "—";
-        const issRetidoChanged = local && iCol ? issRetidoLocal !== issRetidoExcel : false;
+          const statusChanged = local ? local.status !== statusExcel : false;
+          const issRetidoLocal = local ? (local.issRetido === "Sim" ? "Sim" : "Não") : "—";
+          const issRetidoChanged = local && iCol ? issRetidoLocal !== issRetidoExcel : false;
 
-        const res: ConciliationResult = {
-          rowNumber: idx + 2,
-          rawKey,
-          normalizedKey: key,
-          nNFSe: local?.nNFSe || "—",
-          prestador: local?.nomePrestador || "—",
-          rawStatus,
-          statusExcel,
-          statusLocal: local ? local.status : "nao_encontrado",
-          statusChanged,
-          notaId: local?.id,
-          rawIssRetido,
-          issRetidoExcel,
-          issRetidoLocal,
-          issRetidoChanged,
-        };
+          const res: ConciliationResult = {
+            rowNumber: idx + 2,
+            rawKey,
+            normalizedKey: key,
+            nNFSe: local?.nNFSe || "—",
+            prestador: local?.nomePrestador || "—",
+            rawStatus,
+            statusExcel,
+            statusLocal: local ? local.status : "nao_encontrado",
+            statusChanged,
+            notaId: local?.id,
+            rawIssRetido,
+            issRetidoExcel,
+            issRetidoLocal,
+            issRetidoChanged,
+          };
 
-        if (!local) {
-          notFound++;
-        } else if (res.statusChanged || res.issRetidoChanged) {
-          updated++;
-        } else {
-          alreadyCorrect++;
+          if (!local) {
+            notFound++;
+          } else if (res.statusChanged || res.issRetidoChanged) {
+            updated++;
+          } else {
+            alreadyCorrect++;
+          }
+
+          results.push(res);
         }
-
-        results.push(res);
       }
 
       setConciliatedItems(results);
@@ -1398,8 +1457,8 @@ function Dashboard() {
       setStatusCol(sCol);
       setIssCol(issColDefault);
 
-      if (kCol && sCol && todasNotas) {
-        runConciliation(rows, kCol, sCol, issColDefault, todasNotas);
+      if (kCol && sCol && todasNotas && todasNotasTomadas) {
+        runConciliation(rows, kCol, sCol, issColDefault, todasNotas, todasNotasTomadas, conciliationTarget);
       }
       addActivity("conciliation", "Planilha Carregada", `Relatório "${file.name}" carregado com ${rows.length} linhas.`);
       setRightPanelOpen(true);
@@ -1430,38 +1489,63 @@ function Dashboard() {
     }
 
     try {
-      await db.transaction("rw", db.notas, async () => {
-        for (const item of changes) {
-          if (item.notaId) {
-            const updates: Partial<NotaFiscal> = {};
-            if (item.statusChanged) updates.status = item.statusExcel;
-            if (item.issRetidoChanged && item.issRetidoExcel) {
-              updates.issRetido = item.issRetidoExcel;
-              // Recalcula vlrIssRet e vlrIssRecolher com base no novo issRetido
-              // vlrIss já contém o valor correto do ISS da nota
-              const nota = todasNotas?.find((n) => n.id === item.notaId);
-              const vlrIss = nota?.vlrIss ?? 0;
-              if (item.issRetidoExcel === "Sim") {
-                updates.vlrIssRet = vlrIss;
-                updates.vlrIssRecolher = 0;
-              } else {
-                updates.vlrIssRet = 0;
-                updates.vlrIssRecolher = vlrIss;
+      if (conciliationTarget === "emitidas") {
+        await db.transaction("rw", db.notas, async () => {
+          for (const item of changes) {
+            if (item.notaId) {
+              const updates: Partial<NotaFiscal> = {};
+              if (item.statusChanged) updates.status = item.statusExcel;
+              if (item.issRetidoChanged && item.issRetidoExcel) {
+                updates.issRetido = item.issRetidoExcel;
+                // Recalcula vlrIssRet e vlrIssRecolher com base no novo issRetido
+                // vlrIss já contém o valor correto do ISS da nota
+                const nota = todasNotas?.find((n) => n.id === item.notaId);
+                const vlrIss = nota?.vlrIss ?? 0;
+                if (item.issRetidoExcel === "Sim") {
+                  updates.vlrIssRet = vlrIss;
+                  updates.vlrIssRecolher = 0;
+                } else {
+                  updates.vlrIssRet = 0;
+                  updates.vlrIssRecolher = vlrIss;
+                }
+              }
+
+              if (Object.keys(updates).length > 0) {
+                await db.notas.update(item.notaId, updates);
               }
             }
+          }
+        });
+      } else {
+        await db.transaction("rw", db.notasTomadas, async () => {
+          for (const item of changes) {
+            if (item.notaId) {
+              const updates: Partial<NotaFiscalTomada> = {};
+              if (item.statusChanged) updates.status = item.statusExcel;
+              if (item.issRetidoChanged && item.issRetidoExcel) {
+                updates.issRetido = item.issRetidoExcel;
+                const nota = todasNotasTomadas?.find((n) => n.id === item.notaId);
+                const vlrIss = nota?.vlrIss ?? nota?.vlrIssRet ?? 0;
+                if (item.issRetidoExcel === "Sim") {
+                  updates.vlrIssRet = vlrIss;
+                } else {
+                  updates.vlrIssRet = 0;
+                }
+              }
 
-            if (Object.keys(updates).length > 0) {
-              await db.notas.update(item.notaId, updates);
+              if (Object.keys(updates).length > 0) {
+                await db.notasTomadas.update(item.notaId, updates);
+              }
             }
           }
-        }
-      });
+        });
+      }
       addActivity("update", "Divergências Aplicadas", `${changes.length} nota(s) retificada(s) no banco local.`);
       setRightPanelOpen(true);
       toast.success("Divergências retificadas no banco de dados local!");
     } catch (e) {
       console.error(e);
-      toast.error("Erro ao salvar as atualizações.");
+      toast.error("Erro ao salvar as updates.");
     }
   };
 
@@ -1507,10 +1591,10 @@ function Dashboard() {
   };
 
   useEffect(() => {
-    if (xlsxRows.length > 0 && keyCol && statusCol && todasNotas) {
-      runConciliation(xlsxRows, keyCol, statusCol, issCol, todasNotas);
+    if (xlsxRows.length > 0 && keyCol && statusCol && todasNotas && todasNotasTomadas) {
+      runConciliation(xlsxRows, keyCol, statusCol, issCol, todasNotas, todasNotasTomadas, conciliationTarget);
     }
-  }, [todasNotas, xlsxRows, keyCol, statusCol, issCol, runConciliation]);
+  }, [todasNotas, todasNotasTomadas, xlsxRows, keyCol, statusCol, issCol, conciliationTarget, runConciliation]);
 
   return (
     <div className="min-h-screen bg-background flex font-sans antialiased text-foreground w-full overflow-hidden transition-colors duration-300">
@@ -2897,6 +2981,46 @@ function Dashboard() {
 
             <TabsContent value="conciliation" className="space-y-6 mt-0 outline-none">
               
+              {/* Target Selector */}
+              <div className="flex bg-muted p-1 rounded-xl border border-border/50 max-w-sm">
+                <button
+                  onClick={() => {
+                    setConciliationTarget("emitidas");
+                    setXlsxFile(null);
+                    setXlsxRows([]);
+                    setXlsxHeaders([]);
+                    setConciliatedItems([]);
+                    setConciliatedStats({ total: 0, updated: 0, alreadyCorrect: 0, notFound: 0 });
+                    toast.info("Conciliador: Faturamento (Emitidas)");
+                  }}
+                  className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer text-center ${
+                    conciliationTarget === "emitidas"
+                      ? "bg-card text-foreground shadow-xs font-bold"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Faturamento (Emitidas)
+                </button>
+                <button
+                  onClick={() => {
+                    setConciliationTarget("tomadas");
+                    setXlsxFile(null);
+                    setXlsxRows([]);
+                    setXlsxHeaders([]);
+                    setConciliatedItems([]);
+                    setConciliatedStats({ total: 0, updated: 0, alreadyCorrect: 0, notFound: 0 });
+                    toast.info("Conciliador: Serviços Tomados");
+                  }}
+                  className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer text-center ${
+                    conciliationTarget === "tomadas"
+                      ? "bg-card text-foreground shadow-xs font-bold"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Serviços Tomados
+                </button>
+              </div>
+              
               {/* XLSX DROP ZONE */}
               <div
                 onDragOver={(e) => {
@@ -3414,12 +3538,12 @@ function Dashboard() {
                   </div>
 
                   {/* Gráficos: Evolução + Distribuição */}
-                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     {/* Gráfico A — Evolução mensal */}
-                    <div className="bg-card border border-border rounded-2xl p-5 shadow-xs lg:col-span-2">
+                    <div className="bg-card border border-border rounded-2xl p-5 shadow-xs">
                       <h3 className="text-xs font-bold text-foreground mb-1">Evolução dos Serviços Tomados</h3>
                       <p className="text-[10px] text-muted-foreground mb-4">Valor total mensal de NFS-e recebidas</p>
-                      <div className="h-[240px]">
+                      <div className="h-[260px]">
                         {evolucaoData.length === 0 ? <EmptyState /> : (
                           <ResponsiveContainer width="100%" height="100%">
                             <AreaChart data={evolucaoData}>
@@ -3448,7 +3572,7 @@ function Dashboard() {
                         {servicoData.length === 0 ? <EmptyState /> : (
                           <ResponsiveContainer width="100%" height="100%">
                             <PieChart>
-                              <Pie data={servicoData} dataKey="value" nameKey="name" innerRadius={55} outerRadius={90} paddingAngle={3} stroke="var(--color-card)" strokeWidth={3}>
+                              <Pie data={servicoData} dataKey="value" nameKey="name" innerRadius={65} outerRadius={105} paddingAngle={3} stroke="var(--color-card)" strokeWidth={3}>
                                 {servicoData.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
                               </Pie>
                               <Tooltip formatter={(v) => fmtBRL(Number(v))} contentStyle={{ backgroundColor: "var(--color-popover)", borderColor: "var(--color-border)", borderRadius: 12, color: "var(--color-foreground)" }} />
