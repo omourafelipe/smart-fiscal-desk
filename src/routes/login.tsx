@@ -31,7 +31,9 @@ function LoginPageComponent() {
 
   useEffect(() => {
     if (session || user) {
-      navigate({ to: "/" });
+      const searchParams = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
+      const redirectTo = searchParams.get("redirectTo") || "/";
+      navigate({ to: redirectTo });
     }
   }, [session, user, navigate]);
 
@@ -61,7 +63,9 @@ function LoginPageComponent() {
     } else {
       const success = await signIn(email, password);
       if (success) {
-        navigate({ to: "/" });
+        const searchParams = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
+        const redirectTo = searchParams.get("redirectTo") || "/";
+        navigate({ to: redirectTo });
       }
     }
   };

@@ -1,4 +1,4 @@
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import { useLiveQuery } from "dexie-react-hooks";
 import {
   Sparkles,
@@ -9,10 +9,15 @@ import {
   Filter,
   Download,
   Trash2,
+  Settings,
+  Users,
+  LogOut,
 } from "lucide-react";
 import { toast } from "sonner";
 import { db } from "@/lib/db";
 import { useLayoutShell } from "./LayoutShell";
+import { useAuthStore } from "@/store/useAuthStore";
+import { useTenantStore } from "@/store/useTenantStore";
 
 export function Sidebar() {
   const {
@@ -24,6 +29,10 @@ export function Sidebar() {
 
   const routerState = useRouterState();
   const currentPath = routerState.location.pathname;
+  const navigate = useNavigate();
+
+  const { user, profile, signOut } = useAuthStore();
+  const { groups, activeGroup, setActiveGroup, activeRole } = useTenantStore();
 
   // Retrieve global counts from IndexedDB for sidebar badges
   const totalNotasEmitidas = useLiveQuery(() => db.notas.count()) ?? 0;
@@ -85,15 +94,62 @@ export function Sidebar() {
         </div>
 
         {/* User Profile Info */}
-        <div className="flex items-center gap-3 p-3 rounded-xl bg-muted/60 border border-border/40 mt-2">
-          <div className="h-9 w-9 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-sm">
-            DS
+        {user ? (
+          <div className="flex flex-col gap-2 p-3 rounded-xl bg-muted/60 border border-border/40 mt-2">
+            <div className="flex items-center gap-2.5">
+              <div className="h-8 w-8 rounded-full bg-indigo-600 flex items-center justify-center text-white font-bold text-xs flex-shrink-0">
+                {(profile?.nome || user?.email || "U").substring(0, 2).toUpperCase()}
+              </div>
+              <div className="overflow-hidden flex-1">
+                <p className="text-xs font-semibold text-foreground truncate">{profile?.nome || "Usuário"}</p>
+                <p className="text-[10px] text-muted-foreground truncate">{user?.email}</p>
+              </div>
+            </div>
+            
+            {groups.length > 1 ? (
+              <div className="mt-1 pt-1.5 border-t border-border/40">
+                <label className="text-[8px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                  Grupo / Empresa Activa
+                </label>
+                <select
+                  value={activeGroup?.id || ""}
+                  onChange={async (e) => {
+                    const selected = groups.find(g => g.id === e.target.value);
+                    if (selected) {
+                      await setActiveGroup(selected);
+                    }
+                  }}
+                  className="w-full bg-slate-950/40 border border-slate-800 text-foreground text-[10px] rounded-lg p-1 font-semibold focus:outline-none"
+                >
+                  {groups.map((g) => (
+                    <option key={g.id} value={g.id} className="bg-slate-900 text-white">
+                      {g.nome}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              activeGroup && (
+                <div className="text-[9px] text-indigo-400 font-semibold mt-1">
+                  Grupo: {activeGroup.nome}
+                </div>
+              )
+            )}
           </div>
-          <div className="overflow-hidden">
-            <p className="text-xs font-semibold text-foreground truncate">Diretoria Samel</p>
-            <p className="text-[10px] text-muted-foreground truncate">diretoria@samel.com.br</p>
-          </div>
-        </div>
+        ) : (
+          <Link
+            to="/login"
+            className="flex items-center gap-3 p-3 rounded-xl bg-muted/40 border border-dashed border-border/60 hover:bg-muted/60 hover:border-indigo-500/40 mt-2 transition-all group"
+          >
+            <div className="h-8 w-8 rounded-full bg-indigo-500/10 flex items-center justify-center group-hover:bg-indigo-500/20">
+              <Users className="h-4 w-4 text-indigo-400" />
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-indigo-400 group-hover:text-indigo-300">Conectar em Nuvem</p>
+              <p className="text-[9px] text-muted-foreground">Sincronizar e compartilhar</p>
+            </div>
+          </Link>
+        )}
 
         {/* Regime de Data (Competência vs Emissão) */}
         <div className="flex flex-col gap-2 px-1">
@@ -209,6 +265,21 @@ export function Sidebar() {
                 <Filter className="h-4 w-4" /> Categorias
               </div>
             </Link>
+
+            {/* Configurações */}
+            {user && (
+              <Link
+                to="/configuracoes"
+                search={(prev) => prev}
+                className={`flex items-center justify-between px-3 py-2 text-xs font-medium rounded-xl transition-all w-full text-left ${
+                  currentPath === "/configuracoes" ? "bg-muted text-foreground font-semibold" : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <Settings className="h-4 w-4" /> Configurações
+                </div>
+              </Link>
+            )}
           </div>
 
           {/* Quick Actions Category */}
@@ -226,6 +297,32 @@ export function Sidebar() {
             >
               <Trash2 className="h-4 w-4" /> Limpar Base Local
             </button>
+
+            {/* Log Out */}
+            {user && (
+              <button
+                onClick={async () => {
+                  if (confirm("Deseja sair da sua conta na nuvem? Isso removerá as notas sincronizadas localmente.")) {
+                    await signOut();
+                    // Clear Dexie since they are logging out
+                    await Promise.all([
+                      db.notas.clear(),
+                      db.notasTomadas.clear(),
+                      db.customCategories.clear(),
+                      db.categoryOverrides.clear(),
+                      db.serviceClassifications.clear(),
+                      db.categoryRules.clear(),
+                      db.auditLogs.clear()
+                    ]);
+                    toast.success("Desconectado com sucesso.");
+                    navigate({ to: "/login" });
+                  }
+                }}
+                className="flex items-center gap-3 px-3 py-2 text-xs font-medium text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 hover:bg-amber-500/10 rounded-xl transition-all w-full text-left cursor-pointer"
+              >
+                <LogOut className="h-4 w-4" /> Sair da Conta Cloud
+              </button>
+            )}
           </div>
         </nav>
       </div>
@@ -233,7 +330,15 @@ export function Sidebar() {
       {/* Sidebar Footer */}
       <div className="p-4 border-t border-border flex items-center justify-between text-[10px] text-muted-foreground font-medium">
         <span>v1.01 SPED</span>
-        <span className="bg-muted border border-border px-2 py-0.5 rounded-full text-muted-foreground">100% Local</span>
+        {user ? (
+          <span className="bg-indigo-500/10 border border-indigo-500/25 px-2 py-0.5 rounded-full text-indigo-400 font-semibold">
+            SaaS Cloud
+          </span>
+        ) : (
+          <span className="bg-muted border border-border px-2 py-0.5 rounded-full text-muted-foreground">
+            100% Local
+          </span>
+        )}
       </div>
     </aside>
   );

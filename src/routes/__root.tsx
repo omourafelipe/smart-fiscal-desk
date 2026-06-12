@@ -13,6 +13,7 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { LayoutShell } from "@/components/layout/LayoutShell";
 import { useAuthStore } from "@/store/useAuthStore";
+import { useTenantStore } from "@/store/useTenantStore";
 import { SyncManager } from "@/lib/data-access/SyncManager";
 import { ShieldAlert } from "lucide-react";
 
@@ -148,7 +149,9 @@ function RootComponent() {
 
   useEffect(() => {
     if (session?.user?.id) {
-      SyncManager.syncAll(session.user.id);
+      useTenantStore.getState().fetchTenantData().then(() => {
+        SyncManager.syncAll(session.user.id);
+      });
     }
   }, [session]);
 

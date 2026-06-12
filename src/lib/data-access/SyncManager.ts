@@ -65,16 +65,22 @@ export class SyncManager {
   ): Promise<any[]> {
     if (!supabase) return [];
     
+    const activeGroupId = typeof window !== "undefined" ? localStorage.getItem("active_group_id") : null;
     let allData: any[] = [];
     let from = 0;
     let to = 999;
     let hasMore = true;
 
     while (hasMore) {
-      const { data, error } = await supabase
-        .from(tableName)
-        .select("*")
-        .eq("user_id", userId)
+      let query = supabase.from(tableName).select("*");
+      
+      if (activeGroupId) {
+        query = query.eq("group_id", activeGroupId);
+      } else {
+        query = query.eq("user_id", userId);
+      }
+
+      const { data, error } = await query
         .order(orderKey, { ascending: true })
         .range(from, to);
 
@@ -101,12 +107,15 @@ export class SyncManager {
   private static async pushLocalToCloud(userId: string): Promise<void> {
     if (!supabase) return;
 
+    const activeGroupId = typeof window !== "undefined" ? localStorage.getItem("active_group_id") : null;
+
     // --- 1. Sincronizar Notas Fiscais Emitidas ---
     const localNotas = await db.notas.toArray();
     if (localNotas.length > 0) {
       const mappedNotas = localNotas.map((n) => ({
         id: n.id,
         user_id: userId,
+        group_id: activeGroupId || null,
         n_nfse: n.nNFSe,
         cnpj_prestador: n.cnpjPrestador,
         nome_prestador: n.nomePrestador,
@@ -147,6 +156,7 @@ export class SyncManager {
       const mappedTomadas = localNotasTomadas.map((n) => ({
         id: n.id,
         user_id: userId,
+        group_id: activeGroupId || null,
         n_nfse: n.nNFSe,
         cnpj_tomador: n.cnpjTomador,
         nome_tomador: n.nomeTomador,
@@ -185,6 +195,7 @@ export class SyncManager {
       const mappedCats = localCats.map((c) => ({
         id: c.id,
         user_id: userId,
+        group_id: activeGroupId || null,
         nome: c.nome,
         grupo_sintetico: c.grupoSintetico || null,
       }));
@@ -198,6 +209,7 @@ export class SyncManager {
       const mappedOverrides = localOverrides.map((o) => ({
         codigo: o.codigo,
         user_id: userId,
+        group_id: activeGroupId || null,
         categoria: o.categoria,
       }));
       const { error } = await supabase.from("category_overrides").upsert(mappedOverrides);
@@ -210,6 +222,7 @@ export class SyncManager {
       const mappedClass = localClassifications.map((c) => ({
         codigo: c.codigo,
         user_id: userId,
+        group_id: activeGroupId || null,
         categoria_executiva: c.categoriaExecutiva,
         grupo_operacional: c.grupoOperacional,
         codigo_lc116: c.codigoLc116,
@@ -236,6 +249,7 @@ export class SyncManager {
       const mappedRules = localRules.map((r) => ({
         id: r.id,
         user_id: userId,
+        group_id: activeGroupId || null,
         tipo: r.tipo,
         chave: r.chave,
         categoria_executiva: r.categoriaExecutiva,
@@ -251,6 +265,7 @@ export class SyncManager {
       const mappedLogs = localLogs.map((l) => ({
         id: l.id,
         user_id: userId,
+        group_id: activeGroupId || null,
         codigo: l.codigo,
         classificacao_anterior: l.classificacaoAnterior,
         classificacao_nova: l.classificacaoNova,
