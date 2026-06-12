@@ -12,6 +12,7 @@ export interface FiscalFilters {
 }
 
 import { useGlobalFilters } from "@/store/useGlobalFilters";
+import { CategoryLabelService } from "@/lib/services/CategoryLabelService";
 
 export function useFiscalData({
   periodType,
@@ -357,7 +358,7 @@ export function useFiscalData({
   const prevNotasCount = useMemo(() => prevNotasAtivas.length, [prevNotasAtivas]);
 
   const getTrend = useCallback((current: number, previous: number) => {
-    if (previous === 0) return { percent: 0, isPositive: true, text: "0%" };
+    if (previous === 0) return null;
     const diff = ((current - previous) / previous) * 100;
     const isPositive = diff >= 0;
     return {
@@ -589,7 +590,7 @@ export function useFiscalData({
     notasAtivas.forEach((n) => {
       const cod = n.codTribNacional || "";
       const key = cod || "Outros";
-      const desc = getServicoDescricao(cod);
+      const desc = CategoryLabelService.getFriendlyName(cod);
       const curr = map.get(key) || { cod, desc, total: 0 };
       curr.total += n.valor;
       map.set(key, curr);
@@ -671,7 +672,7 @@ export function useFiscalData({
     notasAtivas.forEach((n) => {
       const key = isGlobal
         ? n.nomePrestador || n.cnpjPrestador
-        : getServicoDescricao(n.codTribNacional);
+        : CategoryLabelService.getFriendlyName(n.codTribNacional);
       map.set(key, (map.get(key) ?? 0) + n.valor);
     });
     return Array.from(map.entries())
@@ -751,20 +752,4 @@ const formatarMesAnoCurto = (mesAnoStr: string) => {
     return `${mesesCurto[m - 1]}/${ano.slice(2)}`;
   }
   return mesAnoStr;
-};
-
-const getServicoDescricao = (codTrib: string) => {
-  const code = String(codTrib).trim();
-  if (!code) return "Sem descrição";
-
-  const clean = code.replace(/\D/g, "");
-  if (clean.startsWith("422") || clean.startsWith("0422")) return "Plano de Saúde";
-  if (
-    clean.startsWith("423") || clean.startsWith("0423") ||
-    clean.startsWith("403") || clean.startsWith("0403") ||
-    clean.startsWith("433") || clean.startsWith("0433")
-  ) {
-    return "Serviços Hospitalares";
-  }
-  return `Serviço ${code}`;
 };

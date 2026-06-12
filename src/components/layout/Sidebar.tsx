@@ -18,6 +18,7 @@ import { db } from "@/lib/db";
 import { useLayoutShell } from "./LayoutShell";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useTenantStore } from "@/store/useTenantStore";
+import { PermissionService } from "@/lib/services/PermissionService";
 
 export function Sidebar() {
   const {
@@ -33,6 +34,7 @@ export function Sidebar() {
 
   const { user, profile, signOut } = useAuthStore();
   const { groups, activeGroup, setActiveGroup, activeRole } = useTenantStore();
+  const canClearDatabase = PermissionService.canClearDatabase(activeRole);
 
   // Retrieve global counts from IndexedDB for sidebar badges
   const totalNotasEmitidas = useLiveQuery(() => db.notas.count()) ?? 0;
@@ -291,7 +293,7 @@ export function Sidebar() {
             >
               <Download className="h-4 w-4" /> Exportar Notas CSV
             </button>
-            {activeRole !== "Visualizador" && (
+            {canClearDatabase && (
               <button
                 onClick={clearDb}
                 className="flex items-center gap-3 px-3 py-2 text-xs font-medium text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 hover:bg-rose-500/10 rounded-xl transition-all w-full text-left cursor-pointer"

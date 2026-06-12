@@ -39,9 +39,13 @@ export class SyncManager {
       // 2. Pull dos dados do Supabase para o banco local (Download)
       const totalPulled = await this.pullCloudToLocal(userId, updateProgress);
 
+      // 3. Invalidar estados derivados e recalcular filtros (Reset)
+      const { useGlobalFilters } = await import("@/store/useGlobalFilters");
+      useGlobalFilters.getState().resetFilters();
+
       if (showToast && toastId) {
         toast.success(
-          `Sincronização concluída! ${totalPulled} registros sincronizados da nuvem.`,
+          `Sincronização concluída! ${totalPulled} registros atualizados. Filtros e gráficos recalculados imediatamente.`,
           { id: toastId }
         );
       }

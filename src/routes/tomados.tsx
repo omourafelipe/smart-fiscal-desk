@@ -18,7 +18,8 @@ import {
   Bar,
   Legend,
 } from "recharts";
-import { Calendar, Building2, ShoppingBag, Loader2, Trash2, FileText, XCircle, Search, ChevronLeft, ChevronRight, Download } from "lucide-react";
+import { AlertCircle, FileSpreadsheet, Download, Upload, CheckCircle2, FileJson, X, Search, Filter, TrendingUp, DollarSign, Activity, Settings2, Trash2, Calendar, Building2, ShoppingBag, Loader2, FileText, XCircle, ChevronLeft, ChevronRight } from "lucide-react";
+import { PermissionService } from "@/lib/services/PermissionService";
 import { toast } from "sonner";
 import { db, type NotaFiscalTomada, type ServiceClassification, type CategoryRule } from "@/lib/db";
 import { parseNfseXmlTomada } from "@/lib/parseXml";
@@ -95,6 +96,7 @@ function TomadosRouteComponent() {
 
   const { addActivity } = useLayoutShell();
   const { activeRole } = useTenantStore();
+  const canEdit = PermissionService.canEdit(activeRole);
   const [activePieIndex, setActivePieIndex] = useState<number | null>(null);
 
   // Filters from URL Search Params
@@ -443,7 +445,7 @@ function TomadosRouteComponent() {
             className="hidden"
             onChange={(e) => e.target.files && processFilesTomadas(e.target.files)}
           />
-          {activeRole !== "Visualizador" && (
+          {canEdit && (
             <Button
               disabled={importingTomadas}
               onClick={() => !importingTomadas && fileRefTomadas.current?.click()}
@@ -749,7 +751,7 @@ function TomadosRouteComponent() {
                 >
                   <Download className="h-3.5 w-3.5" /> Exportar CSV
                 </button>
-                {activeRole !== "Visualizador" && (
+                {canEdit && (
                   <button
                     onClick={async () => {
                       if (confirm("Limpar toda a base de notas tomadas?")) {

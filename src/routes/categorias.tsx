@@ -135,6 +135,7 @@ function formatarHora(isoString: string): string {
 function CategoriasRouteComponent() {
   const { session, profile } = useAuthStore();
   const { activeRole } = useTenantStore();
+  const canEdit = PermissionService.canEdit(activeRole);
   const [tabActive, setTabActive] = useState<"classifications" | "pending" | "rules" | "audit" | "categories_groups">("classifications");
   const [activePieIndex, setActivePieIndex] = useState<number | null>(null);
   const [searchCat, setSearchCat] = useState("");
@@ -1032,7 +1033,7 @@ function CategoriasRouteComponent() {
             </div>
 
             <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-              {tabActive === "rules" && activeRole !== "Visualizador" && (
+              {tabActive === "rules" && canEdit && (
                 <button
                   onClick={() => handleOpenRuleDialog(null)}
                   className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold h-9 px-3 rounded-lg transition-colors cursor-pointer"
@@ -1057,7 +1058,7 @@ function CategoriasRouteComponent() {
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
                     <tr className="border-b border-border bg-muted/40 font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">
-                      {activeRole !== "Visualizador" && (
+                      {canEdit && (
                         <th className="px-4 py-3.5 w-10 text-center">
                           <input
                             type="checkbox"
@@ -1076,7 +1077,7 @@ function CategoriasRouteComponent() {
                       <th className="px-4 py-3.5 text-center w-24">Origem</th>
                       <th className="px-4 py-3.5 text-center w-20">Confiança</th>
                       <th className="px-4 py-3.5 text-right w-24">Última Util.</th>
-                      {activeRole !== "Visualizador" && <th className="px-4 py-3.5 text-center w-16">Ações</th>}
+                      {canEdit && <th className="px-4 py-3.5 text-center w-16">Ações</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
@@ -1095,7 +1096,7 @@ function CategoriasRouteComponent() {
 
                       return (
                         <tr key={linha.codigo} className="hover:bg-muted/30 transition-colors">
-                          {activeRole !== "Visualizador" && (
+                          {canEdit && (
                             <td className="px-4 py-3 text-center">
                               <input
                                 type="checkbox"
@@ -1147,7 +1148,7 @@ function CategoriasRouteComponent() {
                           <td className="px-4 py-3 text-right text-muted-foreground font-mono">
                             {formatarData(linha.ultimaUtilizacao)}
                           </td>
-                          {activeRole !== "Visualizador" && (
+                          {canEdit && (
                             <td className="px-4 py-3 text-center">
                               <button
                                 onClick={() => handleOpenEditDialog([linha.codigo])}
@@ -1195,7 +1196,7 @@ function CategoriasRouteComponent() {
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
                     <tr className="border-b border-border bg-muted/40 font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">
-                      {activeRole !== "Visualizador" && (
+                      {canEdit && (
                         <th className="px-4 py-3.5 w-10 text-center">
                           <input
                             type="checkbox"
@@ -1213,7 +1214,7 @@ function CategoriasRouteComponent() {
                       <th className="px-4 py-3.5 text-right w-32">Valor Faturado</th>
                       <th className="px-4 py-3.5 text-center w-20">Confiança</th>
                       <th className="px-4 py-3.5 text-right w-24">Última Util.</th>
-                      {activeRole !== "Visualizador" && <th className="px-4 py-3.5 text-center w-16">Ações</th>}
+                      {canEdit && <th className="px-4 py-3.5 text-center w-16">Ações</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
@@ -1226,7 +1227,7 @@ function CategoriasRouteComponent() {
 
                       return (
                         <tr key={linha.codigo} className="hover:bg-muted/30 transition-colors">
-                          {activeRole !== "Visualizador" && (
+                          {canEdit && (
                             <td className="px-4 py-3 text-center">
                               <input
                                 type="checkbox"
@@ -1268,7 +1269,7 @@ function CategoriasRouteComponent() {
                           <td className="px-4 py-3 text-right text-muted-foreground font-mono">
                             {formatarData(linha.ultimaUtilizacao)}
                           </td>
-                          {activeRole !== "Visualizador" && (
+                          {canEdit && (
                             <td className="px-4 py-3 text-center">
                               <button
                                 onClick={() => handleOpenEditDialog([linha.codigo])}
@@ -1305,7 +1306,7 @@ function CategoriasRouteComponent() {
                       <th className="px-4 py-3.5">Chave da Regra</th>
                       <th className="px-4 py-3.5">Categoria Executiva (Nível 1)</th>
                       <th className="px-4 py-3.5">Grupo Operacional (Nível 2)</th>
-                      {activeRole !== "Visualizador" && <th className="px-4 py-3.5 text-center w-24">Ações</th>}
+                      {canEdit && <th className="px-4 py-3.5 text-center w-24">Ações</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
@@ -1329,7 +1330,7 @@ function CategoriasRouteComponent() {
                         <td className="px-4 py-3 text-muted-foreground">
                           {regra.grupoOperacional}
                         </td>
-                        {activeRole !== "Visualizador" && (
+                        {canEdit && (
                           <td className="px-4 py-3 text-center space-x-1">
                             <button
                               onClick={() => handleOpenRuleDialog(regra)}
@@ -1426,7 +1427,7 @@ function CategoriasRouteComponent() {
               </div>
 
               {/* Form para Adicionar Categoria Customizada */}
-              {activeRole !== "Visualizador" && (
+              {canEdit && (
                 <div className="flex gap-2">
                   <input
                     type="text"
@@ -1462,7 +1463,7 @@ function CategoriasRouteComponent() {
                       <span className="text-[9px] font-bold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded-md border border-indigo-500/20">
                         Customizada
                       </span>
-                      {activeRole !== "Visualizador" && (
+                      {canEdit && (
                         <button
                           onClick={() => handleDeleteCustomCategory(cat.id)}
                           className="text-muted-foreground hover:text-destructive p-1 rounded-md hover:bg-muted/80 transition-colors cursor-pointer"
@@ -1517,7 +1518,7 @@ function CategoriasRouteComponent() {
       </div>
 
       {/* Floating Bulk Action Bar */}
-      {selectedCodes.size > 0 && activeRole !== "Visualizador" && (
+      {selectedCodes.size > 0 && canEdit && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-card border border-border shadow-xl px-6 py-4 rounded-2xl flex items-center gap-6 z-40 animate-in slide-in-from-bottom-12 duration-200">
           <span className="text-xs text-foreground font-semibold flex items-center gap-2">
             <span className="h-5 w-5 bg-indigo-500 text-white rounded-full flex items-center justify-center font-bold text-[10px]">

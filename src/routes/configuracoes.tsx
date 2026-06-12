@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabaseClient";
+import { PermissionService } from "@/lib/services/PermissionService";
 
 export const Route = createFileRoute("/configuracoes")({
   component: ConfiguracoesRouteComponent,
@@ -201,9 +202,9 @@ function ConfiguracoesRouteComponent() {
   };
 
   // Permission Checks
-  const isOwner = activeRole === "Owner";
-  const isAdmin = activeRole === "Administrador" || isOwner;
-  const isAnalista = activeRole === "Analista" || isAdmin;
+  const isOwner = PermissionService.isOwner(activeRole);
+  const isAdmin = PermissionService.canManageUsers(activeRole);
+  const isAnalista = PermissionService.canEdit(activeRole);
 
   return (
     <main className="flex-1 p-6 md:p-8 max-w-[1400px] w-full mx-auto space-y-6">

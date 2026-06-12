@@ -34,7 +34,7 @@ import {
 
 import { db, type NotaFiscal } from "@/lib/db";
 import { parseNfseXml } from "@/lib/parseXml";
-import { getServicoDescricao } from "@/lib/category-utils";
+import { CategoryLabelService } from "@/lib/services/CategoryLabelService";
 import { useLayoutShell } from "@/components/layout/LayoutShell";
 import { useFiscalData } from "@/hooks/useFiscalData";
 import { useInsightsEngine } from "@/hooks/useInsightsEngine";
@@ -159,6 +159,26 @@ const mesesOpcoes = [
   { value: "11", label: "Novembro" },
   { value: "12", label: "Dezembro" },
 ];
+
+function groupIntoOutros(data: any[], percentThreshold = 3) {
+  const total = data.reduce((acc, curr) => acc + curr.value, 0);
+  if (total === 0) return data;
+  let groupedValue = 0;
+  let groupedCount = 0;
+  const filtered = data.filter((item) => {
+    const pct = (item.value / total) * 100;
+    if (pct < percentThreshold) {
+      groupedValue += item.value;
+      groupedCount += (item.count || 0);
+      return false;
+    }
+    return true;
+  });
+  if (groupedValue > 0) {
+    filtered.push({ name: "Outros", value: groupedValue, count: groupedCount, fill: "#94a3b8" });
+  }
+  return filtered;
+}
 
 function Dashboard() {
   const search = Route.useSearch();
@@ -419,7 +439,7 @@ function Dashboard() {
       (n.vlrCsll ?? 0).toFixed(2),
       (n.vlrIrrf ?? 0).toFixed(2),
       (n.vlrInss ?? 0).toFixed(2),
-      n.codTribNacional ? `${n.codTribNacional} - ${getServicoDescricao(n.codTribNacional)}` : "—",
+      n.codTribNacional ? `${n.codTribNacional} - ${CategoryLabelService.getFriendlyName(n.codTribNacional)}` : "—",
       getNoteStatus(n) === "válida" ? "Válida" : "Cancelada",
     ]);
     const csv = [headers, ...rows]
@@ -482,38 +502,38 @@ function Dashboard() {
             <KpiCardNew
               label="Faturamento"
               value={fmtBRL(faturamento)}
-              trendText={faturamentoTrend.text}
-              isPositive={faturamentoTrend.isPositive}
+              trendText={faturamentoTrend?.text || ""}
+              isPositive={faturamentoTrend?.isPositive || false}
               subtext="comparado ao período anterior"
               tone="blue"
-              showComparison={hasComparison}
+              showComparison={hasComparison && !!faturamentoTrend}
             />
             <KpiCardNew
               label="Plano de Saúde"
               value={fmtBRL(plansFaturamento)}
-              trendText={plansTrend.text}
-              isPositive={plansTrend.isPositive}
-              subtext="código 042201"
+              trendText={plansTrend?.text || ""}
+              isPositive={plansTrend?.isPositive || false}
+              subtext="comparado ao período anterior"
               tone="purple"
-              showComparison={hasComparison}
+              showComparison={hasComparison && !!plansTrend}
             />
             <KpiCardNew
               label="Serviços Hospitalares"
               value={fmtBRL(hospFaturamento)}
-              trendText={hospTrend.text}
-              isPositive={hospTrend.isPositive}
-              subtext="códigos 040301, 043301"
+              trendText={hospTrend?.text || ""}
+              isPositive={hospTrend?.isPositive || false}
+              subtext="comparado ao período anterior"
               tone="green"
-              showComparison={hasComparison}
+              showComparison={hasComparison && !!hospTrend}
             />
             <KpiCardNew
               label="Notas Emitidas"
               value={notasAtivas.length.toLocaleString("pt-BR")}
-              trendText={notasAtivasTrend.text}
-              isPositive={notasAtivasTrend.isPositive}
-              subtext="notas fiscais com status ativo"
+              trendText={notasAtivasTrend?.text || ""}
+              isPositive={notasAtivasTrend?.isPositive || false}
+              subtext="comparado ao período anterior"
               tone="amber"
-              showComparison={hasComparison}
+              showComparison={hasComparison && !!notasAtivasTrend}
             />
           </div>
         );
@@ -782,7 +802,7 @@ function Dashboard() {
           <h3 className="text-xs font-bold text-foreground mb-1">Tipo de Contratação</h3>
           <p className="text-[10px] text-muted-foreground mb-4">Faturamento distribuído por tipo de contratação</p>
 
-          <div className="h-[200px] flex items-center justify-center relative">
+          <div className="h-[250px] flex items-center justify-center relative">
             {pjPfData.length === 0 ? (
               <EmptyState />
             ) : (
@@ -790,30 +810,30 @@ function Dashboard() {
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
-                      data={pjPfData}
+                      data={groupIntoOutros(pjPfData, 3)}
                       dataKey="value"
                       nameKey="name"
-                      innerRadius={50}
-                      outerRadius={75}
+                      innerRadius={60}
+                      outerRadius={85}
                       paddingAngle={1.5}
                       stroke="var(--color-card)"
                       strokeWidth={3}
                       onMouseEnter={(_, index) => setActivePieIndex1(index)}
                       onMouseLeave={() => setActivePieIndex1(null)}
                       onClick={(data) => {
-                        if (data && data.name) {
+                        if (data && data.name && data.name !== "Outros") {
                           setTipoClienteFiltro((prev) => (prev === data.name ? "__all__" : (data.name || "")));
                           setCurrentPage(1);
                         }
                       }}
                       className="cursor-pointer outline-none focus:outline-none"
                     >
-                      {pjPfData.map((entry, index) => {
-                        const colors = ["#6366f1", "#14b8a6", "#ec4899"];
+                      {groupIntoOutros(pjPfData, 3).map((entry, index) => {
+                        const colors = ["#6366f1", "#14b8a6", "#ec4899", "#94a3b8"];
                         return (
                           <Cell 
                             key={`cell-${index}`} 
-                            fill={colors[index % colors.length]} 
+                            fill={entry.fill || colors[index % colors.length]} 
                             opacity={activePieIndex1 === null || activePieIndex1 === index ? 1 : 0.6}
                             style={{
                               transform: activePieIndex1 === index ? 'scale(1.03)' : 'scale(1)',
@@ -849,9 +869,9 @@ function Dashboard() {
             )}
           </div>
 
-          <div className="flex flex-col gap-2.5 mt-3 pt-3 border-t border-border/50 text-xs">
-            {pjPfData.map((item, idx) => {
-              const colors = ["#6366f1", "#14b8a6", "#ec4899"];
+          <div className="flex flex-col gap-2.5 mt-3 pt-3 border-t border-border/50 text-xs max-h-[150px] overflow-y-auto pr-1">
+            {groupIntoOutros(pjPfData, 3).map((item, idx) => {
+              const colors = ["#6366f1", "#14b8a6", "#ec4899", "#94a3b8"];
               const isHovered = activePieIndex1 === idx;
               return (
                 <div 
@@ -861,7 +881,7 @@ function Dashboard() {
                   onMouseLeave={() => setActivePieIndex1(null)}
                 >
                   <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                    <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: colors[idx % colors.length] }} />
+                    <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: item.fill || colors[idx % colors.length] }} />
                     <span className="font-semibold text-foreground/90 truncate max-w-[150px]">{item.name}</span>
                   </div>
                   <div className="text-right flex flex-col items-end">
@@ -885,7 +905,7 @@ function Dashboard() {
           <h3 className="text-xs font-bold text-foreground mb-1">Comparativo por Tipo de Serviço</h3>
           <p className="text-[10px] text-muted-foreground mb-4">Plano de Saúde vs. Serviços Hospitalares</p>
 
-          <div className="h-[200px] flex items-center justify-center relative">
+          <div className="h-[250px] flex items-center justify-center relative">
             {comparativoServicosData.every((d) => d.value === 0) ? (
               <EmptyState />
             ) : (
@@ -893,38 +913,36 @@ function Dashboard() {
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
-                      data={comparativoServicosData.filter((d) => d.value > 0)}
+                      data={groupIntoOutros(comparativoServicosData.filter((d) => d.value > 0), 3)}
                       dataKey="value"
                       nameKey="name"
-                      innerRadius={50}
-                      outerRadius={75}
+                      innerRadius={60}
+                      outerRadius={85}
                       paddingAngle={1.5}
                       stroke="var(--color-card)"
                       strokeWidth={3}
                       onMouseEnter={(_, index) => setActivePieIndex2(index)}
                       onMouseLeave={() => setActivePieIndex2(null)}
                       onClick={(data) => {
-                        if (data && data.name) {
+                        if (data && data.name && data.name !== "Outros") {
                           const filterVal = data.name === "Plano de Saúde" ? "042201" : "040301";
                           setCServFiltro(cServFiltro === filterVal ? "__all__" : filterVal);
                         }
                       }}
                       className="cursor-pointer outline-none focus:outline-none"
                     >
-                      {comparativoServicosData
-                        .filter((d) => d.value > 0)
-                        .map((entry, i) => (
-                          <Cell 
-                            key={i} 
-                            fill={entry.fill} 
-                            opacity={activePieIndex2 === null || activePieIndex2 === i ? 1 : 0.6}
-                            style={{
-                              transform: activePieIndex2 === i ? 'scale(1.03)' : 'scale(1)',
-                              transformOrigin: '50% 50%',
-                              transition: 'transform 0.2s ease, opacity 0.2s ease',
-                            }}
-                          />
-                        ))}
+                      {groupIntoOutros(comparativoServicosData.filter((d) => d.value > 0), 3).map((entry, i) => (
+                        <Cell 
+                          key={i} 
+                          fill={entry.fill || "#94a3b8"} 
+                          opacity={activePieIndex2 === null || activePieIndex2 === i ? 1 : 0.6}
+                          style={{
+                            transform: activePieIndex2 === i ? 'scale(1.03)' : 'scale(1)',
+                            transformOrigin: '50% 50%',
+                            transition: 'transform 0.2s ease, opacity 0.2s ease',
+                          }}
+                        />
+                      ))}
                     </Pie>
                     <Tooltip
                       formatter={(value: number) => {
@@ -949,8 +967,8 @@ function Dashboard() {
             )}
           </div>
 
-          <div className="flex justify-around items-center mt-3 pt-3 border-t border-border/50 text-xs">
-            {comparativoServicosData.filter((d) => d.value > 0).map((item, idx) => {
+          <div className="flex justify-around flex-wrap items-center mt-3 pt-3 border-t border-border/50 text-xs max-h-[150px] overflow-y-auto gap-2">
+            {groupIntoOutros(comparativoServicosData.filter((d) => d.value > 0), 3).map((item, idx) => {
               const isHovered = activePieIndex2 === idx;
               return (
                 <div 
@@ -959,12 +977,14 @@ function Dashboard() {
                   onMouseEnter={() => setActivePieIndex2(idx)}
                   onMouseLeave={() => setActivePieIndex2(null)}
                   onClick={() => {
-                    const filterVal = item.name === "Plano de Saúde" ? "042201" : "040301";
-                    setCServFiltro(cServFiltro === filterVal ? "__all__" : filterVal);
+                    if (item.name !== "Outros") {
+                      const filterVal = item.name === "Plano de Saúde" ? "042201" : "040301";
+                      setCServFiltro(cServFiltro === filterVal ? "__all__" : filterVal);
+                    }
                   }}
                 >
                   <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                    <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: item.fill }} />
+                    <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: item.fill || "#94a3b8" }} />
                     <span className="truncate max-w-[100px]">{item.name}</span>
                   </div>
                   <span className="font-bold text-foreground mt-0.5">{fmtBRL(item.value)}</span>
@@ -1096,9 +1116,9 @@ function Dashboard() {
                     <TableCell className="text-right font-mono text-[10px] text-muted-foreground">{fmtBRL(n.vlrInss ?? 0)}</TableCell>
                     <TableCell
                       className="text-xs text-muted-foreground max-w-[200px] truncate"
-                      title={n.codTribNacional ? getServicoDescricao(n.codTribNacional) : "—"}
+                      title={n.codTribNacional ? CategoryLabelService.getFriendlyName(n.codTribNacional) : "—"}
                     >
-                      {n.codTribNacional ? getServicoDescricao(n.codTribNacional) : "—"}
+                      {n.codTribNacional ? CategoryLabelService.getFriendlyName(n.codTribNacional) : "—"}
                     </TableCell>
                   </TableRow>
                 ))
