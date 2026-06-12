@@ -22,8 +22,6 @@ import { PermissionService } from "@/lib/services/PermissionService";
 import {
   classificarServicoLocal,
   resolverServicoFiscal,
-  MAPEAMENTO_PADRAO_LC116,
-  MAPEAMENTO_PREFIXO_LC116,
   getServicoDescricao
 } from "@/lib/category-utils";
 import {
@@ -38,7 +36,6 @@ import {
   Check,
   X,
   FileText,
-  HelpCircle,
   Cpu,
   Layers,
   ArrowRight,
