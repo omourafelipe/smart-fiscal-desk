@@ -17,18 +17,17 @@ export class SyncManager {
       toastId = toast.loading("Sincronizando seus dados com a nuvem...");
     }
 
-    try {
-      // Sincroniza com timeout de 30 segundos
-      await Promise.race([
-        (async () => {
-          // 1. Push dos dados locais para o Supabase (Upload)
-          await this.pushLocalToCloud(userId);
+    const updateProgress = (msg: string) => {
+      if (showToast && toastId) toast.loading(msg, { id: toastId });
+    };
 
-          // 2. Pull dos dados do Supabase para o banco local (Download)
-          await this.pullCloudToLocal(userId);
-        })(),
-        this.timeout(30000)
-      ]);
+    try {
+      // 1. Push dos dados locais para o Supabase (Upload)
+      updateProgress("Enviando dados locais para a nuvem...");
+      await this.pushLocalToCloud(userId);
+
+      // 2. Pull dos dados do Supabase para o banco local (Download)
+      await this.pullCloudToLocal(userId, updateProgress);
 
       const notasCount = await db.notas.count();
       const tomadasCount = await db.notasTomadas.count();
@@ -47,12 +46,6 @@ export class SyncManager {
     } finally {
       this.isSyncing = false;
     }
-  }
-
-  private static timeout(ms: number): Promise<never> {
-    return new Promise((_, reject) =>
-      setTimeout(() => reject(new Error("A sincronização expirou devido a lentidão na rede.")), ms)
-    );
   }
 
   /**
