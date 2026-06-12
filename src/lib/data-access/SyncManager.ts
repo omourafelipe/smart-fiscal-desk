@@ -17,18 +17,17 @@ export class SyncManager {
       toastId = toast.loading("Sincronizando seus dados com a nuvem...");
     }
 
-    try {
-      // Sincroniza com timeout de 30 segundos
-      await Promise.race([
-        (async () => {
-          // 1. Push dos dados locais para o Supabase (Upload)
-          await this.pushLocalToCloud(userId);
+    const updateProgress = (msg: string) => {
+      if (showToast && toastId) toast.loading(msg, { id: toastId });
+    };
 
-          // 2. Pull dos dados do Supabase para o banco local (Download)
-          await this.pullCloudToLocal(userId);
-        })(),
-        this.timeout(30000)
-      ]);
+    try {
+      // 1. Push dos dados locais para o Supabase (Upload)
+      updateProgress("Enviando dados locais para a nuvem...");
+      await this.pushLocalToCloud(userId);
+
+      // 2. Pull dos dados do Supabase para o banco local (Download)
+      await this.pullCloudToLocal(userId, updateProgress);
 
       const notasCount = await db.notas.count();
       const tomadasCount = await db.notasTomadas.count();
@@ -49,19 +48,14 @@ export class SyncManager {
     }
   }
 
-  private static timeout(ms: number): Promise<never> {
-    return new Promise((_, reject) =>
-      setTimeout(() => reject(new Error("A sincronização expirou devido a lentidão na rede.")), ms)
-    );
-  }
-
   /**
    * Helper genérico para baixar TODOS os dados de uma tabela no Supabase contornando o limite de 1000 linhas
    */
   private static async fetchAllFromCloud(
     tableName: string,
     userId: string,
-    orderKey: string
+    orderKey: string,
+    onProgress?: (count: number) => void
   ): Promise<any[]> {
     if (!supabase) return [];
     
@@ -88,6 +82,7 @@ export class SyncManager {
 
       if (data && data.length > 0) {
         allData = allData.concat(data);
+        onProgress?.(allData.length);
         from += 1000;
         to += 1000;
         if (data.length < 1000) {
@@ -281,11 +276,20 @@ export class SyncManager {
   /**
    * Baixa dados da nuvem para o Dexie local do navegador
    */
-  private static async pullCloudToLocal(userId: string): Promise<void> {
+  private static async pullCloudToLocal(
+    userId: string,
+    onProgress?: (msg: string) => void
+  ): Promise<void> {
     if (!supabase) return;
 
     // --- 1. Baixar Notas Emitidas ---
-    const cloudNotas = await this.fetchAllFromCloud("nfse_documents", userId, "id");
+    onProgress?.("Baixando notas emitidas da nuvem...");
+    const cloudNotas = await this.fetchAllFromCloud(
+      "nfse_documents",
+      userId,
+      "id",
+      (count) => onProgress?.(`Baixando notas emitidas... ${count}`)
+    );
     if (cloudNotas && cloudNotas.length > 0) {
       const mappedNotas = cloudNotas.map((n) => ({
         id: n.id,
@@ -318,7 +322,13 @@ export class SyncManager {
     }
 
     // --- 2. Baixar Notas Tomadas ---
-    const cloudTomadas = await this.fetchAllFromCloud("nfse_documents_tomadas", userId, "id");
+    onProgress?.("Baixando notas tomadas da nuvem...");
+    const cloudTomadas = await this.fetchAllFromCloud(
+      "nfse_documents_tomadas",
+      userId,
+      "id",
+      (count) => onProgress?.(`Baixando notas tomadas... ${count}`)
+    );
     if (cloudTomadas && cloudTomadas.length > 0) {
       const mappedTomadas = cloudTomadas.map((n) => ({
         id: n.id,
