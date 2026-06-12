@@ -17,12 +17,15 @@ CREATE TABLE IF NOT EXISTS public.profiles (
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
 -- Políticas de RLS
+DROP POLICY IF EXISTS "Permitir leitura do próprio perfil" ON public.profiles;
 CREATE POLICY "Permitir leitura do próprio perfil" ON public.profiles
     FOR SELECT USING (auth.uid() = id);
 
+DROP POLICY IF EXISTS "Permitir atualização do próprio perfil" ON public.profiles;
 CREATE POLICY "Permitir atualização do próprio perfil" ON public.profiles
     FOR UPDATE USING (auth.uid() = id);
 
+DROP POLICY IF EXISTS "Permitir inserção do próprio perfil" ON public.profiles;
 CREATE POLICY "Permitir inserção do próprio perfil" ON public.profiles
     FOR INSERT WITH CHECK (auth.uid() = id);
 
@@ -59,6 +62,7 @@ CREATE TABLE IF NOT EXISTS public.nfse_documents (
 
 ALTER TABLE public.nfse_documents ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Permitir acesso total às próprias notas emitidas" ON public.nfse_documents;
 CREATE POLICY "Permitir acesso total às próprias notas emitidas" ON public.nfse_documents
     FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
@@ -94,6 +98,7 @@ CREATE TABLE IF NOT EXISTS public.nfse_documents_tomadas (
 
 ALTER TABLE public.nfse_documents_tomadas ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Permitir acesso total às próprias notas tomadas" ON public.nfse_documents_tomadas;
 CREATE POLICY "Permitir acesso total às próprias notas tomadas" ON public.nfse_documents_tomadas
     FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
@@ -108,6 +113,7 @@ CREATE TABLE IF NOT EXISTS public.custom_categories (
 
 ALTER TABLE public.custom_categories ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Permitir acesso total às próprias categorias" ON public.custom_categories;
 CREATE POLICY "Permitir acesso total às próprias categorias" ON public.custom_categories
     FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
@@ -121,6 +127,7 @@ CREATE TABLE IF NOT EXISTS public.category_overrides (
 
 ALTER TABLE public.category_overrides ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Permitir acesso total aos próprios overrides" ON public.category_overrides;
 CREATE POLICY "Permitir acesso total aos próprios overrides" ON public.category_overrides
     FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
@@ -145,6 +152,7 @@ CREATE TABLE IF NOT EXISTS public.service_classifications (
 
 ALTER TABLE public.service_classifications ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Permitir acesso total às próprias classificações" ON public.service_classifications;
 CREATE POLICY "Permitir acesso total às próprias classificações" ON public.service_classifications
     FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
@@ -161,6 +169,7 @@ CREATE TABLE IF NOT EXISTS public.category_rules (
 
 ALTER TABLE public.category_rules ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Permitir acesso total às próprias regras" ON public.category_rules;
 CREATE POLICY "Permitir acesso total às próprias regras" ON public.category_rules
     FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
@@ -179,6 +188,7 @@ CREATE TABLE IF NOT EXISTS public.audit_logs (
 
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Permitir acesso total aos próprios logs de auditoria" ON public.audit_logs;
 CREATE POLICY "Permitir acesso total aos próprios logs de auditoria" ON public.audit_logs
     FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
@@ -299,28 +309,36 @@ $$ LANGUAGE sql SECURITY DEFINER;
 -- 9. Políticas de RLS em Tabelas SaaS
 
 -- Políticas para groups
+DROP POLICY IF EXISTS "Leitura de grupos permitida aos membros ativos" ON public.groups;
 CREATE POLICY "Leitura de grupos permitida aos membros ativos" ON public.groups
-    FOR SELECT USING (exists (select 1 from group_members where group_members.group_id = id and group_members.user_id = auth.uid() and group_members.status = 'active'));
+    FOR SELECT USING (exists (select 1 from group_members where group_members.group_id = groups.id and group_members.user_id = auth.uid() and group_members.status = 'active'));
 
+DROP POLICY IF EXISTS "Criar grupos permitida aos usuários autenticados" ON public.groups;
 CREATE POLICY "Criar grupos permitida aos usuários autenticados" ON public.groups
     FOR INSERT WITH CHECK (auth.uid() = owner_user_id);
 
+DROP POLICY IF EXISTS "Alteração de grupo permitida apenas ao Proprietário" ON public.groups;
 CREATE POLICY "Alteração de grupo permitida apenas ao Proprietário" ON public.groups
     FOR UPDATE USING (auth.uid() = owner_user_id);
 
+DROP POLICY IF EXISTS "Exclusão de grupo permitida apenas ao Proprietário" ON public.groups;
 CREATE POLICY "Exclusão de grupo permitida apenas ao Proprietário" ON public.groups
     FOR DELETE USING (auth.uid() = owner_user_id);
 
 -- Políticas para group_members
+DROP POLICY IF EXISTS "Leitura de membros permitida aos membros ativos do grupo" ON public.group_members;
 CREATE POLICY "Leitura de membros permitida aos membros ativos do grupo" ON public.group_members
     FOR SELECT USING (exists (select 1 from group_members gm where gm.group_id = group_id and gm.user_id = auth.uid() and gm.status = 'active'));
 
+DROP POLICY IF EXISTS "Inserção de membros permitida a Proprietários/Administradores" ON public.group_members;
 CREATE POLICY "Inserção de membros permitida a Proprietários/Administradores" ON public.group_members
     FOR INSERT WITH CHECK (exists (select 1 from group_members gm where gm.group_id = group_id and gm.user_id = auth.uid() and gm.role in ('Owner', 'Administrador') and gm.status = 'active'));
 
+DROP POLICY IF EXISTS "Atualização de membros permitida apenas a Proprietários" ON public.group_members;
 CREATE POLICY "Atualização de membros permitida apenas a Proprietários" ON public.group_members
     FOR UPDATE USING (exists (select 1 from group_members gm where gm.group_id = group_id and gm.user_id = auth.uid() and gm.role = 'Owner' and gm.status = 'active'));
 
+DROP POLICY IF EXISTS "Exclusão de membros permitida a Proprietários (Administradores podem excluir a si mesmos)" ON public.group_members;
 CREATE POLICY "Exclusão de membros permitida a Proprietários (Administradores podem excluir a si mesmos)" ON public.group_members
     FOR DELETE USING (
         exists (select 1 from group_members gm where gm.group_id = group_id and gm.user_id = auth.uid() and gm.role = 'Owner' and gm.status = 'active')
@@ -328,30 +346,41 @@ CREATE POLICY "Exclusão de membros permitida a Proprietários (Administradores 
     );
 
 -- Políticas para companies
+DROP POLICY IF EXISTS "Leitura de empresas permitida aos membros ativos do grupo" ON public.companies;
 CREATE POLICY "Leitura de empresas permitida aos membros ativos do grupo" ON public.companies
     FOR SELECT USING (exists (select 1 from group_members where group_members.group_id = group_id and group_members.user_id = auth.uid() and group_members.status = 'active'));
 
+DROP POLICY IF EXISTS "Criar empresas permitida a Proprietários/Administradores" ON public.companies;
 CREATE POLICY "Criar empresas permitida a Proprietários/Administradores" ON public.companies
     FOR INSERT WITH CHECK (exists (select 1 from group_members where group_members.group_id = group_id and group_members.user_id = auth.uid() and group_members.role in ('Owner', 'Administrador') and group_members.status = 'active'));
 
+DROP POLICY IF EXISTS "Atualização de empresas permitida a Proprietários/Administradores" ON public.companies;
 CREATE POLICY "Atualização de empresas permitida a Proprietários/Administradores" ON public.companies
     FOR UPDATE USING (exists (select 1 from group_members where group_members.group_id = group_id and group_members.user_id = auth.uid() and group_members.role in ('Owner', 'Administrador') and group_members.status = 'active'));
 
+DROP POLICY IF EXISTS "Exclusão de empresas permitida apenas a Proprietários" ON public.companies;
 CREATE POLICY "Exclusão de empresas permitida apenas a Proprietários" ON public.companies
     FOR DELETE USING (exists (select 1 from group_members where group_members.group_id = group_id and group_members.user_id = auth.uid() and group_members.role = 'Owner' and group_members.status = 'active'));
 
 -- Políticas para group_invitations
+DROP POLICY IF EXISTS "Leitura de convites permitida aos membros ativos do grupo" ON public.group_invitations;
 CREATE POLICY "Leitura de convites permitida aos membros ativos do grupo" ON public.group_invitations
     FOR SELECT USING (exists (select 1 from group_members where group_members.group_id = group_id and group_members.user_id = auth.uid() and group_members.status = 'active'));
 
+DROP POLICY IF EXISTS "Criar convites permitida a Proprietários/Administradores" ON public.group_invitations;
 CREATE POLICY "Criar convites permitida a Proprietários/Administradores" ON public.group_invitations
     FOR INSERT WITH CHECK (exists (select 1 from group_members where group_members.group_id = group_id and group_members.user_id = auth.uid() and group_members.role in ('Owner', 'Administrador') and group_members.status = 'active'));
 
+DROP POLICY IF EXISTS "Atualização/exclusão de convites permitida a Proprietários/Administradores" ON public.group_invitations;
 CREATE POLICY "Atualização/exclusão de convites permitida a Proprietários/Administradores" ON public.group_invitations
     FOR ALL USING (exists (select 1 from group_members where group_members.group_id = group_id and group_members.user_id = auth.uid() and group_members.role in ('Owner', 'Administrador') and group_members.status = 'active'));
 
 -- Políticas RLS genéricas para tabelas de dados do grupo (documentos, regras, classificações)
 DROP POLICY IF EXISTS "Permitir acesso total às próprias notas emitidas" ON public.nfse_documents;
+DROP POLICY IF EXISTS "Leitura de notas emitidas permitida aos membros ativos do grupo" ON public.nfse_documents;
+DROP POLICY IF EXISTS "Importação de notas emitidas permitida a Proprietários/Administradores" ON public.nfse_documents;
+DROP POLICY IF EXISTS "Atualização de notas emitidas permitida a Proprietários/Administradores/Analistas" ON public.nfse_documents;
+DROP POLICY IF EXISTS "Exclusão de notas emitidas permitida apenas ao Proprietário" ON public.nfse_documents;
 CREATE POLICY "Leitura de notas emitidas permitida aos membros ativos do grupo" ON public.nfse_documents
     FOR SELECT USING (exists (select 1 from group_members where group_members.group_id = group_id and group_members.user_id = auth.uid() and group_members.status = 'active'));
 CREATE POLICY "Importação de notas emitidas permitida a Proprietários/Administradores" ON public.nfse_documents
@@ -362,6 +391,10 @@ CREATE POLICY "Exclusão de notas emitidas permitida apenas ao Proprietário" ON
     FOR DELETE USING (exists (select 1 from group_members where group_members.group_id = group_id and group_members.user_id = auth.uid() and group_members.role = 'Owner' and group_members.status = 'active'));
 
 DROP POLICY IF EXISTS "Permitir acesso total às próprias notas tomadas" ON public.nfse_documents_tomadas;
+DROP POLICY IF EXISTS "Leitura de notas tomadas permitida aos membros ativos do grupo" ON public.nfse_documents_tomadas;
+DROP POLICY IF EXISTS "Importação de notas tomadas permitida a Proprietários/Administradores" ON public.nfse_documents_tomadas;
+DROP POLICY IF EXISTS "Atualização de notas tomadas permitida a Proprietários/Administradores/Analistas" ON public.nfse_documents_tomadas;
+DROP POLICY IF EXISTS "Exclusão de notas tomadas permitida apenas ao Proprietário" ON public.nfse_documents_tomadas;
 CREATE POLICY "Leitura de notas tomadas permitida aos membros ativos do grupo" ON public.nfse_documents_tomadas
     FOR SELECT USING (exists (select 1 from group_members where group_members.group_id = group_id and group_members.user_id = auth.uid() and group_members.status = 'active'));
 CREATE POLICY "Importação de notas tomadas permitida a Proprietários/Administradores" ON public.nfse_documents_tomadas
@@ -372,30 +405,40 @@ CREATE POLICY "Exclusão de notas tomadas permitida apenas ao Proprietário" ON 
     FOR DELETE USING (exists (select 1 from group_members where group_members.group_id = group_id and group_members.user_id = auth.uid() and group_members.role = 'Owner' and group_members.status = 'active'));
 
 DROP POLICY IF EXISTS "Permitir acesso total às próprias categorias" ON public.custom_categories;
+DROP POLICY IF EXISTS "Leitura de categorias customizadas permitida aos membros ativos do grupo" ON public.custom_categories;
+DROP POLICY IF EXISTS "Escrita de categorias customizadas permitida a Proprietários/Administradores/Analistas" ON public.custom_categories;
 CREATE POLICY "Leitura de categorias customizadas permitida aos membros ativos do grupo" ON public.custom_categories
     FOR SELECT USING (exists (select 1 from group_members where group_members.group_id = group_id and group_members.user_id = auth.uid() and group_members.status = 'active'));
 CREATE POLICY "Escrita de categorias customizadas permitida a Proprietários/Administradores/Analistas" ON public.custom_categories
     FOR ALL USING (exists (select 1 from group_members where group_members.group_id = group_id and group_members.user_id = auth.uid() and group_members.role in ('Owner', 'Administrador', 'Analista') and group_members.status = 'active'));
 
 DROP POLICY IF EXISTS "Permitir acesso total aos próprios overrides" ON public.category_overrides;
+DROP POLICY IF EXISTS "Leitura de overrides permitida aos membros ativos do grupo" ON public.category_overrides;
+DROP POLICY IF EXISTS "Escrita de overrides permitida a Proprietários/Administradores/Analistas" ON public.category_overrides;
 CREATE POLICY "Leitura de overrides permitida aos membros ativos do grupo" ON public.category_overrides
     FOR SELECT USING (exists (select 1 from group_members where group_members.group_id = group_id and group_members.user_id = auth.uid() and group_members.status = 'active'));
 CREATE POLICY "Escrita de overrides permitida a Proprietários/Administradores/Analistas" ON public.category_overrides
     FOR ALL USING (exists (select 1 from group_members where group_members.group_id = group_id and group_members.user_id = auth.uid() and group_members.role in ('Owner', 'Administrador', 'Analista') and group_members.status = 'active'));
 
 DROP POLICY IF EXISTS "Permitir acesso total às próprias classificações" ON public.service_classifications;
+DROP POLICY IF EXISTS "Leitura de classificações permitida aos membros ativos do grupo" ON public.service_classifications;
+DROP POLICY IF EXISTS "Escrita de classificações permitida a Proprietários/Administradores/Analistas" ON public.service_classifications;
 CREATE POLICY "Leitura de classificações permitida aos membros ativos do grupo" ON public.service_classifications
     FOR SELECT USING (exists (select 1 from group_members where group_members.group_id = group_id and group_members.user_id = auth.uid() and group_members.status = 'active'));
 CREATE POLICY "Escrita de classificações permitida a Proprietários/Administradores/Analistas" ON public.service_classifications
     FOR ALL USING (exists (select 1 from group_members where group_members.group_id = group_id and group_members.user_id = auth.uid() and group_members.role in ('Owner', 'Administrador', 'Analista') and group_members.status = 'active'));
 
 DROP POLICY IF EXISTS "Permitir acesso total às próprias regras" ON public.category_rules;
+DROP POLICY IF EXISTS "Leitura de regras permitida aos membros ativos do grupo" ON public.category_rules;
+DROP POLICY IF EXISTS "Escrita de regras permitida a Proprietários/Administradores/Analistas" ON public.category_rules;
 CREATE POLICY "Leitura de regras permitida aos membros ativos do grupo" ON public.category_rules
     FOR SELECT USING (exists (select 1 from group_members where group_members.group_id = group_id and group_members.user_id = auth.uid() and group_members.status = 'active'));
 CREATE POLICY "Escrita de regras permitida a Proprietários/Administradores/Analistas" ON public.category_rules
     FOR ALL USING (exists (select 1 from group_members where group_members.group_id = group_id and group_members.user_id = auth.uid() and group_members.role in ('Owner', 'Administrador', 'Analista') and group_members.status = 'active'));
 
 DROP POLICY IF EXISTS "Permitir acesso total aos próprios logs de auditoria" ON public.audit_logs;
+DROP POLICY IF EXISTS "Leitura de audit_logs permitida aos membros ativos do grupo" ON public.audit_logs;
+DROP POLICY IF EXISTS "Inserção de audit_logs permitida a membros ativos" ON public.audit_logs;
 CREATE POLICY "Leitura de audit_logs permitida aos membros ativos do grupo" ON public.audit_logs
     FOR SELECT USING (exists (select 1 from group_members where group_members.group_id = group_id and group_members.user_id = auth.uid() and group_members.status = 'active'));
 CREATE POLICY "Inserção de audit_logs permitida a membros ativos" ON public.audit_logs
@@ -403,13 +446,14 @@ CREATE POLICY "Inserção de audit_logs permitida a membros ativos" ON public.au
 
 -- Política para profiles (visualizar dados de perfis de membros do mesmo grupo)
 DROP POLICY IF EXISTS "Permitir leitura do próprio perfil" ON public.profiles;
+DROP POLICY IF EXISTS "Leitura de perfil permitida ao próprio usuário ou membros do grupo" ON public.profiles;
 CREATE POLICY "Leitura de perfil permitida ao próprio usuário ou membros do grupo" ON public.profiles
     FOR SELECT USING (
         auth.uid() = id
         OR exists (
             select 1 from group_members my_gm
             join group_members other_gm on my_gm.group_id = other_gm.group_id
-            where my_gm.user_id = auth.uid() and other_gm.user_id = id and my_gm.status = 'active' and other_gm.status = 'active'
+            where my_gm.user_id = auth.uid() and other_gm.user_id = profiles.id and my_gm.status = 'active' and other_gm.status = 'active'
         )
     );
 
