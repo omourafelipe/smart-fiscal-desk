@@ -51,11 +51,27 @@ function getRoleColor(role: string) {
     case "Owner":
       return "bg-rose-500/10 text-rose-400 border border-rose-500/25";
     case "Administrador":
+    case "Admin":
       return "bg-indigo-500/10 text-indigo-400 border border-indigo-500/25";
     case "Analista":
+    case "Analyst":
       return "bg-emerald-500/10 text-emerald-400 border border-emerald-500/25";
     default:
       return "bg-slate-500/10 text-slate-400 border border-slate-500/25";
+  }
+}
+
+function translateRole(role: string | null): string {
+  if (!role) return "Sem vínculo ativo";
+  switch (role) {
+    case "Owner": return "Owner";
+    case "Administrador":
+    case "Admin": return "Admin";
+    case "Analista":
+    case "Analyst": return "Analyst";
+    case "Visualizador":
+    case "Viewer": return "Viewer";
+    default: return role;
   }
 }
 
@@ -221,7 +237,7 @@ function ConfiguracoesRouteComponent() {
         </div>
         <div className="flex items-center gap-2">
           <Badge className={`${getRoleColor(activeRole || "Visualizador")} font-semibold px-2.5 py-1 text-xs`}>
-            Papel: {activeRole || "Sem Acesso"}
+            Papel: {activeRole ? translateRole(activeRole) : "Sem vínculo ativo"}
           </Badge>
           {loading && <Loader2 className="h-4 w-4 animate-spin text-slate-400" />}
         </div>
@@ -407,7 +423,7 @@ function ConfiguracoesRouteComponent() {
                             </Select>
                           ) : (
                             <Badge className={`${getRoleColor(member.role)} text-[10px] font-semibold px-2 py-0.5`}>
-                              {member.role}
+                              {translateRole(member.role)}
                             </Badge>
                           )}
                         </TableCell>
@@ -482,7 +498,7 @@ function ConfiguracoesRouteComponent() {
                           <div className="text-[9px] text-muted-foreground font-mono mt-0.5">Token: {invite.token.substring(0, 8)}...</div>
                         </TableCell>
                         <TableCell>
-                          <Badge className={`${getRoleColor(invite.role)} text-[10px]`}>{invite.role}</Badge>
+                          <Badge className={`${getRoleColor(invite.role)} text-[10px]`}>{translateRole(invite.role)}</Badge>
                         </TableCell>
                         <TableCell className="text-xs font-mono text-muted-foreground">
                           {formatarData(invite.expires_at)}

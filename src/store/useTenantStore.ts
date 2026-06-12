@@ -5,6 +5,33 @@ import { SyncManager } from "@/lib/data-access/SyncManager";
 import { useAuthStore } from "./useAuthStore";
 import { toast } from "sonner";
 
+export function toStoreRole(dbRole: string | null): 'Owner' | 'Admin' | 'Analyst' | 'Viewer' | null {
+  if (!dbRole) return null;
+  switch (dbRole) {
+    case 'Owner': return 'Owner';
+    case 'Administrador': return 'Admin';
+    case 'Analista': return 'Analyst';
+    case 'Visualizador': return 'Viewer';
+    case 'Admin': return 'Admin';
+    case 'Analyst': return 'Analyst';
+    case 'Viewer': return 'Viewer';
+    default: return null;
+  }
+}
+
+export function toDbRole(storeRole: string): 'Owner' | 'Administrador' | 'Analista' | 'Visualizador' {
+  switch (storeRole) {
+    case 'Owner': return 'Owner';
+    case 'Admin': return 'Administrador';
+    case 'Analyst': return 'Analista';
+    case 'Viewer': return 'Visualizador';
+    case 'Administrador': return 'Administrador';
+    case 'Analista': return 'Analista';
+    case 'Visualizador': return 'Visualizador';
+    default: return 'Visualizador';
+  }
+}
+
 export interface Group {
   id: string;
   nome: string;
@@ -24,7 +51,7 @@ export interface GroupMember {
   id: string;
   group_id: string;
   user_id: string;
-  role: 'Owner' | 'Administrador' | 'Analista' | 'Visualizador';
+  role: 'Owner' | 'Administrador' | 'Analista' | 'Visualizador' | 'Admin' | 'Analyst' | 'Viewer';
   invited_by?: string;
   invited_at?: string;
   accepted_at?: string;
@@ -40,7 +67,7 @@ export interface GroupInvitation {
   id: string;
   group_id: string;
   email: string;
-  role: 'Owner' | 'Administrador' | 'Analista' | 'Visualizador';
+  role: 'Owner' | 'Administrador' | 'Analista' | 'Visualizador' | 'Admin' | 'Analyst' | 'Viewer';
   token: string;
   invited_by: string;
   expires_at: string;
@@ -51,7 +78,7 @@ export interface GroupInvitation {
 interface TenantState {
   groups: Group[];
   activeGroup: Group | null;
-  activeRole: 'Owner' | 'Administrador' | 'Analista' | 'Visualizador' | null;
+  activeRole: 'Owner' | 'Admin' | 'Analyst' | 'Viewer' | null;
   companies: Company[];
   members: GroupMember[];
   invitations: GroupInvitation[];
@@ -78,7 +105,12 @@ export const useTenantStore = create<TenantState>((set, get) => ({
   loading: false,
 
   fetchTenantData: async () => {
-    const user = useAuthStore.getState().user;
+    let user = useAuthStore.getState().user;
+    if (!user && supabase) {
+      const { data: { session } } = await supabase.auth.getSession();
+      user = session?.user || null;
+    }
+    
     if (!user) {
       set({ groups: [], activeGroup: null, activeRole: null, companies: [], members: [], invitations: [] });
       return;
@@ -91,33 +123,61 @@ export const useTenantStore = create<TenantState>((set, get) => ({
 
     set({ loading: true });
     try {
-      // 1. Fetch user groups where they are an active member
+      // 1. Fetch user's active group memberships AND owned groups to build access list
+      const [membershipsRes, ownedGroupsRes] = await Promise.all([
+        supabase
+          .from("group_members")
+          .select("group_id, role")
+          .eq("user_id", user.id)
+          .eq("status", "active"),
+        supabase
+          .from("groups")
+          .select("id, nome, owner_user_id")
+          .eq("owner_user_id", user.id),
+      ]);
+
+      const roleMap = new Map<string, string>();
+      
+      if (membershipsRes.data) {
+        for (const m of membershipsRes.data) {
+          roleMap.set(m.group_id, m.role);
+        }
+      }
+      
+      if (ownedGroupsRes.data) {
+        for (const g of ownedGroupsRes.data) {
+          roleMap.set(g.id, "Owner");
+        }
+      }
+
+      const allGroupIds = Array.from(roleMap.keys());
+      if (allGroupIds.length === 0) {
+        set({ groups: [], activeGroup: null, activeRole: null, companies: [], members: [], invitations: [], loading: false });
+        return;
+      }
+
+      // Fetch group details for all accessible groups
       const { data: groupsData, error: groupsError } = await supabase
         .from("groups")
-        .select("*");
+        .select("*")
+        .in("id", allGroupIds);
 
       if (groupsError) throw groupsError;
 
       const groupsList = groupsData || [];
       set({ groups: groupsList });
 
-      if (groupsList.length === 0) {
-        set({ activeGroup: null, activeRole: null, companies: [], members: [], invitations: [], loading: false });
-        return;
-      }
-
       // 2. Select active group
       let selectedGroup: Group | null = null;
-      const storedGroupId = typeof window !== "undefined" ? localStorage.getItem("active_group_id") : null;
-      
-      if (storedGroupId) {
-        selectedGroup = groupsList.find(g => g.id === storedGroupId) || null;
-      }
-
-      if (!selectedGroup) {
-        selectedGroup = groupsList[0] || null;
-        if (typeof window !== "undefined" && selectedGroup) {
-          localStorage.setItem("active_group_id", selectedGroup.id);
+      if (groupsList.length === 1) {
+        selectedGroup = groupsList[0];
+      } else if (groupsList.length > 1) {
+        const storedGroupId = typeof window !== "undefined" ? localStorage.getItem("active_group_id") : null;
+        if (storedGroupId) {
+          selectedGroup = groupsList.find(g => g.id === storedGroupId) || null;
+        }
+        if (!selectedGroup) {
+          selectedGroup = groupsList[0];
         }
       }
 
@@ -126,6 +186,9 @@ export const useTenantStore = create<TenantState>((set, get) => ({
         return;
       }
 
+      if (typeof window !== "undefined" && selectedGroup) {
+        localStorage.setItem("active_group_id", selectedGroup.id);
+      }
       set({ activeGroup: selectedGroup });
 
       // 3. Fetch active group's companies
@@ -166,11 +229,19 @@ export const useTenantStore = create<TenantState>((set, get) => ({
 
         set({ members: mappedMembers as GroupMember[] });
 
-        // Set user's active role
-        const myMember = mappedMembers.find(m => m.user_id === user.id);
-        set({ activeRole: myMember ? myMember.role : null });
+        // Set user's active role (with translation and owner fallback)
+        const dbRole = roleMap.get(selectedGroup.id) || null;
+        let activeRole = toStoreRole(dbRole);
+        if (selectedGroup.owner_user_id === user.id) {
+          activeRole = "Owner";
+        }
+        set({ activeRole });
       } else {
-        set({ members: [], activeRole: null });
+        let activeRole: 'Owner' | 'Admin' | 'Analyst' | 'Viewer' | null = null;
+        if (selectedGroup.owner_user_id === user.id) {
+          activeRole = "Owner";
+        }
+        set({ members: [], activeRole });
       }
 
       // 5. Fetch active group's pending/all invitations
@@ -287,12 +358,13 @@ export const useTenantStore = create<TenantState>((set, get) => ({
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + 7); // Expires in 7 days
 
+      const dbRole = toDbRole(role);
       const { data, error } = await supabase
         .from("group_invitations")
         .insert({
           group_id: activeGroup.id,
           email,
-          role,
+          role: dbRole,
           token,
           invited_by: user.id,
           expires_at: expiresAt.toISOString(),
@@ -361,9 +433,10 @@ export const useTenantStore = create<TenantState>((set, get) => ({
     }
 
     try {
+      const dbRole = toDbRole(newRole);
       const { error } = await supabase
         .from("group_members")
-        .update({ role: newRole })
+        .update({ role: dbRole })
         .eq("id", memberId);
 
       if (error) throw error;

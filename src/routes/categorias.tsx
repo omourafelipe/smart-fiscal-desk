@@ -18,6 +18,7 @@ import {
 import { useAuthStore } from "@/store/useAuthStore";
 import { useTenantStore } from "@/store/useTenantStore";
 import { SyncManager } from "@/lib/data-access/SyncManager";
+import { PermissionService } from "@/lib/services/PermissionService";
 import {
   classificarServicoLocal,
   resolverServicoFiscal,

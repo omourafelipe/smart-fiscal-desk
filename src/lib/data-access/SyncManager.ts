@@ -14,7 +14,7 @@ export class SyncManager {
     this.isSyncing = true;
     let toastId: string | number | undefined;
     if (showToast) {
-      toastId = toast.loading("Sincronizando seus dados com a nuvem...");
+      toastId = toast.loading("Iniciando sincronização...");
     }
 
     const updateProgress = (msg: string) => {
@@ -27,9 +27,37 @@ export class SyncManager {
       const { useTenantStore } = await import("@/store/useTenantStore");
       await useTenantStore.getState().fetchTenantData();
 
+      const activeGroupId = useTenantStore.getState().activeGroup?.id;
+
+      // Obter contagem total de registros na nuvem para progresso preciso
+      updateProgress("Calculando total de registros na nuvem...");
+      let totalToSync = 0;
+      
+      try {
+        let queryEmitidas = supabase.from("nfse_documents").select("id", { count: "exact", head: true });
+        let queryTomadas = supabase.from("nfse_documents_tomadas").select("id", { count: "exact", head: true });
+        
+        if (activeGroupId) {
+          queryEmitidas = queryEmitidas.eq("group_id", activeGroupId);
+          queryTomadas = queryTomadas.eq("group_id", activeGroupId);
+        } else {
+          queryEmitidas = queryEmitidas.eq("user_id", userId);
+          queryTomadas = queryTomadas.eq("user_id", userId);
+        }
+        
+        const [resEmitidas, resTomadas] = await Promise.all([
+          queryEmitidas,
+          queryTomadas
+        ]);
+        
+        totalToSync = (resEmitidas.count || 0) + (resTomadas.count || 0);
+      } catch (err) {
+        console.error("Erro ao obter contagem de registros na nuvem:", err);
+      }
+
       // 1. Push dos dados locais para o Supabase (Upload) - pular se for Visualizador
       const role = useTenantStore.getState().activeRole;
-      if (role === "Visualizador") {
+      if (role === "Viewer") {
         updateProgress("Perfil de Visualizador: pulando envio de dados locais...");
       } else {
         updateProgress("Enviando dados locais para a nuvem...");
@@ -37,7 +65,38 @@ export class SyncManager {
       }
 
       // 2. Pull dos dados do Supabase para o banco local (Download)
-      const totalPulled = await this.pullCloudToLocal(userId, updateProgress);
+      const downloadedMap = new Map<string, number>();
+      const startTime = Date.now();
+      
+      const reportPullProgress = (tableKey: string, count: number) => {
+        downloadedMap.set(tableKey, count);
+        
+        let totalDownloaded = 0;
+        downloadedMap.forEach((val) => {
+          totalDownloaded += val;
+        });
+        
+        const elapsed = Date.now() - startTime;
+        let progressMsg = `Sincronizando: ${totalDownloaded}`;
+        
+        if (totalToSync > 0) {
+          const percent = Math.min(100, Math.round((totalDownloaded / totalToSync) * 100));
+          const speed = totalDownloaded / elapsed; // registros por ms
+          const remaining = totalToSync - totalDownloaded;
+          const etaSeconds = speed > 0 ? Math.round(remaining / (speed * 1000)) : 0;
+          
+          progressMsg = `Sincronizando: ${totalDownloaded} de ${totalToSync} (${percent}%)`;
+          if (etaSeconds > 0) {
+            progressMsg += ` - Est. ${etaSeconds}s restantes`;
+          }
+        } else {
+          progressMsg += ` registros baixados...`;
+        }
+        
+        updateProgress(progressMsg);
+      };
+
+      const totalPulled = await this.pullCloudToLocal(userId, reportPullProgress);
 
       // 3. Invalidar estados derivados e recalcular filtros (Reset)
       const { useGlobalFilters } = await import("@/store/useGlobalFilters");
@@ -70,7 +129,8 @@ export class SyncManager {
   ): Promise<any[]> {
     if (!supabase) return [];
     
-    const activeGroupId = typeof window !== "undefined" ? localStorage.getItem("active_group_id") : null;
+    const { useTenantStore } = await import("@/store/useTenantStore");
+    const activeGroupId = useTenantStore.getState().activeGroup?.id;
     let allData: any[] = [];
     let from = 0;
     let to = 999;
@@ -289,19 +349,18 @@ export class SyncManager {
    */
   private static async pullCloudToLocal(
     userId: string,
-    onProgress?: (msg: string) => void
+    onProgress?: (tableKey: string, count: number) => void
   ): Promise<number> {
     if (!supabase) return 0;
 
     let totalPulled = 0;
 
     // --- 1. Baixar Notas Emitidas ---
-    onProgress?.("Baixando notas emitidas da nuvem...");
     const cloudNotas = await this.fetchAllFromCloud(
       "nfse_documents",
       userId,
       "id",
-      (count) => onProgress?.(`Baixando notas emitidas... ${count}`)
+      (count) => onProgress?.("emitidas", count)
     );
     await db.notas.clear();
     if (cloudNotas && cloudNotas.length > 0) {
@@ -337,12 +396,11 @@ export class SyncManager {
     }
 
     // --- 2. Baixar Notas Tomadas ---
-    onProgress?.("Baixando notas tomadas da nuvem...");
     const cloudTomadas = await this.fetchAllFromCloud(
       "nfse_documents_tomadas",
       userId,
       "id",
-      (count) => onProgress?.(`Baixando notas tomadas... ${count}`)
+      (count) => onProgress?.("tomadas", count)
     );
     await db.notasTomadas.clear();
     if (cloudTomadas && cloudTomadas.length > 0) {

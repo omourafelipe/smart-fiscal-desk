@@ -142,6 +142,7 @@ function RootComponent() {
   const isLoginPage = state.location.pathname === "/login";
 
   const { session, checkSession, isSupabaseConfigured } = useAuthStore();
+  const { groups, loading: tenantLoading } = useTenantStore();
 
   useEffect(() => {
     checkSession();
@@ -161,6 +162,22 @@ function RootComponent() {
         <Outlet />
       ) : (
         <LayoutShell>
+          {session && isSupabaseConfigured && groups.length === 0 && !tenantLoading && (
+            <div className="bg-amber-500/10 border-b border-amber-500/20 px-6 py-2.5 flex items-center justify-between text-xs text-amber-700 dark:text-amber-400 font-medium animate-in fade-in slide-in-from-top-4 duration-300">
+              <div className="flex items-center gap-2">
+                <ShieldAlert className="h-4.5 w-4.5 text-amber-500 shrink-0" />
+                <span>
+                  Você não possui nenhum grupo ou empresa ativa associada. Crie um novo grupo nas <strong>Configurações</strong> para começar.
+                </span>
+              </div>
+              <Link
+                to="/configuracoes"
+                className="bg-amber-500/20 hover:bg-amber-500/30 text-amber-700 dark:text-amber-300 font-bold px-3 py-1 rounded-xl transition-colors shrink-0"
+              >
+                Acessar Configurações
+              </Link>
+            </div>
+          )}
           {!session && isSupabaseConfigured && (
             <div className="bg-amber-500/10 border-b border-amber-500/20 px-6 py-2 flex items-center justify-between text-xs text-amber-600 dark:text-amber-400 font-medium">
               <div className="flex items-center gap-2">

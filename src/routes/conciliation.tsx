@@ -415,7 +415,7 @@ function ConciliationRouteComponent() {
       </div>
       
       {/* XLSX DROP ZONE */}
-      {activeRole === "Visualizador" ? (
+      {activeRole === "Viewer" ? (
         <div className="bg-amber-500/10 border border-amber-500/20 p-6 rounded-2xl flex flex-col items-center gap-2 text-center shadow-xs">
           <AlertTriangle className="h-8 w-8 text-amber-500" />
           <p className="font-semibold text-xs text-foreground">Perfil de Acesso Limitado</p>
@@ -588,7 +588,7 @@ function ConciliationRouteComponent() {
               </div>
 
               <div className="flex gap-2">
-                {activeRole !== "Visualizador" && (
+                {activeRole !== "Viewer" && (
                   <Button
                     size="sm"
                     onClick={applyUpdates}

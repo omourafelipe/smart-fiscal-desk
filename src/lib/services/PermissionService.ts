@@ -1,12 +1,12 @@
-export type UserRole = "Owner" | "Administrador" | "Analista" | "Visualizador" | null;
+export type UserRole = "Owner" | "Admin" | "Analyst" | "Viewer" | "Administrador" | "Analista" | "Visualizador" | null;
 
 export class PermissionService {
   /**
    * Verifica se o usuário tem permissão para gerenciar outros usuários e configurações sensíveis.
-   * Apenas Owner e Administrador.
+   * Apenas Owner e Administrador / Admin.
    */
   static canManageUsers(role: UserRole): boolean {
-    return role === "Owner" || role === "Administrador";
+    return role === "Owner" || role === "Admin" || role === "Administrador";
   }
 
   /**
@@ -19,10 +19,16 @@ export class PermissionService {
 
   /**
    * Verifica se o usuário tem permissão para editar dados, categorias, importar XMLs e ver ações nas tabelas.
-   * Qualquer um acima de Visualizador.
+   * Qualquer um acima de Visualizador / Viewer.
    */
   static canEdit(role: UserRole): boolean {
-    return role === "Owner" || role === "Administrador" || role === "Analista";
+    return (
+      role === "Owner" ||
+      role === "Admin" ||
+      role === "Administrador" ||
+      role === "Analyst" ||
+      role === "Analista"
+    );
   }
 
   /**

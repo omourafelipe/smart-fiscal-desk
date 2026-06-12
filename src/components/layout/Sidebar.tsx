@@ -105,6 +105,11 @@ export function Sidebar() {
               <div className="overflow-hidden flex-1">
                 <p className="text-xs font-semibold text-foreground truncate">{profile?.nome || "Usuário"}</p>
                 <p className="text-[10px] text-muted-foreground truncate">{user?.email}</p>
+                {activeRole && (
+                  <span className="inline-block mt-1 text-[8px] font-bold px-1.5 py-0.2 rounded-md bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 w-fit">
+                    {activeRole}
+                  </span>
+                )}
               </div>
             </div>
             
