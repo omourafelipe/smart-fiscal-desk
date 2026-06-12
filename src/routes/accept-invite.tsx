@@ -56,6 +56,8 @@ function AcceptInvitePageComponent() {
       // Record previous groups to identify which group was joined
       const previousGroupIds = groups.map(g => g.id);
 
+      if (!supabase) throw new Error("Supabase não está configurado.");
+
       // Call accept invitation RPC
       const { data, error } = await supabase.rpc("accept_group_invitation", {
         invite_token: token,

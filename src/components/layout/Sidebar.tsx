@@ -194,7 +194,7 @@ export function Sidebar() {
             {/* Dashboard / Faturamento */}
             <Link
               to="/"
-              search={(prev) => prev}
+              search={(prev: any) => prev}
               className={`flex items-center justify-between px-3 py-2 text-xs font-medium rounded-xl transition-all w-full text-left ${
                 currentPath === "/" ? "bg-muted text-foreground font-semibold" : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
               }`}
@@ -212,7 +212,7 @@ export function Sidebar() {
             {/* Resumo do Grupo */}
             <Link
               to="/grupo"
-              search={(prev) => prev}
+              search={(prev: any) => prev}
               className={`flex items-center justify-between px-3 py-2 text-xs font-medium rounded-xl transition-all w-full text-left ${
                 currentPath === "/grupo" ? "bg-muted text-foreground font-semibold" : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
               }`}
@@ -225,7 +225,7 @@ export function Sidebar() {
             {/* Serviços Tomados */}
             <Link
               to="/tomados"
-              search={(prev) => prev}
+              search={(prev: any) => prev}
               className={`flex items-center justify-between px-3 py-2 text-xs font-medium rounded-xl transition-all w-full text-left ${
                 currentPath === "/tomados" ? "bg-muted text-foreground font-semibold" : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
               }`}
@@ -243,7 +243,7 @@ export function Sidebar() {
             {/* Conciliador */}
             <Link
               to="/conciliation"
-              search={(prev) => prev}
+              search={(prev: any) => prev}
               className={`flex items-center justify-between px-3 py-2 text-xs font-medium rounded-xl transition-all w-full text-left ${
                 currentPath === "/conciliation" ? "bg-muted text-foreground font-semibold" : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
               }`}
@@ -256,7 +256,7 @@ export function Sidebar() {
             {/* Categorias */}
             <Link
               to="/categorias"
-              search={(prev) => prev}
+              search={(prev: any) => prev}
               className={`flex items-center justify-between px-3 py-2 text-xs font-medium rounded-xl transition-all w-full text-left ${
                 currentPath === "/categorias" ? "bg-muted text-foreground font-semibold" : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
               }`}
@@ -270,7 +270,7 @@ export function Sidebar() {
             {user && (
               <Link
                 to="/configuracoes"
-                search={(prev) => prev}
+                search={(prev: any) => prev}
                 className={`flex items-center justify-between px-3 py-2 text-xs font-medium rounded-xl transition-all w-full text-left ${
                   currentPath === "/configuracoes" ? "bg-muted text-foreground font-semibold" : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
                 }`}
@@ -291,12 +291,14 @@ export function Sidebar() {
             >
               <Download className="h-4 w-4" /> Exportar Notas CSV
             </button>
-            <button
-              onClick={clearDb}
-              className="flex items-center gap-3 px-3 py-2 text-xs font-medium text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 hover:bg-rose-500/10 rounded-xl transition-all w-full text-left cursor-pointer"
-            >
-              <Trash2 className="h-4 w-4" /> Limpar Base Local
-            </button>
+            {activeRole !== "Visualizador" && (
+              <button
+                onClick={clearDb}
+                className="flex items-center gap-3 px-3 py-2 text-xs font-medium text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 hover:bg-rose-500/10 rounded-xl transition-all w-full text-left cursor-pointer"
+              >
+                <Trash2 className="h-4 w-4" /> Limpar Base Local
+              </button>
+            )}
 
             {/* Log Out */}
             {user && (
@@ -304,18 +306,6 @@ export function Sidebar() {
                 onClick={async () => {
                   if (confirm("Deseja sair da sua conta na nuvem? Isso removerá as notas sincronizadas localmente.")) {
                     await signOut();
-                    // Clear Dexie since they are logging out
-                    await Promise.all([
-                      db.notas.clear(),
-                      db.notasTomadas.clear(),
-                      db.customCategories.clear(),
-                      db.categoryOverrides.clear(),
-                      db.serviceClassifications.clear(),
-                      db.categoryRules.clear(),
-                      db.auditLogs.clear()
-                    ]);
-                    toast.success("Desconectado com sucesso.");
-                    navigate({ to: "/login" });
                   }
                 }}
                 className="flex items-center gap-3 px-3 py-2 text-xs font-medium text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 hover:bg-amber-500/10 rounded-xl transition-all w-full text-left cursor-pointer"

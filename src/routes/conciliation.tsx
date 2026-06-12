@@ -20,6 +20,7 @@ import {
   type ExcelRowData,
 } from "@/lib/xlsx-parser";
 import { useLayoutShell } from "@/components/layout/LayoutShell";
+import { useTenantStore } from "@/store/useTenantStore";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -56,6 +57,7 @@ export const Route = createFileRoute("/conciliation")({
 
 function ConciliationRouteComponent() {
   const { addActivity } = useLayoutShell();
+  const { activeRole } = useTenantStore();
 
   // Excel Fechamento States
   const xlsxRef = useRef<HTMLInputElement>(null);
@@ -413,55 +415,66 @@ function ConciliationRouteComponent() {
       </div>
       
       {/* XLSX DROP ZONE */}
-      <div
-        onDragOver={(e) => { e.preventDefault(); setXlsxDragOver(true); }}
-        onDragLeave={() => setXlsxDragOver(false)}
-        onDrop={onXlsxDrop}
-        onClick={() => !isXlsxProcessing && xlsxRef.current?.click()}
-        className={`rounded-2xl border border-dashed p-6 text-center cursor-pointer transition-all duration-300 ${
-          xlsxDragOver
-            ? "border-indigo-500 bg-indigo-500/5 dark:bg-indigo-500/10 scale-[1.005] shadow-sm"
-            : "border-border bg-card text-card-foreground hover:border-indigo-500/50 hover:bg-slate-50/30 dark:hover:bg-slate-800/10"
-        }`}
-      >
-        <input
-          ref={xlsxRef}
-          type="file"
-          accept=".xlsx,.xls"
-          className="hidden"
-          disabled={isXlsxProcessing}
-          onChange={(e) => e.target.files?.[0] && processXlsxFile(e.target.files[0])}
-        />
-        <div className="flex flex-col items-center gap-2">
-          {isXlsxProcessing ? (
-            <>
-              <Loader2 className="h-8 w-8 text-indigo-600 animate-spin" />
-              <p className="font-semibold text-xs text-foreground">Conciliando Planilha de Faturamento...</p>
-            </>
-          ) : (
-            <>
-              <div className="h-10 w-10 rounded-xl bg-indigo-500/10 flex items-center justify-center">
-                <FileSpreadsheet className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
-              </div>
-              {xlsxFile ? (
-                <>
-                  <p className="font-semibold text-xs text-indigo-600 dark:text-indigo-400">{xlsxFile.name}</p>
-                  <p className="text-[10px] text-muted-foreground">Clique ou arraste outro arquivo para substituir</p>
-                </>
-              ) : (
-                <>
-                  <p className="font-semibold text-xs text-foreground">
-                    Arraste a planilha de fechamento fiscal (.xlsx) aqui ou clique para selecionar
-                  </p>
-                  <p className="text-[10px] text-muted-foreground">
-                    O arquivo deve conter as colunas de "Chave de Acesso" e "Situação/Status"
-                  </p>
-                </>
-              )}
-            </>
-          )}
+      {activeRole === "Visualizador" ? (
+        <div className="bg-amber-500/10 border border-amber-500/20 p-6 rounded-2xl flex flex-col items-center gap-2 text-center shadow-xs">
+          <AlertTriangle className="h-8 w-8 text-amber-500" />
+          <p className="font-semibold text-xs text-foreground">Perfil de Acesso Limitado</p>
+          <p className="text-[10px] text-muted-foreground max-w-md">
+            Você está logado com o nível de acesso de <strong>Visualizador</strong>. 
+            Não é possível carregar planilhas ou realizar a conciliação de faturamento/serviços.
+          </p>
         </div>
-      </div>
+      ) : (
+        <div
+          onDragOver={(e) => { e.preventDefault(); setXlsxDragOver(true); }}
+          onDragLeave={() => setXlsxDragOver(false)}
+          onDrop={onXlsxDrop}
+          onClick={() => !isXlsxProcessing && xlsxRef.current?.click()}
+          className={`rounded-2xl border border-dashed p-6 text-center cursor-pointer transition-all duration-300 ${
+            xlsxDragOver
+              ? "border-indigo-500 bg-indigo-500/5 dark:bg-indigo-500/10 scale-[1.005] shadow-sm"
+              : "border-border bg-card text-card-foreground hover:border-indigo-500/50 hover:bg-slate-50/30 dark:hover:bg-slate-800/10"
+          }`}
+        >
+          <input
+            ref={xlsxRef}
+            type="file"
+            accept=".xlsx,.xls"
+            className="hidden"
+            disabled={isXlsxProcessing}
+            onChange={(e) => e.target.files?.[0] && processXlsxFile(e.target.files[0])}
+          />
+          <div className="flex flex-col items-center gap-2">
+            {isXlsxProcessing ? (
+              <>
+                <Loader2 className="h-8 w-8 text-indigo-600 animate-spin" />
+                <p className="font-semibold text-xs text-foreground">Conciliando Planilha de Faturamento...</p>
+              </>
+            ) : (
+              <>
+                <div className="h-10 w-10 rounded-xl bg-indigo-500/10 flex items-center justify-center">
+                  <FileSpreadsheet className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+                </div>
+                {xlsxFile ? (
+                  <>
+                    <p className="font-semibold text-xs text-indigo-600 dark:text-indigo-400">{xlsxFile.name}</p>
+                    <p className="text-[10px] text-muted-foreground">Clique ou arraste outro arquivo para substituir</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="font-semibold text-xs text-foreground">
+                      Arraste a planilha de fechamento fiscal (.xlsx) aqui ou clique para selecionar
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">
+                      O arquivo deve conter as colunas de "Chave de Acesso" e "Situação/Status"
+                    </p>
+                  </>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* CONCILIATION RESULT VIEW */}
       {xlsxRows.length > 0 && (
@@ -575,14 +588,16 @@ function ConciliationRouteComponent() {
               </div>
 
               <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  onClick={applyUpdates}
-                  disabled={conciliatedStats.updated === 0}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg text-xs h-8 cursor-pointer"
-                >
-                  <Check className="h-3.5 w-3.5 mr-1.5" /> Retificar Status no Banco
-                </Button>
+                {activeRole !== "Visualizador" && (
+                  <Button
+                    size="sm"
+                    onClick={applyUpdates}
+                    disabled={conciliatedStats.updated === 0}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg text-xs h-8 cursor-pointer"
+                  >
+                    <Check className="h-3.5 w-3.5 mr-1.5" /> Retificar Status no Banco
+                  </Button>
+                )}
                 <Button
                   variant="outline"
                   size="sm"

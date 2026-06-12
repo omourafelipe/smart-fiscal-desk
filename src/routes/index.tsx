@@ -16,6 +16,8 @@ import {
   PieChart,
   Pie,
   Cell,
+  LineChart,
+  Line,
 } from "recharts";
 import {
   Upload,
@@ -89,6 +91,22 @@ const CustomTooltip = ({ active, payload }: any) => {
   return null;
 };
 
+const NfseCountTooltip = ({ active, payload }: any) => {
+  if (active && payload && payload.length) {
+    return (
+      <div className="bg-popover border border-border p-2.5 rounded-xl shadow-md text-[10px] font-medium text-foreground">
+        <p className="font-bold">{payload[0].name || payload[0].payload.label}</p>
+        {payload.map((item: any, idx: number) => (
+          <p key={idx} className={`${idx === 0 ? "text-indigo-600 dark:text-indigo-400" : "text-slate-400"} mt-0.5`}>
+            {item.name}: {item.value} nota(s)
+          </p>
+        ))}
+      </div>
+    );
+  }
+  return null;
+};
+
 const formatarData = (dataStr: string) => {
   if (!dataStr) return "—";
   try {
@@ -154,6 +172,9 @@ function Dashboard() {
   const { searchCliente, setSearchCliente, cServFiltro, setCServFiltro } = useGlobalFilters();
   const { session } = useAuthStore();
 
+  const [activePieIndex1, setActivePieIndex1] = useState<number | null>(null);
+  const [activePieIndex2, setActivePieIndex2] = useState<number | null>(null);
+
   const {
     empresas,
     anos,
@@ -178,6 +199,7 @@ function Dashboard() {
     irrfTotal,
     inssTotal,
     lineChartData,
+    nfseCountChartData,
     barData,
     pieData,
     topClientesList,
@@ -249,15 +271,19 @@ function Dashboard() {
     let planosTotal = 0;
     let hospitaisTotal = 0;
     notasAtivas.forEach((n) => {
-      const code = String(n.codTribNacional || "").replace(/^0+/, "");
-      if (code === "42201") {
+      const clean = String(n.codTribNacional || "").replace(/\D/g, "");
+      if (clean.startsWith("422") || clean.startsWith("0422")) {
         planosTotal += n.valor;
-      } else if (code === "40301" || code === "43301") {
+      } else if (
+        clean.startsWith("423") || clean.startsWith("0423") ||
+        clean.startsWith("403") || clean.startsWith("0403") ||
+        clean.startsWith("433") || clean.startsWith("0433")
+      ) {
         hospitaisTotal += n.valor;
       }
     });
     return [
-      { name: "Planos de Saúde", value: planosTotal, fill: "#6366f1" },
+      { name: "Plano de Saúde", value: planosTotal, fill: "#6366f1" },
       { name: "Serviços Hospitalares", value: hospitaisTotal, fill: "#14b8a6" },
     ];
   }, [notasAtivas]);
@@ -449,40 +475,49 @@ function Dashboard() {
 
 
       {/* METRICS / KPI GRID */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCardNew
-          label="Faturamento"
-          value={fmtBRL(faturamento)}
-          trendText={faturamentoTrend.text}
-          isPositive={faturamentoTrend.isPositive}
-          subtext="comparado ao período anterior"
-          tone="blue"
-        />
-        <KpiCardNew
-          label="Plano de Saúde"
-          value={fmtBRL(plansFaturamento)}
-          trendText={plansTrend.text}
-          isPositive={plansTrend.isPositive}
-          subtext="código 042201"
-          tone="purple"
-        />
-        <KpiCardNew
-          label="Serviços Hospitalares"
-          value={fmtBRL(hospFaturamento)}
-          trendText={hospTrend.text}
-          isPositive={hospTrend.isPositive}
-          subtext="códigos 040301, 043301"
-          tone="green"
-        />
-        <KpiCardNew
-          label="Notas Emitidas"
-          value={notasAtivas.length.toLocaleString("pt-BR")}
-          trendText={notasAtivasTrend.text}
-          isPositive={notasAtivasTrend.isPositive}
-          subtext="notas fiscais com status ativo"
-          tone="amber"
-        />
-      </div>
+      {(() => {
+        const hasComparison = prevNotasCount > 0;
+        return (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <KpiCardNew
+              label="Faturamento"
+              value={fmtBRL(faturamento)}
+              trendText={faturamentoTrend.text}
+              isPositive={faturamentoTrend.isPositive}
+              subtext="comparado ao período anterior"
+              tone="blue"
+              showComparison={hasComparison}
+            />
+            <KpiCardNew
+              label="Plano de Saúde"
+              value={fmtBRL(plansFaturamento)}
+              trendText={plansTrend.text}
+              isPositive={plansTrend.isPositive}
+              subtext="código 042201"
+              tone="purple"
+              showComparison={hasComparison}
+            />
+            <KpiCardNew
+              label="Serviços Hospitalares"
+              value={fmtBRL(hospFaturamento)}
+              trendText={hospTrend.text}
+              isPositive={hospTrend.isPositive}
+              subtext="códigos 040301, 043301"
+              tone="green"
+              showComparison={hasComparison}
+            />
+            <KpiCardNew
+              label="Notas Emitidas"
+              value={notasAtivas.length.toLocaleString("pt-BR")}
+              trendText={notasAtivasTrend.text}
+              isPositive={notasAtivasTrend.isPositive}
+              subtext="notas fiscais com status ativo"
+              tone="amber"
+              showComparison={hasComparison}
+            />
+          </div>
+        );
+      })()}
 
       {/* TAXES SUMMARY PANEL */}
       <div className="bg-card border border-border rounded-2xl p-5 shadow-xs transition-colors duration-300">
@@ -535,7 +570,8 @@ function Dashboard() {
       {/* PRIMARY CHARTS & DETAILS GRID */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Faturamento Line Chart */}
-        <div className="bg-card border border-border rounded-2xl p-5 shadow-xs lg:col-span-12 transition-colors duration-300">
+        {/* Faturamento Line Chart */}
+        <div className="bg-card border border-border rounded-2xl p-5 shadow-xs lg:col-span-6 transition-colors duration-300">
           <div className="flex items-center justify-between gap-4 mb-5 flex-wrap">
             <div>
               <h3 className="text-xs font-bold text-foreground">Evolução do Faturamento</h3>
@@ -643,6 +679,100 @@ function Dashboard() {
             )}
           </div>
         </div>
+
+        {/* NFS-e Count Line Chart */}
+        <div className="bg-card border border-border rounded-2xl p-5 shadow-xs lg:col-span-6 transition-colors duration-300">
+          <div className="flex items-center justify-between gap-4 mb-5 flex-wrap">
+            <div>
+              <h3 className="text-xs font-bold text-foreground">Evolução do Número de NFS-e</h3>
+              <p className="text-[10px] text-muted-foreground mt-0.5">Comparativo do número de notas emitidas com o período anterior</p>
+            </div>
+            <div className="flex items-center gap-4 text-[10px] font-medium text-muted-foreground">
+              <div className="flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-purple-600 animate-pulse" />
+                <span>Período Atual</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-slate-400/80" />
+                <span className="border-b border-dashed border-muted-foreground/60 pb-0.5">Período Anterior</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="h-[280px]">
+            {nfseCountChartData.length === 0 ? (
+              <EmptyState />
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart
+                  data={nfseCountChartData}
+                  onClick={(state) => {
+                    if (state && state.activeLabel) {
+                      const mesesSiglas: Record<string, string> = {
+                        Jan: "01",
+                        Fev: "02",
+                        Mar: "03",
+                        Abr: "04",
+                        Mai: "05",
+                        Jun: "06",
+                        Jul: "07",
+                        Ago: "08",
+                        Set: "09",
+                        Out: "10",
+                        Nov: "11",
+                        Dez: "12",
+                      };
+                      const selectedMonth = mesesSiglas[state.activeLabel];
+                      if (selectedMonth) {
+                        const { setMesFiltro } = useGlobalFilters.getState();
+                        setMesFiltro(selectedMonth);
+                        addActivity(
+                          "update",
+                          `Mês Selecionado: ${state.activeLabel}`,
+                          `Dashboard filtrado para o mês de ${state.activeLabel} via clique no gráfico de contagem.`,
+                        );
+                        toast.success(`Filtrado pelo mês: ${state.activeLabel}`);
+                      }
+                    }
+                  }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-border)" opacity={0.4} />
+                  <XAxis
+                    dataKey="label"
+                    stroke="var(--color-muted-foreground)"
+                    fontSize={10}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    stroke="var(--color-muted-foreground)"
+                    fontSize={10}
+                    axisLine={false}
+                    tickLine={false}
+                    tickFormatter={(v) => String(v)}
+                  />
+                  <Tooltip content={<NfseCountTooltip />} />
+                  <Line
+                    type="monotone"
+                    dataKey="Período Atual"
+                    stroke="#8b5cf6"
+                    strokeWidth={2.5}
+                    dot={{ r: 3 }}
+                    activeDot={{ r: 5 }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="Período Anterior"
+                    stroke="#94a3b8"
+                    strokeWidth={2}
+                    strokeDasharray="4 4"
+                    dot={{ r: 2 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* SECONDARY CHARTS GRID */}
@@ -663,11 +793,13 @@ function Dashboard() {
                       data={pjPfData}
                       dataKey="value"
                       nameKey="name"
-                      innerRadius={45}
-                      outerRadius={70}
-                      paddingAngle={3}
+                      innerRadius={50}
+                      outerRadius={75}
+                      paddingAngle={1.5}
                       stroke="var(--color-card)"
                       strokeWidth={3}
+                      onMouseEnter={(_, index) => setActivePieIndex1(index)}
+                      onMouseLeave={() => setActivePieIndex1(null)}
                       onClick={(data) => {
                         if (data && data.name) {
                           setTipoClienteFiltro((prev) => (prev === data.name ? "__all__" : (data.name || "")));
@@ -678,10 +810,33 @@ function Dashboard() {
                     >
                       {pjPfData.map((entry, index) => {
                         const colors = ["#6366f1", "#14b8a6", "#ec4899"];
-                        return <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />;
+                        return (
+                          <Cell 
+                            key={`cell-${index}`} 
+                            fill={colors[index % colors.length]} 
+                            opacity={activePieIndex1 === null || activePieIndex1 === index ? 1 : 0.6}
+                            style={{
+                              transform: activePieIndex1 === index ? 'scale(1.03)' : 'scale(1)',
+                              transformOrigin: '50% 50%',
+                              transition: 'transform 0.2s ease, opacity 0.2s ease',
+                            }}
+                          />
+                        );
                       })}
                     </Pie>
-                    <Tooltip content={<CustomTooltip />} />
+                    <Tooltip
+                      formatter={(value: number) => {
+                        const totalVal = pjPfData.reduce((acc, curr) => acc + curr.value, 0);
+                        const pct = totalVal > 0 ? ((value / totalVal) * 100).toFixed(1) : "0.0";
+                        return [`${fmtBRL(value)} (${pct}%)`, "Faturamento"];
+                      }}
+                      contentStyle={{
+                        backgroundColor: "var(--color-popover)",
+                        borderColor: "var(--color-border)",
+                        borderRadius: 12,
+                        color: "var(--color-foreground)",
+                      }}
+                    />
                   </PieChart>
                 </ResponsiveContainer>
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
@@ -697,8 +852,14 @@ function Dashboard() {
           <div className="flex flex-col gap-2.5 mt-3 pt-3 border-t border-border/50 text-xs">
             {pjPfData.map((item, idx) => {
               const colors = ["#6366f1", "#14b8a6", "#ec4899"];
+              const isHovered = activePieIndex1 === idx;
               return (
-                <div key={idx} className="flex items-center justify-between">
+                <div 
+                  key={idx} 
+                  className={`flex items-center justify-between p-1 rounded-lg transition-all ${isHovered ? "bg-muted scale-[1.02]" : ""}`}
+                  onMouseEnter={() => setActivePieIndex1(idx)}
+                  onMouseLeave={() => setActivePieIndex1(null)}
+                >
                   <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
                     <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: colors[idx % colors.length] }} />
                     <span className="font-semibold text-foreground/90 truncate max-w-[150px]">{item.name}</span>
@@ -722,7 +883,7 @@ function Dashboard() {
         {/* Donut Chart: Planos vs Hospitais Comparativo */}
         <div className="bg-card border border-border rounded-2xl p-5 shadow-xs transition-colors duration-300">
           <h3 className="text-xs font-bold text-foreground mb-1">Comparativo por Tipo de Serviço</h3>
-          <p className="text-[10px] text-muted-foreground mb-4">Planos de Saúde vs. Serviços Hospitalares</p>
+          <p className="text-[10px] text-muted-foreground mb-4">Plano de Saúde vs. Serviços Hospitalares</p>
 
           <div className="h-[200px] flex items-center justify-center relative">
             {comparativoServicosData.every((d) => d.value === 0) ? (
@@ -735,14 +896,16 @@ function Dashboard() {
                       data={comparativoServicosData.filter((d) => d.value > 0)}
                       dataKey="value"
                       nameKey="name"
-                      innerRadius={45}
-                      outerRadius={70}
-                      paddingAngle={3}
+                      innerRadius={50}
+                      outerRadius={75}
+                      paddingAngle={1.5}
                       stroke="var(--color-card)"
                       strokeWidth={3}
+                      onMouseEnter={(_, index) => setActivePieIndex2(index)}
+                      onMouseLeave={() => setActivePieIndex2(null)}
                       onClick={(data) => {
                         if (data && data.name) {
-                          const filterVal = data.name === "Planos de Saúde" ? "042201" : "040301";
+                          const filterVal = data.name === "Plano de Saúde" ? "042201" : "040301";
                           setCServFiltro(cServFiltro === filterVal ? "__all__" : filterVal);
                         }
                       }}
@@ -751,10 +914,31 @@ function Dashboard() {
                       {comparativoServicosData
                         .filter((d) => d.value > 0)
                         .map((entry, i) => (
-                          <Cell key={i} fill={entry.fill} />
+                          <Cell 
+                            key={i} 
+                            fill={entry.fill} 
+                            opacity={activePieIndex2 === null || activePieIndex2 === i ? 1 : 0.6}
+                            style={{
+                              transform: activePieIndex2 === i ? 'scale(1.03)' : 'scale(1)',
+                              transformOrigin: '50% 50%',
+                              transition: 'transform 0.2s ease, opacity 0.2s ease',
+                            }}
+                          />
                         ))}
                     </Pie>
-                    <Tooltip content={<CustomTooltip />} />
+                    <Tooltip
+                      formatter={(value: number) => {
+                        const totalVal = comparativoServicosData.reduce((acc, curr) => acc + curr.value, 0);
+                        const pct = totalVal > 0 ? ((value / totalVal) * 100).toFixed(1) : "0.0";
+                        return [`${fmtBRL(value)} (${pct}%)`, "Faturamento"];
+                      }}
+                      contentStyle={{
+                        backgroundColor: "var(--color-popover)",
+                        borderColor: "var(--color-border)",
+                        borderRadius: 12,
+                        color: "var(--color-foreground)",
+                      }}
+                    />
                   </PieChart>
                 </ResponsiveContainer>
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
@@ -766,15 +950,27 @@ function Dashboard() {
           </div>
 
           <div className="flex justify-around items-center mt-3 pt-3 border-t border-border/50 text-xs">
-            {comparativoServicosData.filter((d) => d.value > 0).map((item, idx) => (
-              <div key={idx} className="flex flex-col items-center">
-                <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                  <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: item.fill }} />
-                  <span className="truncate max-w-[100px]">{item.name}</span>
+            {comparativoServicosData.filter((d) => d.value > 0).map((item, idx) => {
+              const isHovered = activePieIndex2 === idx;
+              return (
+                <div 
+                  key={idx} 
+                  className={`flex flex-col items-center p-1 rounded-lg transition-all cursor-pointer hover:bg-muted/85 ${isHovered ? "bg-muted scale-[1.02]" : ""}`}
+                  onMouseEnter={() => setActivePieIndex2(idx)}
+                  onMouseLeave={() => setActivePieIndex2(null)}
+                  onClick={() => {
+                    const filterVal = item.name === "Plano de Saúde" ? "042201" : "040301";
+                    setCServFiltro(cServFiltro === filterVal ? "__all__" : filterVal);
+                  }}
+                >
+                  <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                    <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: item.fill }} />
+                    <span className="truncate max-w-[100px]">{item.name}</span>
+                  </div>
+                  <span className="font-bold text-foreground mt-0.5">{fmtBRL(item.value)}</span>
                 </div>
-                <span className="font-bold text-foreground mt-0.5">{fmtBRL(item.value)}</span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 

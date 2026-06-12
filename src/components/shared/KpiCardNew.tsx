@@ -5,6 +5,7 @@ export function KpiCardNew({
   isPositive,
   subtext,
   tone,
+  showComparison = true,
 }: {
   label: string;
   value: string;
@@ -12,6 +13,7 @@ export function KpiCardNew({
   isPositive: boolean;
   subtext: string;
   tone: "blue" | "purple" | "green" | "rose" | "amber";
+  showComparison?: boolean;
 }) {
   const borderColors = {
     blue: "border-blue-100 dark:border-blue-900/50 hover:border-blue-300 dark:hover:border-blue-800/60",
@@ -44,18 +46,20 @@ export function KpiCardNew({
         <p className={`${valueFontSize} text-foreground`}>{value}</p>
       </div>
 
-      <div className="flex items-center gap-1.5 mt-4 pt-2 border-t border-border/40 flex-wrap">
-        <span
-          className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[9px] font-bold ${
-            isPositive 
-              ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" 
-              : "bg-rose-500/10 text-rose-700 dark:text-rose-400"
-          }`}
-        >
-          {trendText} {isPositive ? "↗" : "↘"}
-        </span>
-        <span className="text-[9px] text-muted-foreground font-medium truncate max-w-[110px]" title={subtext}>{subtext}</span>
-      </div>
+      {showComparison && (
+        <div className="flex items-center gap-1.5 mt-4 pt-2 border-t border-border/40 flex-wrap">
+          <span
+            className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[9px] font-bold ${
+              isPositive 
+                ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" 
+                : "bg-rose-500/10 text-rose-700 dark:text-rose-400"
+            }`}
+          >
+            {trendText} {isPositive ? "↗" : "↘"}
+          </span>
+          <span className="text-[9px] text-muted-foreground font-medium truncate max-w-[110px]" title={subtext}>{subtext}</span>
+        </div>
+      )}
     </div>
   );
 }

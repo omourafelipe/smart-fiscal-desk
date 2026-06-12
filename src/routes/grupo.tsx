@@ -79,8 +79,15 @@ const formatarCnpjCpf = (val: string) => {
 const getServicoDescricao = (codTrib: string) => {
   const code = String(codTrib).trim();
   if (!code) return "Sem descrição";
-  if (code === "042201" || code === "42201") return "Planos de Saúde";
-  if (code === "040301" || code === "40301" || code === "043301" || code === "43301") return "Serviços Hospitalares";
+  const clean = code.replace(/\D/g, "");
+  if (clean.startsWith("422") || clean.startsWith("0422")) return "Plano de Saúde";
+  if (
+    clean.startsWith("423") || clean.startsWith("0423") ||
+    clean.startsWith("403") || clean.startsWith("0403") ||
+    clean.startsWith("433") || clean.startsWith("0433")
+  ) {
+    return "Serviços Hospitalares";
+  }
   return `Serviço ${code}`;
 };
 
@@ -112,9 +119,9 @@ function GrupoRouteComponent() {
     statusCol: "",
   });
 
-  const setMesFiltro = (val: string) => navigate({ search: (prev) => ({ ...prev, mes: val === "__all__" ? undefined : val }) });
-  const setAnoFiltro = (val: string) => navigate({ search: (prev) => ({ ...prev, ano: val === "__all__" ? undefined : val }) });
-  const setCServFiltro = (val: string) => navigate({ search: (prev) => ({ ...prev, cServ: val === "__all__" ? undefined : val }) });
+  const setMesFiltro = (val: string) => navigate({ search: (prev: any) => ({ ...prev, mes: val === "__all__" ? undefined : val }) });
+  const setAnoFiltro = (val: string) => navigate({ search: (prev: any) => ({ ...prev, ano: val === "__all__" ? undefined : val }) });
+  const setCServFiltro = (val: string) => navigate({ search: (prev: any) => ({ ...prev, cServ: val === "__all__" ? undefined : val }) });
 
   return (
     <main className="flex-1 p-6 md:p-8 max-w-[1400px] w-full mx-auto space-y-6">

@@ -244,10 +244,15 @@ export function getServicoDescricao(codTrib: string): string {
   const code = String(codTrib).trim();
   if (!code) return "Sem descrição";
 
-  if (code === "042201" || code === "42201") return "Planos de Saúde";
-  if (code === "040301" || code === "40301" || code === "043301" || code === "43301") return "Serviços Hospitalares";
-
   const clean = code.replace(/\D/g, "");
+  if (clean.startsWith("422") || clean.startsWith("0422")) return "Plano de Saúde";
+  if (
+    clean.startsWith("423") || clean.startsWith("0423") ||
+    clean.startsWith("403") || clean.startsWith("0403") ||
+    clean.startsWith("433") || clean.startsWith("0433")
+  ) {
+    return "Serviços Hospitalares";
+  }
 
   // 1. cTribNac do Padrão Nacional (6 dígitos exatos)
   if (clean.length === 6) {

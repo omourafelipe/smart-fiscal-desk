@@ -23,6 +23,7 @@ import { toast } from "sonner";
 import { db, type NotaFiscalTomada, type ServiceClassification, type CategoryRule } from "@/lib/db";
 import { parseNfseXmlTomada } from "@/lib/parseXml";
 import { useLayoutShell } from "@/components/layout/LayoutShell";
+import { useTenantStore } from "@/store/useTenantStore";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -80,6 +81,9 @@ const SERV_COLORS = [
   "#06b6d4", // Cyan
   "#10b981", // Emerald
   "#3b82f6", // Blue
+  "#f97316", // Orange
+  "#a855f7", // Purple
+  "#84cc16", // Lime
   "#64748b"  // Slate (for Outras)
 ];
 
@@ -90,6 +94,8 @@ function TomadosRouteComponent() {
   const navigate = useNavigate({ from: Route.id });
 
   const { addActivity } = useLayoutShell();
+  const { activeRole } = useTenantStore();
+  const [activePieIndex, setActivePieIndex] = useState<number | null>(null);
 
   // Filters from URL Search Params
   const mesFiltroTomadas = search.mes || "__all__";
@@ -106,15 +112,15 @@ function TomadosRouteComponent() {
   const fileRefTomadas = useRef<HTMLInputElement>(null);
 
   const setMesFiltroTomadas = (val: string) => {
-    navigate({ search: (prev) => ({ ...prev, mes: val === "__all__" ? undefined : val }) });
+    navigate({ search: (prev: any) => ({ ...prev, mes: val === "__all__" ? undefined : val }) });
     setPageTomadas(1);
   };
   const setAnoFiltroTomadas = (val: string) => {
-    navigate({ search: (prev) => ({ ...prev, ano: val === "__all__" ? undefined : val }) });
+    navigate({ search: (prev: any) => ({ ...prev, ano: val === "__all__" ? undefined : val }) });
     setPageTomadas(1);
   };
   const setEmpresaFiltroTomadas = (val: string) => {
-    navigate({ search: (prev) => ({ ...prev, empresa: val === "__all__" ? undefined : val }) });
+    navigate({ search: (prev: any) => ({ ...prev, empresa: val === "__all__" ? undefined : val }) });
     setPageTomadas(1);
   };
 
@@ -279,7 +285,7 @@ function TomadosRouteComponent() {
     });
   }, [todasNotasTomadas, mesFiltroTomadas, anoFiltroTomadas, empresaFiltroTomadas, searchTomadas]);
 
-  const { servicoData, top9Keys } = useMemo(() => {
+  const { servicoData, top12Keys } = useMemo(() => {
     const servicoMap = new Map<string, number>();
     notasTomValidasSemCategoria.forEach((n) => {
       const cat = categorizarComOverride(n.servico, n.codTribNacional) || "Sem categoria";
@@ -288,15 +294,15 @@ function TomadosRouteComponent() {
     });
 
     const servicoEntries = Array.from(servicoMap.entries()).sort(([, a], [, b]) => b - a);
-    const topServicos = servicoEntries.slice(0, 9);
-    const top9Keys = topServicos.map(([k]) => k);
-    const outrosServ = servicoEntries.slice(9).reduce((s, [, v]) => s + v, 0);
+    const topServicos = servicoEntries.slice(0, 12);
+    const top12Keys = topServicos.map(([k]) => k);
+    const outrosServ = servicoEntries.slice(12).reduce((s, [, v]) => s + v, 0);
     const servicoData = [
-      ...topServicos.map(([k, v], i) => ({ name: k, value: v, fill: SERV_COLORS[i % 9] })),
-      ...(outrosServ > 0 ? [{ name: "Outras", value: outrosServ, fill: SERV_COLORS[9] }] : [])
+      ...topServicos.map(([k, v], i) => ({ name: k, value: v, fill: SERV_COLORS[i % 12] })),
+      ...(outrosServ > 0 ? [{ name: "Outras", value: outrosServ, fill: SERV_COLORS[12] }] : [])
     ];
 
-    return { servicoData, top9Keys };
+    return { servicoData, top12Keys };
   }, [notasTomValidasSemCategoria, categorizarComOverride]);
 
   const notasTomValidas = useMemo(() => {
@@ -305,11 +311,11 @@ function TomadosRouteComponent() {
       const cat = categorizarComOverride(n.servico, n.codTribNacional) || "Sem categoria";
       const grupo = obterGrupoSintetico(cat);
       if (categoriaFiltroTomadas === "Outras") {
-        return !top9Keys.includes(grupo);
+        return !top12Keys.includes(grupo);
       }
       return grupo === categoriaFiltroTomadas;
     });
-  }, [notasTomValidasSemCategoria, categoriaFiltroTomadas, top9Keys, categorizarComOverride]);
+  }, [notasTomValidasSemCategoria, categoriaFiltroTomadas, top12Keys, categorizarComOverride]);
 
   const totalTomados = useMemo(() => notasTomValidas.reduce((s, n) => s + n.valor, 0), [notasTomValidas]);
   const fornecedoresAtivos = useMemo(() => new Set(notasTomValidas.map((n) => n.cnpjPrestador)).size, [notasTomValidas]);
@@ -437,23 +443,25 @@ function TomadosRouteComponent() {
             className="hidden"
             onChange={(e) => e.target.files && processFilesTomadas(e.target.files)}
           />
-          <Button
-            disabled={importingTomadas}
-            onClick={() => !importingTomadas && fileRefTomadas.current?.click()}
-            className="flex items-center gap-2 px-4 h-9 text-xs font-semibold rounded-xl bg-teal-600 hover:bg-teal-700 text-white shadow-xs transition-all duration-300 hover:scale-[1.01] cursor-pointer"
-          >
-            {importingTomadas ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                {progressTomadas ? `Importando (${progressTomadas.done}/${progressTomadas.total})` : "Importando..."}
-              </>
-            ) : (
-              <>
-                <ShoppingBag className="h-4 w-4" />
-                Importar Tomadas (ZIP)
-              </>
-            )}
-          </Button>
+          {activeRole !== "Visualizador" && (
+            <Button
+              disabled={importingTomadas}
+              onClick={() => !importingTomadas && fileRefTomadas.current?.click()}
+              className="flex items-center gap-2 px-4 h-9 text-xs font-semibold rounded-xl bg-teal-600 hover:bg-teal-700 text-white shadow-xs transition-all duration-300 hover:scale-[1.01] cursor-pointer"
+            >
+              {importingTomadas ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  {progressTomadas ? `Importando (${progressTomadas.done}/${progressTomadas.total})` : "Importando..."}
+                </>
+              ) : (
+                <>
+                  <ShoppingBag className="h-4 w-4" />
+                  Importar Tomadas (ZIP)
+                </>
+              )}
+            </Button>
+          )}
         </div>
       </div>
 
@@ -568,11 +576,13 @@ function TomadosRouteComponent() {
                     data={servicoData}
                     dataKey="value"
                     nameKey="name"
-                    innerRadius={65}
-                    outerRadius={105}
-                    paddingAngle={3}
+                    innerRadius={70}
+                    outerRadius={110}
+                    paddingAngle={1.5}
                     stroke="var(--color-card)"
                     strokeWidth={3}
+                    onMouseEnter={(_, index) => setActivePieIndex(index)}
+                    onMouseLeave={() => setActivePieIndex(null)}
                     onClick={(data) => {
                       if (data && data.name) {
                         const clickedName = data.name;
@@ -590,43 +600,63 @@ function TomadosRouteComponent() {
                       <Cell
                         key={i}
                         fill={entry.fill}
+                        opacity={activePieIndex === null || activePieIndex === i ? 1 : 0.6}
+                        style={{
+                          transform: activePieIndex === i ? 'scale(1.03)' : 'scale(1)',
+                          transformOrigin: '50% 50%',
+                          transition: 'transform 0.2s ease, opacity 0.2s ease',
+                        }}
                         className="cursor-pointer outline-none focus:outline-none"
                       />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(v) => fmtBRL(Number(v))} contentStyle={{ backgroundColor: "var(--color-popover)", borderColor: "var(--color-border)", borderRadius: 12, color: "var(--color-foreground)" }} />
+                  <Tooltip 
+                    formatter={(value: number) => {
+                      const totalVal = servicoData.reduce((acc, curr) => acc + curr.value, 0);
+                      const pct = totalVal > 0 ? ((value / totalVal) * 100).toFixed(1) : "0.0";
+                      return [`${fmtBRL(value)} (${pct}%)`, "Valor"];
+                    }} 
+                    contentStyle={{ backgroundColor: "var(--color-popover)", borderColor: "var(--color-border)", borderRadius: 12, color: "var(--color-foreground)" }} 
+                  />
                 </PieChart>
               </ResponsiveContainer>
             )}
           </div>
-          <div className="grid grid-cols-2 gap-x-3 gap-y-1 mt-2 pt-2 border-t border-border/50">
-            {servicoData.map((d, i) => {
-              const isSelected = categoriaFiltroTomadas === d.name;
-              return (
-                <button
-                  key={i}
-                  onClick={() => {
-                    if (isSelected) {
-                      setCategoriaFiltroTomadas("__all__");
-                    } else {
-                      setCategoriaFiltroTomadas(d.name);
-                    }
-                    setPageTomadas(1);
-                  }}
-                  className={`flex items-center justify-between text-[10px] p-1 px-1.5 rounded-lg transition-all text-left cursor-pointer hover:bg-muted/80 w-full ${
-                    isSelected
-                      ? "bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 font-bold border border-indigo-500/25"
-                      : "border border-transparent"
-                  }`}
-                >
-                  <span className="flex items-center gap-1.5 text-muted-foreground truncate max-w-[110px]" title={d.name}>
-                    <span className="h-1.5 w-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: d.fill }} />
-                    <span className="truncate">{d.name}</span>
-                  </span>
-                  <span className="font-bold text-foreground flex-shrink-0 ml-1">{fmtBRL(d.value)}</span>
-                </button>
-              );
-            })}
+          <div className="max-h-[160px] overflow-y-auto pr-1 mt-2 pt-2 border-t border-border/50 scrollbar-thin">
+            <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+              {servicoData.map((d, i) => {
+                const isSelected = categoriaFiltroTomadas === d.name;
+                const isHovered = activePieIndex === i;
+                return (
+                  <button
+                    key={i}
+                    onMouseEnter={() => setActivePieIndex(i)}
+                    onMouseLeave={() => setActivePieIndex(null)}
+                    onClick={() => {
+                      if (isSelected) {
+                        setCategoriaFiltroTomadas("__all__");
+                      } else {
+                        setCategoriaFiltroTomadas(d.name);
+                      }
+                      setPageTomadas(1);
+                    }}
+                    className={`flex items-center justify-between text-[10px] p-1 px-1.5 rounded-lg transition-all text-left cursor-pointer hover:bg-muted/80 w-full ${
+                      isSelected
+                        ? "bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 font-bold border border-indigo-500/25"
+                        : isHovered
+                          ? "bg-muted text-foreground"
+                          : "border border-transparent"
+                    }`}
+                  >
+                    <span className="flex items-center gap-1.5 text-muted-foreground truncate max-w-[110px]" title={d.name}>
+                      <span className="h-1.5 w-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: d.fill }} />
+                      <span className="truncate">{d.name}</span>
+                    </span>
+                    <span className="font-bold text-foreground flex-shrink-0 ml-1">{fmtBRL(d.value)}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
       </div>
@@ -719,17 +749,19 @@ function TomadosRouteComponent() {
                 >
                   <Download className="h-3.5 w-3.5" /> Exportar CSV
                 </button>
-                <button
-                  onClick={async () => {
-                    if (confirm("Limpar toda a base de notas tomadas?")) {
-                      await db.notasTomadas.clear();
-                      toast.success("Base de serviços tomados limpa.");
-                    }
-                  }}
-                  className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer"
-                >
-                  <Trash2 className="h-3.5 w-3.5" /> Limpar Base
-                </button>
+                {activeRole !== "Visualizador" && (
+                  <button
+                    onClick={async () => {
+                      if (confirm("Limpar toda a base de notas tomadas?")) {
+                        await db.notasTomadas.clear();
+                        toast.success("Base de serviços tomados limpa.");
+                      }
+                    }}
+                    className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" /> Limpar Base
+                  </button>
+                )}
               </>
             )}
           </div>

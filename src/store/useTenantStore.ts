@@ -84,6 +84,11 @@ export const useTenantStore = create<TenantState>((set, get) => ({
       return;
     }
 
+    if (!supabase) {
+      console.warn("Supabase não inicializado em fetchTenantData.");
+      return;
+    }
+
     set({ loading: true });
     try {
       // 1. Fetch user groups where they are an active member
@@ -110,10 +115,15 @@ export const useTenantStore = create<TenantState>((set, get) => ({
       }
 
       if (!selectedGroup) {
-        selectedGroup = groupsList[0];
-        if (typeof window !== "undefined") {
+        selectedGroup = groupsList[0] || null;
+        if (typeof window !== "undefined" && selectedGroup) {
           localStorage.setItem("active_group_id", selectedGroup.id);
         }
+      }
+
+      if (!selectedGroup) {
+        set({ activeGroup: null, activeRole: null, companies: [], members: [], invitations: [], loading: false });
+        return;
       }
 
       set({ activeGroup: selectedGroup });
@@ -220,6 +230,10 @@ export const useTenantStore = create<TenantState>((set, get) => ({
   createGroup: async (nome: string) => {
     const user = useAuthStore.getState().user;
     if (!user) return null;
+    if (!supabase) {
+      toast.error("Supabase não está configurado.");
+      return null;
+    }
 
     try {
       // Insert new group
@@ -262,6 +276,10 @@ export const useTenantStore = create<TenantState>((set, get) => ({
     const { activeGroup } = get();
     const user = useAuthStore.getState().user;
     if (!activeGroup || !user) return null;
+    if (!supabase) {
+      toast.error("Supabase não está configurado.");
+      return null;
+    }
 
     try {
       // Generate a secure token
@@ -305,6 +323,10 @@ export const useTenantStore = create<TenantState>((set, get) => ({
   cancelInvitation: async (invitationId: string) => {
     const { activeGroup } = get();
     if (!activeGroup) return false;
+    if (!supabase) {
+      toast.error("Supabase não está configurado.");
+      return false;
+    }
 
     try {
       const { error } = await supabase
@@ -333,6 +355,10 @@ export const useTenantStore = create<TenantState>((set, get) => ({
   changeMemberRole: async (memberId: string, newRole: GroupMember['role']) => {
     const { activeGroup } = get();
     if (!activeGroup) return false;
+    if (!supabase) {
+      toast.error("Supabase não está configurado.");
+      return false;
+    }
 
     try {
       const { error } = await supabase
@@ -356,6 +382,10 @@ export const useTenantStore = create<TenantState>((set, get) => ({
   removeMember: async (memberId: string) => {
     const { activeGroup } = get();
     if (!activeGroup) return false;
+    if (!supabase) {
+      toast.error("Supabase não está configurado.");
+      return false;
+    }
 
     try {
       const { error } = await supabase
@@ -379,6 +409,10 @@ export const useTenantStore = create<TenantState>((set, get) => ({
   createCompany: async (nome: string, cnpj: string) => {
     const { activeGroup } = get();
     if (!activeGroup) return null;
+    if (!supabase) {
+      toast.error("Supabase não está configurado.");
+      return null;
+    }
 
     try {
       const { data, error } = await supabase
@@ -412,6 +446,10 @@ export const useTenantStore = create<TenantState>((set, get) => ({
   deleteCompany: async (companyId: string) => {
     const { activeGroup } = get();
     if (!activeGroup) return false;
+    if (!supabase) {
+      toast.error("Supabase não está configurado.");
+      return false;
+    }
 
     try {
       const { error } = await supabase

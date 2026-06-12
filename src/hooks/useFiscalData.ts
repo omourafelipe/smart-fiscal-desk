@@ -18,13 +18,20 @@ export function useFiscalData({
   xlsxRows,
   keyCol,
   statusCol,
+  filters,
 }: {
   periodType: "competencia" | "emissao";
   xlsxRows: any[];
   keyCol: string;
   statusCol: string;
+  filters?: Partial<FiscalFilters>;
 }) {
-  const { empresaFiltro, mesFiltro, anoFiltro, cServFiltro, searchCliente } = useGlobalFilters();
+  const globalFilters = useGlobalFilters();
+  const empresaFiltro = filters?.empresaFiltro ?? globalFilters.empresaFiltro;
+  const mesFiltro = filters?.mesFiltro ?? globalFilters.mesFiltro;
+  const anoFiltro = filters?.anoFiltro ?? globalFilters.anoFiltro;
+  const cServFiltro = filters?.cServFiltro ?? globalFilters.cServFiltro;
+  const searchCliente = filters?.searchCliente ?? globalFilters.searchCliente;
 
   const todasNotas = useLiveQuery(() => db.notas.toArray(), [], [] as NotaFiscal[]);
   const todasNotasTomadas = useLiveQuery(() => db.notasTomadas.toArray(), [], [] as NotaFiscalTomada[]);
@@ -243,12 +250,24 @@ export function useFiscalData({
       if (mesFiltro !== "__all__" && dateStr.slice(5, 7) !== mesFiltro) return false;
       if (anoFiltro !== "__all__" && dateStr.slice(0, 4) !== anoFiltro) return false;
       if (cServFiltro !== "__all__") {
-        const c1 = String(n.codTribNacional || "").replace(/^0+/, "");
-        const c2 = String(cServFiltro).replace(/^0+/, "");
-        const isHospitalarMatch = 
-          (c2 === "43301" || c2 === "40301") && 
-          (c1 === "43301" || c1 === "40301");
-        if (c1 !== c2 && !isHospitalarMatch) return false;
+        const c1 = String(n.codTribNacional || "").replace(/\D/g, "");
+        const c2 = String(cServFiltro).replace(/\D/g, "");
+        
+        const isPlano1 = c1.startsWith("422") || c1.startsWith("0422");
+        const isPlano2 = c2.startsWith("422") || c2.startsWith("0422");
+        const isHosp1 = 
+          c1.startsWith("423") || c1.startsWith("0423") ||
+          c1.startsWith("403") || c1.startsWith("0403") ||
+          c1.startsWith("433") || c1.startsWith("0433");
+        const isHosp2 = 
+          c2.startsWith("423") || c2.startsWith("0423") ||
+          c2.startsWith("403") || c2.startsWith("0403") ||
+          c2.startsWith("433") || c2.startsWith("0433");
+
+        const isPlanoMatch = isPlano1 && isPlano2;
+        const isHospitalarMatch = isHosp1 && isHosp2;
+
+        if (c1 !== c2 && !isPlanoMatch && !isHospitalarMatch) return false;
       }
       if (searchCliente) {
         const query = searchCliente.toLowerCase();
@@ -373,13 +392,19 @@ export function useFiscalData({
 
   const plansFaturamento = useMemo(() => {
     return notasAtivas
-      .filter((n) => String(n.codTribNacional || "").replace(/^0+/, "") === "42201")
+      .filter((n) => {
+        const clean = String(n.codTribNacional || "").replace(/\D/g, "");
+        return clean.startsWith("422") || clean.startsWith("0422");
+      })
       .reduce((sum, n) => sum + n.valor, 0);
   }, [notasAtivas]);
 
   const prevPlansFaturamento = useMemo(() => {
     return prevNotasAtivas
-      .filter((n) => String(n.codTribNacional || "").replace(/^0+/, "") === "42201")
+      .filter((n) => {
+        const clean = String(n.codTribNacional || "").replace(/\D/g, "");
+        return clean.startsWith("422") || clean.startsWith("0422");
+      })
       .reduce((sum, n) => sum + n.valor, 0);
   }, [prevNotasAtivas]);
 
@@ -388,8 +413,12 @@ export function useFiscalData({
   const hospFaturamento = useMemo(() => {
     return notasAtivas
       .filter((n) => {
-        const c = String(n.codTribNacional || "").replace(/^0+/, "");
-        return c === "40301" || c === "43301";
+        const clean = String(n.codTribNacional || "").replace(/\D/g, "");
+        return (
+          clean.startsWith("423") || clean.startsWith("0423") ||
+          clean.startsWith("403") || clean.startsWith("0403") ||
+          clean.startsWith("433") || clean.startsWith("0433")
+        );
       })
       .reduce((sum, n) => sum + n.valor, 0);
   }, [notasAtivas]);
@@ -397,8 +426,12 @@ export function useFiscalData({
   const prevHospFaturamento = useMemo(() => {
     return prevNotasAtivas
       .filter((n) => {
-        const c = String(n.codTribNacional || "").replace(/^0+/, "");
-        return c === "40301" || c === "43301";
+        const clean = String(n.codTribNacional || "").replace(/\D/g, "");
+        return (
+          clean.startsWith("423") || clean.startsWith("0423") ||
+          clean.startsWith("403") || clean.startsWith("0403") ||
+          clean.startsWith("433") || clean.startsWith("0433")
+        );
       })
       .reduce((sum, n) => sum + n.valor, 0);
   }, [prevNotasAtivas]);
@@ -413,12 +446,24 @@ export function useFiscalData({
       const dateStr = getDateField(n);
       if (anoFiltro !== "__all__" && dateStr.slice(0, 4) !== anoFiltro) return false;
       if (cServFiltro !== "__all__") {
-        const c1 = String(n.codTribNacional || "").replace(/^0+/, "");
-        const c2 = String(cServFiltro).replace(/^0+/, "");
-        const isHospitalarMatch = 
-          (c2 === "43301" || c2 === "40301") && 
-          (c1 === "43301" || c1 === "40301");
-        if (c1 !== c2 && !isHospitalarMatch) return false;
+        const c1 = String(n.codTribNacional || "").replace(/\D/g, "");
+        const c2 = String(cServFiltro).replace(/\D/g, "");
+        
+        const isPlano1 = c1.startsWith("422") || c1.startsWith("0422");
+        const isPlano2 = c2.startsWith("422") || c2.startsWith("0422");
+        const isHosp1 = 
+          c1.startsWith("423") || c1.startsWith("0423") ||
+          c1.startsWith("403") || c1.startsWith("0403") ||
+          c1.startsWith("433") || c1.startsWith("0433");
+        const isHosp2 = 
+          c2.startsWith("423") || c2.startsWith("0423") ||
+          c2.startsWith("403") || c2.startsWith("0403") ||
+          c2.startsWith("433") || c2.startsWith("0433");
+
+        const isPlanoMatch = isPlano1 && isPlano2;
+        const isHospitalarMatch = isHosp1 && isHosp2;
+
+        if (c1 !== c2 && !isPlanoMatch && !isHospitalarMatch) return false;
       }
       if (searchCliente) {
         const query = searchCliente.toLowerCase();
@@ -448,12 +493,24 @@ export function useFiscalData({
       const dateStr = getDateField(n);
       if (prevAno !== "__all__" && dateStr.slice(0, 4) !== prevAno) return false;
       if (cServFiltro !== "__all__") {
-        const c1 = String(n.codTribNacional || "").replace(/^0+/, "");
-        const c2 = String(cServFiltro).replace(/^0+/, "");
-        const isHospitalarMatch = 
-          (c2 === "43301" || c2 === "40301") && 
-          (c1 === "43301" || c1 === "40301");
-        if (c1 !== c2 && !isHospitalarMatch) return false;
+        const c1 = String(n.codTribNacional || "").replace(/\D/g, "");
+        const c2 = String(cServFiltro).replace(/\D/g, "");
+        
+        const isPlano1 = c1.startsWith("422") || c1.startsWith("0422");
+        const isPlano2 = c2.startsWith("422") || c2.startsWith("0422");
+        const isHosp1 = 
+          c1.startsWith("423") || c1.startsWith("0423") ||
+          c1.startsWith("403") || c1.startsWith("0403") ||
+          c1.startsWith("433") || c1.startsWith("0433");
+        const isHosp2 = 
+          c2.startsWith("423") || c2.startsWith("0423") ||
+          c2.startsWith("403") || c2.startsWith("0403") ||
+          c2.startsWith("433") || c2.startsWith("0433");
+
+        const isPlanoMatch = isPlano1 && isPlano2;
+        const isHospitalarMatch = isHosp1 && isHosp2;
+
+        if (c1 !== c2 && !isPlanoMatch && !isHospitalarMatch) return false;
       }
       if (searchCliente) {
         const query = searchCliente.toLowerCase();
@@ -481,6 +538,37 @@ export function useFiscalData({
       if (!dateStr) return;
       const key = dateStr.slice(5, 7);
       prevMap.set(key, (prevMap.get(key) ?? 0) + n.valor);
+    });
+    
+    const mesesAbrev = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+    const data = [];
+    for (let i = 1; i <= 12; i++) {
+      const mesStr = String(i).padStart(2, "0");
+      data.push({
+        label: mesesAbrev[i - 1],
+        "Período Atual": currentMap.get(mesStr) ?? 0,
+        "Período Anterior": prevMap.get(mesStr) ?? 0,
+      });
+    }
+    return data;
+  }, [notasParaGrafico, prevNotasParaGrafico, getDateField]);
+
+  const nfseCountChartData = useMemo(() => {
+    const currentMap = new Map<string, number>();
+    const prevMap = new Map<string, number>();
+    
+    notasParaGrafico.forEach((n) => {
+      const dateStr = getDateField(n);
+      if (!dateStr) return;
+      const key = dateStr.slice(5, 7);
+      currentMap.set(key, (currentMap.get(key) ?? 0) + 1);
+    });
+    
+    prevNotasParaGrafico.forEach((n) => {
+      const dateStr = getDateField(n);
+      if (!dateStr) return;
+      const key = dateStr.slice(5, 7);
+      prevMap.set(key, (prevMap.get(key) ?? 0) + 1);
     });
     
     const mesesAbrev = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
@@ -629,6 +717,7 @@ export function useFiscalData({
     hospFaturamento,
     hospTrend,
     lineChartData,
+    nfseCountChartData,
     topServicesList,
     topClientesList,
     issRetidoTotal,
@@ -668,7 +757,14 @@ const getServicoDescricao = (codTrib: string) => {
   const code = String(codTrib).trim();
   if (!code) return "Sem descrição";
 
-  if (code === "042201" || code === "42201") return "Planos de Saúde";
-  if (code === "040301" || code === "40301" || code === "043301" || code === "43301") return "Serviços Hospitalares";
+  const clean = code.replace(/\D/g, "");
+  if (clean.startsWith("422") || clean.startsWith("0422")) return "Plano de Saúde";
+  if (
+    clean.startsWith("423") || clean.startsWith("0423") ||
+    clean.startsWith("403") || clean.startsWith("0403") ||
+    clean.startsWith("433") || clean.startsWith("0433")
+  ) {
+    return "Serviços Hospitalares";
+  }
   return `Serviço ${code}`;
 };

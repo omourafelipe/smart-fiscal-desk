@@ -16,6 +16,7 @@ import {
   Legend,
 } from "recharts";
 import { useAuthStore } from "@/store/useAuthStore";
+import { useTenantStore } from "@/store/useTenantStore";
 import { SyncManager } from "@/lib/data-access/SyncManager";
 import {
   classificarServicoLocal,
@@ -133,7 +134,9 @@ function formatarHora(isoString: string): string {
 
 function CategoriasRouteComponent() {
   const { session, profile } = useAuthStore();
+  const { activeRole } = useTenantStore();
   const [tabActive, setTabActive] = useState<"classifications" | "pending" | "rules" | "audit" | "categories_groups">("classifications");
+  const [activePieIndex, setActivePieIndex] = useState<number | null>(null);
   const [searchCat, setSearchCat] = useState("");
   
   // Selection states
@@ -817,14 +820,14 @@ function CategoriasRouteComponent() {
                     }}
                   />
                   <RechartsTooltip
-                    formatter={(v, name, props) => {
-                      const fVal = props.payload.faturado;
-                      const cVal = props.payload.count;
+                    formatter={((v: any, name: any, props: any) => {
+                      const fVal = props.payload.faturamento || 0;
+                      const cVal = props.payload.count || 0;
                       return [
                         fVal > 0 ? fVal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : `${cVal} serviço(s)`,
                         fVal > 0 ? "Faturamento" : "Qtd. Serviços"
                       ];
-                    }}
+                    }) as any}
                     contentStyle={{
                       backgroundColor: "var(--color-popover)",
                       borderColor: "var(--color-border)",
@@ -876,25 +879,40 @@ function CategoriasRouteComponent() {
                       data={statusChartData}
                       dataKey="value"
                       nameKey="name"
-                      innerRadius={55}
-                      outerRadius={75}
-                      paddingAngle={3}
+                      innerRadius={60}
+                      outerRadius={80}
+                      paddingAngle={1.5}
                       stroke="var(--color-card)"
                       strokeWidth={3}
+                      onMouseEnter={(_, index) => setActivePieIndex(index)}
+                      onMouseLeave={() => setActivePieIndex(null)}
                     >
                       {statusChartData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.fill} />
+                        <Cell 
+                          key={`cell-${index}`} 
+                          fill={entry.fill} 
+                          opacity={activePieIndex === null || activePieIndex === index ? 1 : 0.6}
+                          style={{
+                            transform: activePieIndex === index ? 'scale(1.03)' : 'scale(1)',
+                            transformOrigin: '50% 50%',
+                            transition: 'transform 0.2s ease, opacity 0.2s ease',
+                          }}
+                        />
                       ))}
                     </Pie>
                     <RechartsTooltip
-                      formatter={(v, name, props) => {
-                        const fVal = props.payload.faturado;
-                        const cVal = props.payload.count;
+                      formatter={((v: any, name: any, props: any) => {
+                        const fVal = props.payload.faturamento || 0;
+                        const cVal = props.payload.count || 0;
+                        const totalVal = statusChartData.reduce((acc, curr) => acc + curr.value, 0);
+                        const pct = totalVal > 0 ? ((Number(v) / totalVal) * 100).toFixed(1) : "0.0";
                         return [
-                          fVal > 0 ? fVal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : `${cVal} serviço(s)`,
+                          fVal > 0 
+                            ? `${fVal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} (${pct}%)` 
+                            : `${cVal} serviço(s) (${pct}%)`,
                           fVal > 0 ? "Faturamento" : "Qtd. Serviços"
                         ];
-                      }}
+                      }) as any}
                       contentStyle={{
                         backgroundColor: "var(--color-popover)",
                         borderColor: "var(--color-border)",
@@ -922,7 +940,7 @@ function CategoriasRouteComponent() {
                 </div>
                 <div className="text-right flex flex-col items-end">
                   <span className="font-bold text-foreground">
-                    {item.faturado > 0 ? item.faturado.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : `${item.count} un`}
+                    {item.faturamento > 0 ? item.faturamento.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : `${item.count} un`}
                   </span>
                 </div>
               </div>
@@ -1014,7 +1032,7 @@ function CategoriasRouteComponent() {
             </div>
 
             <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-              {tabActive === "rules" && (
+              {tabActive === "rules" && activeRole !== "Visualizador" && (
                 <button
                   onClick={() => handleOpenRuleDialog(null)}
                   className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold h-9 px-3 rounded-lg transition-colors cursor-pointer"
@@ -1039,14 +1057,16 @@ function CategoriasRouteComponent() {
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
                     <tr className="border-b border-border bg-muted/40 font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">
-                      <th className="px-4 py-3.5 w-10 text-center">
-                        <input
-                          type="checkbox"
-                          checked={selectedCodes.size === filteredRows.length && filteredRows.length > 0}
-                          onChange={(e) => handleSelectAll(e.target.checked, filteredRows)}
-                          className="rounded-md border-border text-indigo-600 focus:ring-indigo-500 h-4 w-4 cursor-pointer"
-                        />
-                      </th>
+                      {activeRole !== "Visualizador" && (
+                        <th className="px-4 py-3.5 w-10 text-center">
+                          <input
+                            type="checkbox"
+                            checked={selectedCodes.size === filteredRows.length && filteredRows.length > 0}
+                            onChange={(e) => handleSelectAll(e.target.checked, filteredRows)}
+                            className="rounded-md border-border text-indigo-600 focus:ring-indigo-500 h-4 w-4 cursor-pointer"
+                          />
+                        </th>
+                      )}
                       <th className="px-4 py-3.5 w-24">Código</th>
                       <th className="px-4 py-3.5">Categoria Executiva</th>
                       <th className="px-4 py-3.5">Grupo Operacional</th>
@@ -1056,7 +1076,7 @@ function CategoriasRouteComponent() {
                       <th className="px-4 py-3.5 text-center w-24">Origem</th>
                       <th className="px-4 py-3.5 text-center w-20">Confiança</th>
                       <th className="px-4 py-3.5 text-right w-24">Última Util.</th>
-                      <th className="px-4 py-3.5 text-center w-16">Ações</th>
+                      {activeRole !== "Visualizador" && <th className="px-4 py-3.5 text-center w-16">Ações</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
@@ -1075,14 +1095,16 @@ function CategoriasRouteComponent() {
 
                       return (
                         <tr key={linha.codigo} className="hover:bg-muted/30 transition-colors">
-                          <td className="px-4 py-3 text-center">
-                            <input
-                              type="checkbox"
-                              checked={selectedCodes.has(linha.codigo)}
-                              onChange={(e) => handleSelectRow(linha.codigo, e.target.checked)}
-                              className="rounded-md border-border text-indigo-600 focus:ring-indigo-500 h-4 w-4 cursor-pointer"
-                            />
-                          </td>
+                          {activeRole !== "Visualizador" && (
+                            <td className="px-4 py-3 text-center">
+                              <input
+                                type="checkbox"
+                                checked={selectedCodes.has(linha.codigo)}
+                                onChange={(e) => handleSelectRow(linha.codigo, e.target.checked)}
+                                className="rounded-md border-border text-indigo-600 focus:ring-indigo-500 h-4 w-4 cursor-pointer"
+                              />
+                            </td>
+                          )}
                           <td className="px-4 py-3">
                             <span className="font-mono bg-muted border border-border px-1.5 py-0.5 rounded-md font-semibold text-foreground/95">
                               {linha.codigo}
@@ -1125,15 +1147,17 @@ function CategoriasRouteComponent() {
                           <td className="px-4 py-3 text-right text-muted-foreground font-mono">
                             {formatarData(linha.ultimaUtilizacao)}
                           </td>
-                          <td className="px-4 py-3 text-center">
-                            <button
-                              onClick={() => handleOpenEditDialog([linha.codigo])}
-                              className="text-indigo-600 hover:text-indigo-500 p-1.5 rounded-lg hover:bg-muted transition-colors cursor-pointer"
-                              title="Reclassificar"
-                            >
-                              <Edit className="h-4 w-4" />
-                            </button>
-                          </td>
+                          {activeRole !== "Visualizador" && (
+                            <td className="px-4 py-3 text-center">
+                              <button
+                                onClick={() => handleOpenEditDialog([linha.codigo])}
+                                className="text-indigo-600 hover:text-indigo-500 p-1.5 rounded-lg hover:bg-muted transition-colors cursor-pointer"
+                                title="Reclassificar"
+                              >
+                                <Edit className="h-4 w-4" />
+                              </button>
+                            </td>
+                          )}
                         </tr>
                       );
                     })}
@@ -1171,14 +1195,16 @@ function CategoriasRouteComponent() {
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
                     <tr className="border-b border-border bg-muted/40 font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">
-                      <th className="px-4 py-3.5 w-10 text-center">
-                        <input
-                          type="checkbox"
-                          checked={selectedCodes.size === filteredPendingRows.length && filteredPendingRows.length > 0}
-                          onChange={(e) => handleSelectAll(e.target.checked, filteredPendingRows)}
-                          className="rounded-md border-border text-indigo-600 focus:ring-indigo-500 h-4 w-4 cursor-pointer"
-                        />
-                      </th>
+                      {activeRole !== "Visualizador" && (
+                        <th className="px-4 py-3.5 w-10 text-center">
+                          <input
+                            type="checkbox"
+                            checked={selectedCodes.size === filteredPendingRows.length && filteredPendingRows.length > 0}
+                            onChange={(e) => handleSelectAll(e.target.checked, filteredPendingRows)}
+                            className="rounded-md border-border text-indigo-600 focus:ring-indigo-500 h-4 w-4 cursor-pointer"
+                          />
+                        </th>
+                      )}
                       <th className="px-4 py-3.5 w-24">Código</th>
                       <th className="px-4 py-3.5">Categoria Executiva</th>
                       <th className="px-4 py-3.5">Grupo Operacional</th>
@@ -1187,7 +1213,7 @@ function CategoriasRouteComponent() {
                       <th className="px-4 py-3.5 text-right w-32">Valor Faturado</th>
                       <th className="px-4 py-3.5 text-center w-20">Confiança</th>
                       <th className="px-4 py-3.5 text-right w-24">Última Util.</th>
-                      <th className="px-4 py-3.5 text-center w-16">Ações</th>
+                      {activeRole !== "Visualizador" && <th className="px-4 py-3.5 text-center w-16">Ações</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
@@ -1200,14 +1226,16 @@ function CategoriasRouteComponent() {
 
                       return (
                         <tr key={linha.codigo} className="hover:bg-muted/30 transition-colors">
-                          <td className="px-4 py-3 text-center">
-                            <input
-                              type="checkbox"
-                              checked={selectedCodes.has(linha.codigo)}
-                              onChange={(e) => handleSelectRow(linha.codigo, e.target.checked)}
-                              className="rounded-md border-border text-indigo-600 focus:ring-indigo-500 h-4 w-4 cursor-pointer"
-                            />
-                          </td>
+                          {activeRole !== "Visualizador" && (
+                            <td className="px-4 py-3 text-center">
+                              <input
+                                type="checkbox"
+                                checked={selectedCodes.has(linha.codigo)}
+                                onChange={(e) => handleSelectRow(linha.codigo, e.target.checked)}
+                                className="rounded-md border-border text-indigo-600 focus:ring-indigo-500 h-4 w-4 cursor-pointer"
+                              />
+                            </td>
+                          )}
                           <td className="px-4 py-3">
                             <span className="font-mono bg-muted border border-border px-1.5 py-0.5 rounded-md font-semibold text-foreground/95">
                               {linha.codigo}
@@ -1240,15 +1268,17 @@ function CategoriasRouteComponent() {
                           <td className="px-4 py-3 text-right text-muted-foreground font-mono">
                             {formatarData(linha.ultimaUtilizacao)}
                           </td>
-                          <td className="px-4 py-3 text-center">
-                            <button
-                              onClick={() => handleOpenEditDialog([linha.codigo])}
-                              className="text-amber-600 hover:text-amber-500 p-1.5 rounded-lg hover:bg-muted transition-colors cursor-pointer"
-                              title="Revisar"
-                            >
-                              <Edit className="h-4 w-4" />
-                            </button>
-                          </td>
+                          {activeRole !== "Visualizador" && (
+                            <td className="px-4 py-3 text-center">
+                              <button
+                                onClick={() => handleOpenEditDialog([linha.codigo])}
+                                className="text-amber-600 hover:text-amber-500 p-1.5 rounded-lg hover:bg-muted transition-colors cursor-pointer"
+                                title="Revisar"
+                              >
+                                <Edit className="h-4 w-4" />
+                              </button>
+                            </td>
+                          )}
                         </tr>
                       );
                     })}
@@ -1275,7 +1305,7 @@ function CategoriasRouteComponent() {
                       <th className="px-4 py-3.5">Chave da Regra</th>
                       <th className="px-4 py-3.5">Categoria Executiva (Nível 1)</th>
                       <th className="px-4 py-3.5">Grupo Operacional (Nível 2)</th>
-                      <th className="px-4 py-3.5 text-center w-24">Ações</th>
+                      {activeRole !== "Visualizador" && <th className="px-4 py-3.5 text-center w-24">Ações</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
@@ -1299,22 +1329,24 @@ function CategoriasRouteComponent() {
                         <td className="px-4 py-3 text-muted-foreground">
                           {regra.grupoOperacional}
                         </td>
-                        <td className="px-4 py-3 text-center space-x-1">
-                          <button
-                            onClick={() => handleOpenRuleDialog(regra)}
-                            className="text-indigo-600 hover:text-indigo-500 p-1.5 rounded-lg hover:bg-muted transition-colors cursor-pointer"
-                            title="Editar Regra"
-                          >
-                            <Edit className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteRule(regra.id!, regra.chave)}
-                            className="text-red-600 hover:text-red-500 p-1.5 rounded-lg hover:bg-muted transition-colors cursor-pointer"
-                            title="Excluir Regra"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </td>
+                        {activeRole !== "Visualizador" && (
+                          <td className="px-4 py-3 text-center space-x-1">
+                            <button
+                              onClick={() => handleOpenRuleDialog(regra)}
+                              className="text-indigo-600 hover:text-indigo-500 p-1.5 rounded-lg hover:bg-muted transition-colors cursor-pointer"
+                              title="Editar Regra"
+                            >
+                              <Edit className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteRule(regra.id!, regra.chave)}
+                              className="text-red-600 hover:text-red-500 p-1.5 rounded-lg hover:bg-muted transition-colors cursor-pointer"
+                              title="Excluir Regra"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
@@ -1394,22 +1426,24 @@ function CategoriasRouteComponent() {
               </div>
 
               {/* Form para Adicionar Categoria Customizada */}
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  placeholder="Nova categoria customizada..."
-                  value={newCustomCategoryName}
-                  onChange={(e) => setNewCustomCategoryName(e.target.value)}
-                  className="flex-1 text-xs rounded-lg border border-border bg-muted/20 h-9 px-3 outline-hidden focus:ring-2 focus:ring-indigo-500/30 text-foreground"
-                />
-                <button
-                  onClick={handleAddCustomCategory}
-                  className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold h-9 px-4 rounded-lg transition-colors cursor-pointer flex items-center gap-1 flex-shrink-0"
-                >
-                  <Plus className="h-4 w-4" />
-                  Adicionar
-                </button>
-              </div>
+              {activeRole !== "Visualizador" && (
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Nova categoria customizada..."
+                    value={newCustomCategoryName}
+                    onChange={(e) => setNewCustomCategoryName(e.target.value)}
+                    className="flex-1 text-xs rounded-lg border border-border bg-muted/20 h-9 px-3 outline-hidden focus:ring-2 focus:ring-indigo-500/30 text-foreground"
+                  />
+                  <button
+                    onClick={handleAddCustomCategory}
+                    className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold h-9 px-4 rounded-lg transition-colors cursor-pointer flex items-center gap-1 flex-shrink-0"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Adicionar
+                  </button>
+                </div>
+              )}
 
               {/* Lista de Categorias */}
               <div className="border border-border rounded-xl overflow-hidden divide-y divide-border max-h-[400px] overflow-y-auto bg-card">
@@ -1428,13 +1462,15 @@ function CategoriasRouteComponent() {
                       <span className="text-[9px] font-bold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded-md border border-indigo-500/20">
                         Customizada
                       </span>
-                      <button
-                        onClick={() => handleDeleteCustomCategory(cat.id)}
-                        className="text-muted-foreground hover:text-destructive p-1 rounded-md hover:bg-muted/80 transition-colors cursor-pointer"
-                        title="Excluir Categoria"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
+                      {activeRole !== "Visualizador" && (
+                        <button
+                          onClick={() => handleDeleteCustomCategory(cat.id)}
+                          className="text-muted-foreground hover:text-destructive p-1 rounded-md hover:bg-muted/80 transition-colors cursor-pointer"
+                          title="Excluir Categoria"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -1481,7 +1517,7 @@ function CategoriasRouteComponent() {
       </div>
 
       {/* Floating Bulk Action Bar */}
-      {selectedCodes.size > 0 && (
+      {selectedCodes.size > 0 && activeRole !== "Visualizador" && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-card border border-border shadow-xl px-6 py-4 rounded-2xl flex items-center gap-6 z-40 animate-in slide-in-from-bottom-12 duration-200">
           <span className="text-xs text-foreground font-semibold flex items-center gap-2">
             <span className="h-5 w-5 bg-indigo-500 text-white rounded-full flex items-center justify-center font-bold text-[10px]">

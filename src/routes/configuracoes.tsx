@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
   Users, Building, Plus, Trash2, Mail, Copy, Shield, Settings, Key, UserCheck, 
-  ShieldAlert, LogOut, Check, Loader2, CopySuccess, AlertTriangle 
+  ShieldAlert, LogOut, Check, Loader2, AlertTriangle 
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabaseClient";
@@ -168,6 +168,12 @@ function ConfiguracoesRouteComponent() {
     if (!activeGroup || !groupNome.trim()) return;
 
     setSubmitting(true);
+    if (!supabase) {
+      toast.error("Supabase não está configurado.");
+      setSubmitting(false);
+      return;
+    }
+
     try {
       const { error } = await supabase
         .from("groups")

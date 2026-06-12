@@ -22,19 +22,26 @@ export class SyncManager {
     };
 
     try {
-      // 1. Push dos dados locais para o Supabase (Upload)
-      updateProgress("Enviando dados locais para a nuvem...");
-      await this.pushLocalToCloud(userId);
+      // 0. Atualizar os dados do Tenant Store primeiro para garantir o group_id correto
+      updateProgress("Carregando informações do grupo...");
+      const { useTenantStore } = await import("@/store/useTenantStore");
+      await useTenantStore.getState().fetchTenantData();
+
+      // 1. Push dos dados locais para o Supabase (Upload) - pular se for Visualizador
+      const role = useTenantStore.getState().activeRole;
+      if (role === "Visualizador") {
+        updateProgress("Perfil de Visualizador: pulando envio de dados locais...");
+      } else {
+        updateProgress("Enviando dados locais para a nuvem...");
+        await this.pushLocalToCloud(userId);
+      }
 
       // 2. Pull dos dados do Supabase para o banco local (Download)
-      await this.pullCloudToLocal(userId, updateProgress);
-
-      const notasCount = await db.notas.count();
-      const tomadasCount = await db.notasTomadas.count();
+      const totalPulled = await this.pullCloudToLocal(userId, updateProgress);
 
       if (showToast && toastId) {
         toast.success(
-          `Sincronização concluída! ${notasCount} notas emitidas e ${tomadasCount} notas tomadas estão em conformidade com a nuvem.`,
+          `Sincronização concluída! ${totalPulled} registros sincronizados da nuvem.`,
           { id: toastId }
         );
       }
@@ -279,8 +286,10 @@ export class SyncManager {
   private static async pullCloudToLocal(
     userId: string,
     onProgress?: (msg: string) => void
-  ): Promise<void> {
-    if (!supabase) return;
+  ): Promise<number> {
+    if (!supabase) return 0;
+
+    let totalPulled = 0;
 
     // --- 1. Baixar Notas Emitidas ---
     onProgress?.("Baixando notas emitidas da nuvem...");
@@ -290,6 +299,7 @@ export class SyncManager {
       "id",
       (count) => onProgress?.(`Baixando notas emitidas... ${count}`)
     );
+    await db.notas.clear();
     if (cloudNotas && cloudNotas.length > 0) {
       const mappedNotas = cloudNotas.map((n) => ({
         id: n.id,
@@ -319,6 +329,7 @@ export class SyncManager {
         raw: n.raw || undefined,
       }));
       await db.notas.bulkPut(mappedNotas);
+      totalPulled += mappedNotas.length;
     }
 
     // --- 2. Baixar Notas Tomadas ---
@@ -329,6 +340,7 @@ export class SyncManager {
       "id",
       (count) => onProgress?.(`Baixando notas tomadas... ${count}`)
     );
+    await db.notasTomadas.clear();
     if (cloudTomadas && cloudTomadas.length > 0) {
       const mappedTomadas = cloudTomadas.map((n) => ({
         id: n.id,
@@ -357,10 +369,12 @@ export class SyncManager {
         raw: n.raw || undefined,
       }));
       await db.notasTomadas.bulkPut(mappedTomadas);
+      totalPulled += mappedTomadas.length;
     }
 
     // --- 3. Baixar Categorias Customizadas ---
     const cloudCats = await this.fetchAllFromCloud("custom_categories", userId, "id");
+    await db.customCategories.clear();
     if (cloudCats && cloudCats.length > 0) {
       const mappedCats = cloudCats.map((c) => ({
         id: c.id,
@@ -368,20 +382,24 @@ export class SyncManager {
         grupoSintetico: c.grupo_sintetico || undefined,
       }));
       await db.customCategories.bulkPut(mappedCats);
+      totalPulled += mappedCats.length;
     }
 
     // --- 4. Baixar Overrides ---
     const cloudOverrides = await this.fetchAllFromCloud("category_overrides", userId, "codigo");
+    await db.categoryOverrides.clear();
     if (cloudOverrides && cloudOverrides.length > 0) {
       const mappedOverrides = cloudOverrides.map((o) => ({
         codigo: o.codigo,
         categoria: o.categoria,
       }));
       await db.categoryOverrides.bulkPut(mappedOverrides);
+      totalPulled += mappedOverrides.length;
     }
 
     // --- 5. Baixar Classificações ---
     const cloudClass = await this.fetchAllFromCloud("service_classifications", userId, "codigo");
+    await db.serviceClassifications.clear();
     if (cloudClass && cloudClass.length > 0) {
       const mappedClass = cloudClass.map((c) => ({
         codigo: c.codigo,
@@ -399,10 +417,12 @@ export class SyncManager {
         ausenteOficial: Boolean(c.ausente_oficial),
       }));
       await db.serviceClassifications.bulkPut(mappedClass);
+      totalPulled += mappedClass.length;
     }
 
     // --- 6. Baixar Regras ---
     const cloudRules = await this.fetchAllFromCloud("category_rules", userId, "id");
+    await db.categoryRules.clear();
     if (cloudRules && cloudRules.length > 0) {
       const mappedRules = cloudRules.map((r) => ({
         id: Number(r.id),
@@ -412,10 +432,12 @@ export class SyncManager {
         grupoOperacional: r.grupo_operacional || "",
       }));
       await db.categoryRules.bulkPut(mappedRules);
+      totalPulled += mappedRules.length;
     }
 
     // --- 7. Baixar Logs de Auditoria ---
     const cloudLogs = await this.fetchAllFromCloud("audit_logs", userId, "id");
+    await db.auditLogs.clear();
     if (cloudLogs && cloudLogs.length > 0) {
       const mappedLogs = cloudLogs.map((l) => ({
         id: Number(l.id),
@@ -427,6 +449,9 @@ export class SyncManager {
         justificativa: l.justificativa || undefined,
       }));
       await db.auditLogs.bulkPut(mappedLogs);
+      totalPulled += mappedLogs.length;
     }
+
+    return totalPulled;
   }
 }

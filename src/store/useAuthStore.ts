@@ -28,6 +28,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
   if (isSupabaseConfigured && supabase) {
     supabase.auth.onAuthStateChange(async (event, session) => {
       if (session) {
+        if (!supabase) return;
         set({ session, user: session.user, loading: true });
         // Busca perfil
         try {
@@ -163,21 +164,65 @@ export const useAuthStore = create<AuthState>((set, get) => {
     },
 
     signOut: async () => {
-      if (!isSupabaseConfigured || !supabase) {
-        set({ session: null, user: null, profile: null });
-        toast.info("Desconectado do modo local.");
-        return;
-      }
-
       set({ loading: true });
       try {
-        const { error } = await supabase.auth.signOut();
-        if (error) throw error;
-        set({ session: null, user: null, profile: null, loading: false });
-        toast.success("Você saiu da sua conta.");
+        if (isSupabaseConfigured && supabase) {
+          await supabase.auth.signOut();
+        }
       } catch (err: any) {
-        toast.error(err.message || "Erro ao deslogar.");
-        set({ loading: false });
+        console.error("Erro ao deslogar do Supabase:", err);
+      } finally {
+        // 1. Limpar tabelas do IndexedDB (Dexie)
+        try {
+          const { db } = await import("@/lib/db");
+          await Promise.all([
+            db.notas.clear(),
+            db.notasTomadas.clear(),
+            db.customCategories.clear(),
+            db.categoryOverrides.clear(),
+            db.serviceClassifications.clear(),
+            db.categoryRules.clear(),
+            db.auditLogs.clear()
+          ]);
+        } catch (dbErr) {
+          console.error("Erro ao limpar IndexedDB no logout:", dbErr);
+        }
+
+        // 2. Limpar estado do Tenant Store
+        try {
+          const { useTenantStore } = await import("./useTenantStore");
+          useTenantStore.setState({
+            groups: [],
+            activeGroup: null,
+            activeRole: null,
+            companies: [],
+            members: [],
+            invitations: [],
+            loading: false
+          });
+        } catch (tenantErr) {
+          console.error("Erro ao limpar tenant store no logout:", tenantErr);
+        }
+
+        // 3. Limpar localStorage (active_group_id e chaves do Supabase sb-*)
+        if (typeof window !== "undefined") {
+          for (let i = localStorage.length - 1; i >= 0; i--) {
+            const key = localStorage.key(i);
+            if (key && (key === "active_group_id" || key.startsWith("sb-"))) {
+              localStorage.removeItem(key);
+            }
+          }
+        }
+
+        // 4. Resetar estado local do Auth Store
+        set({ session: null, user: null, profile: null, loading: false });
+        
+        toast.success("Você saiu da sua conta.");
+
+        // 5. Redirecionar forçado substituindo o histórico
+        if (typeof window !== "undefined") {
+          window.location.replace("/login");
+        }
       }
     },
 
