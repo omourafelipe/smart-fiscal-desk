@@ -15,7 +15,7 @@ import { LayoutShell } from "@/components/layout/LayoutShell";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useTenantStore } from "@/store/useTenantStore";
 import { SyncManager } from "@/lib/data-access/SyncManager";
-import { ShieldAlert } from "lucide-react";
+import { ShieldAlert, RefreshCw } from "lucide-react";
 
 function NotFoundComponent() {
   return (
