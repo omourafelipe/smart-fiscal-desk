@@ -275,11 +275,20 @@ export class SyncManager {
   /**
    * Baixa dados da nuvem para o Dexie local do navegador
    */
-  private static async pullCloudToLocal(userId: string): Promise<void> {
+  private static async pullCloudToLocal(
+    userId: string,
+    onProgress?: (msg: string) => void
+  ): Promise<void> {
     if (!supabase) return;
 
     // --- 1. Baixar Notas Emitidas ---
-    const cloudNotas = await this.fetchAllFromCloud("nfse_documents", userId, "id");
+    onProgress?.("Baixando notas emitidas da nuvem...");
+    const cloudNotas = await this.fetchAllFromCloud(
+      "nfse_documents",
+      userId,
+      "id",
+      (count) => onProgress?.(`Baixando notas emitidas... ${count}`)
+    );
     if (cloudNotas && cloudNotas.length > 0) {
       const mappedNotas = cloudNotas.map((n) => ({
         id: n.id,
@@ -312,7 +321,13 @@ export class SyncManager {
     }
 
     // --- 2. Baixar Notas Tomadas ---
-    const cloudTomadas = await this.fetchAllFromCloud("nfse_documents_tomadas", userId, "id");
+    onProgress?.("Baixando notas tomadas da nuvem...");
+    const cloudTomadas = await this.fetchAllFromCloud(
+      "nfse_documents_tomadas",
+      userId,
+      "id",
+      (count) => onProgress?.(`Baixando notas tomadas... ${count}`)
+    );
     if (cloudTomadas && cloudTomadas.length > 0) {
       const mappedTomadas = cloudTomadas.map((n) => ({
         id: n.id,
