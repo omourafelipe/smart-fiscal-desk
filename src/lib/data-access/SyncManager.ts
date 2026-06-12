@@ -54,7 +54,8 @@ export class SyncManager {
   private static async fetchAllFromCloud(
     tableName: string,
     userId: string,
-    orderKey: string
+    orderKey: string,
+    onProgress?: (count: number) => void
   ): Promise<any[]> {
     if (!supabase) return [];
     
