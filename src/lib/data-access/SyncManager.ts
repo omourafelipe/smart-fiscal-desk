@@ -82,6 +82,7 @@ export class SyncManager {
 
       if (data && data.length > 0) {
         allData = allData.concat(data);
+        onProgress?.(allData.length);
         from += 1000;
         to += 1000;
         if (data.length < 1000) {
