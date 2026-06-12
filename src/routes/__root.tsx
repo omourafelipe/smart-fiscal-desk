@@ -12,6 +12,9 @@ import { useEffect, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { LayoutShell } from "@/components/layout/LayoutShell";
+import { useAuthStore } from "@/store/useAuthStore";
+import { SyncManager } from "@/lib/data-access/SyncManager";
+import { ShieldAlert } from "lucide-react";
 
 function NotFoundComponent() {
   return (
@@ -133,12 +136,47 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const router = useRouter();
+  const state = router.state;
+  const isLoginPage = state.location.pathname === "/login";
+
+  const { session, checkSession, isSupabaseConfigured } = useAuthStore();
+
+  useEffect(() => {
+    checkSession();
+  }, [checkSession]);
+
+  useEffect(() => {
+    if (session?.user?.id) {
+      SyncManager.syncAll(session.user.id);
+    }
+  }, [session]);
 
   return (
     <QueryClientProvider client={queryClient}>
-      <LayoutShell>
+      {isLoginPage ? (
         <Outlet />
-      </LayoutShell>
+      ) : (
+        <LayoutShell>
+          {!session && isSupabaseConfigured && (
+            <div className="bg-amber-500/10 border-b border-amber-500/20 px-6 py-2 flex items-center justify-between text-xs text-amber-600 dark:text-amber-400 font-medium">
+              <div className="flex items-center gap-2">
+                <ShieldAlert className="h-4.5 w-4.5 text-amber-500" />
+                <span>
+                  Você está rodando no <strong>Modo Local (Offline)</strong>. Crie uma conta ou faça login para habilitar a sincronização em nuvem.
+                </span>
+              </div>
+              <Link
+                to="/login"
+                className="bg-amber-500/20 hover:bg-amber-500/30 text-amber-700 dark:text-amber-300 font-bold px-3 py-1 rounded-xl transition-colors"
+              >
+                Fazer Login / Criar Conta
+              </Link>
+            </div>
+          )}
+          <Outlet />
+        </LayoutShell>
+      )}
     </QueryClientProvider>
   );
 }

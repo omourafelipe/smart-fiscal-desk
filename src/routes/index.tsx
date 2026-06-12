@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState, useCallback } from "react";
+import { useGlobalFilters } from "@/store/useGlobalFilters";
 import JSZip from "jszip";
 import { z } from "zod";
 import {
@@ -34,9 +35,14 @@ import { parseNfseXml } from "@/lib/parseXml";
 import { getServicoDescricao } from "@/lib/category-utils";
 import { useLayoutShell } from "@/components/layout/LayoutShell";
 import { useFiscalData } from "@/hooks/useFiscalData";
+import { useInsightsEngine } from "@/hooks/useInsightsEngine";
+import { ExecutiveInsights } from "@/components/dashboard/ExecutiveInsights";
+import { BarChartRanking } from "@/components/dashboard/charts/BarChartRanking";
 import { KpiCardNew } from "@/components/shared/KpiCardNew";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
+import { useAuthStore } from "@/store/useAuthStore";
+import { SyncManager } from "@/lib/data-access/SyncManager";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -141,38 +147,14 @@ function Dashboard() {
   const navigate = useNavigate({ from: Route.id });
   const { periodType, addActivity } = useLayoutShell();
 
-  // Filters synced via URL search parameters
-  const mesFiltro = search.mes || "__all__";
-  const anoFiltro = search.ano || "__all__";
-  const empresaFiltro = search.empresa || "__all__";
-  const cServFiltro = search.cServ || "__all__";
-  const searchCliente = search.searchCliente || "";
-
-  // Local query states
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [tipoClienteFiltro, setTipoClienteFiltro] = useState<string>("__all__");
+  const { searchCliente, setSearchCliente, cServFiltro, setCServFiltro } = useGlobalFilters();
+  const { session } = useAuthStore();
 
-  // Sync route filters change to page 1 reset
-  useEffect(() => {
-    setCurrentPage(1);
-    setTipoClienteFiltro("__all__");
-  }, [mesFiltro, anoFiltro, empresaFiltro, cServFiltro, searchCliente]);
-
-  const setMesFiltro = (val: string) =>
-    navigate({ search: (prev) => ({ ...prev, mes: val === "__all__" ? undefined : val }) });
-  const setAnoFiltro = (val: string) =>
-    navigate({ search: (prev) => ({ ...prev, ano: val === "__all__" ? undefined : val }) });
-  const setEmpresaFiltro = (val: string) =>
-    navigate({ search: (prev) => ({ ...prev, empresa: val === "__all__" ? undefined : val }) });
-  const setCServFiltro = (val: string) =>
-    navigate({ search: (prev) => ({ ...prev, cServ: val === "__all__" ? undefined : val }) });
-  const setSearchCliente = (val: string) =>
-    navigate({ search: (prev) => ({ ...prev, searchCliente: val || undefined }) });
-
-  // Load analytical and aggregate data using useFiscalData hook
   const {
     empresas,
     anos,
@@ -198,21 +180,28 @@ function Dashboard() {
     inssTotal,
     lineChartData,
     barData,
+    pieData,
     topClientesList,
     getNoteStatus,
     getDateField,
+    prevFaturamento,
+    prevNotasCount,
+    ticketMedio,
   } = useFiscalData({
-    filters: {
-      empresaFiltro,
-      mesFiltro,
-      anoFiltro,
-      cServFiltro,
-      searchCliente,
-    },
     periodType,
     xlsxRows: [],
     keyCol: "",
     statusCol: "",
+  });
+
+  const insights = useInsightsEngine({
+    faturamento,
+    prevFaturamento,
+    ticketMedio,
+    notasAtivasCount: notasAtivas.length,
+    prevNotasCount,
+    pieData,
+    lineChartData,
   });
 
   // Calculate local chart breakdown data (PJ vs PF type of contracting)
@@ -356,6 +345,9 @@ function Dashboard() {
       if (allNotas.length) {
         await db.notas.bulkPut(allNotas);
         addActivity("upload", `${allNotas.length} Notas Importadas`, "Importação de XMLs finalizada com sucesso.");
+        if (session?.user?.id) {
+          SyncManager.syncAll(session.user.id);
+        }
       }
       setProgress(null);
       setImporting(false);
@@ -423,73 +415,14 @@ function Dashboard() {
 
   return (
     <main className="flex-1 p-6 md:p-8 max-w-[1400px] w-full mx-auto space-y-6">
-      {/* PAGE MAIN HEADER / FILTERS PANEL */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 flex-wrap bg-card p-5 rounded-2xl border border-border shadow-xs transition-colors duration-300">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-foreground">Consulta de Faturamento</h1>
-          <p className="text-xs text-muted-foreground mt-1">Análise consolidada para a diretoria · Samel</p>
-        </div>
-
-        {/* Filters Grid */}
-        <div className="flex items-center gap-2.5 flex-wrap">
-          <Select value={empresaFiltro} onValueChange={setEmpresaFiltro}>
-            <SelectTrigger className="w-[220px] h-9 text-xs rounded-xl bg-muted border-border hover:bg-muted/80 transition-colors">
-              <Building2 className="h-3.5 w-3.5 mr-2 text-muted-foreground flex-shrink-0" />
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className="rounded-xl shadow-lg border-border bg-popover text-popover-foreground">
-              <SelectItem value="__all__">Todas as Empresas</SelectItem>
-              {empresas.map((e) => (
-                <SelectItem key={e.cnpj} value={e.cnpj}>
-                  {e.nome}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select value={mesFiltro} onValueChange={setMesFiltro}>
-            <SelectTrigger className="w-[130px] h-9 text-xs rounded-xl bg-muted border-border hover:bg-muted/80 transition-colors">
-              <Calendar className="h-3.5 w-3.5 mr-2 text-muted-foreground flex-shrink-0" />
-              <SelectValue placeholder="Mês" />
-            </SelectTrigger>
-            <SelectContent className="rounded-xl shadow-lg border-border bg-popover text-popover-foreground">
-              <SelectItem value="__all__">Todos os meses</SelectItem>
-              {mesesOpcoes.map((m) => (
-                <SelectItem key={m.value} value={m.value}>
-                  {m.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select value={anoFiltro} onValueChange={setAnoFiltro}>
-            <SelectTrigger className="w-[105px] h-9 text-xs rounded-xl bg-muted border-border hover:bg-muted/80 transition-colors">
-              <Calendar className="h-3.5 w-3.5 mr-2 text-muted-foreground flex-shrink-0" />
-              <SelectValue placeholder="Ano" />
-            </SelectTrigger>
-            <SelectContent className="rounded-xl shadow-lg border-border bg-popover text-popover-foreground">
-              <SelectItem value="__all__">Todos os anos</SelectItem>
-              {anos.map((a) => (
-                <SelectItem key={a} value={a}>
-                  {a}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select value={cServFiltro} onValueChange={setCServFiltro}>
-            <SelectTrigger className="w-[180px] h-9 text-xs rounded-xl bg-muted border-border hover:bg-muted/80 transition-colors">
-              <Tag className="h-3.5 w-3.5 mr-2 text-muted-foreground flex-shrink-0" />
-              <SelectValue placeholder="Serviço" />
-            </SelectTrigger>
-            <SelectContent className="rounded-xl shadow-lg border-border bg-popover text-popover-foreground">
-              <SelectItem value="__all__">Todos os Serviços</SelectItem>
-              <SelectItem value="042201">Planos de Saúde</SelectItem>
-              <SelectItem value="040301">Serviços Hospitalares</SelectItem>
-            </SelectContent>
-          </Select>
+          <h1 className="text-xl font-bold tracking-tight text-foreground">Cockpit Executivo Fiscal</h1>
+          <p className="text-xs text-muted-foreground mt-1">Análise consolidada para a diretoria</p>
         </div>
       </div>
+
+      <ExecutiveInsights insights={insights} />
 
       {/* UPLOAD ZIP PANEL */}
       <div
@@ -671,6 +604,7 @@ function Dashboard() {
                       };
                       const selectedMonth = mesesSiglas[state.activeLabel];
                       if (selectedMonth) {
+                        const { setMesFiltro } = useGlobalFilters.getState();
                         setMesFiltro(selectedMonth);
                         addActivity(
                           "update",
@@ -870,46 +804,13 @@ function Dashboard() {
           </div>
         </div>
 
-        {/* Top Clients Table */}
-        <div className="bg-card border border-border rounded-2xl p-5 shadow-xs lg:col-span-1 transition-colors duration-300">
-          <h3 className="text-xs font-bold text-foreground mb-1">Principais Clientes</h3>
-          <p className="text-[10px] text-muted-foreground mb-4">Top 5 tomadores por volume de faturamento</p>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="border-b border-border text-muted-foreground font-semibold">
-                  <th className="pb-2 font-medium">Nome / CNPJ</th>
-                  <th className="pb-2 text-center font-medium">Notas</th>
-                  <th className="pb-2 text-right font-medium">Faturamento</th>
-                </tr>
-              </thead>
-              <tbody>
-                {topClientesList.length === 0 ? (
-                  <tr>
-                    <td colSpan={3} className="text-center text-muted-foreground py-12">Nenhum cliente registrado</td>
-                  </tr>
-                ) : (
-                  topClientesList.map((client, index) => {
-                    return (
-                      <tr key={index} className="border-b border-border/50 hover:bg-muted/40 transition-colors">
-                        <td className="py-2.5 max-w-[120px]">
-                          <div className="font-semibold text-foreground/90 truncate" title={client.nome}>
-                            {client.nome}
-                          </div>
-                          <div className="text-[9px] text-muted-foreground font-mono mt-0.5">
-                            {formatarCnpjCpf(client.cnpjCpf)}
-                          </div>
-                        </td>
-                        <td className="py-2.5 text-center text-muted-foreground font-mono text-[10px]">{client.count}</td>
-                        <td className="py-2.5 text-right font-bold text-foreground">{fmtBRL(client.total)}</td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
+        <div className="lg:col-span-1 h-[300px]">
+          <BarChartRanking 
+            title="Principais Clientes" 
+            subtitle="Top 5 tomadores por volume de faturamento"
+            data={topClientesList.map(c => ({ name: c.nome, value: c.total }))}
+            color="#ec4899"
+          />
         </div>
       </div>
 

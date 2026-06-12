@@ -1,4 +1,4 @@
-import { useNavigate, useSearch, useRouterState } from "@tanstack/react-router";
+import { useRouterState, Link } from "@tanstack/react-router";
 import {
   Menu,
   Star,
@@ -8,8 +8,25 @@ import {
   Clock,
   Bell,
   LayoutDashboard,
+  Cloud,
+  CloudOff,
+  LogOut,
+  User as UserIcon,
+  RefreshCw,
 } from "lucide-react";
 import { useLayoutShell } from "./LayoutShell";
+import { useGlobalFilters } from "@/store/useGlobalFilters";
+import { useAuthStore } from "@/store/useAuthStore";
+import { SyncManager } from "@/lib/data-access/SyncManager";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 interface TopbarProps {
   rightPanelOpen: boolean;
@@ -28,15 +45,8 @@ export function Topbar({ rightPanelOpen, setRightPanelOpen }: TopbarProps) {
   const routerState = useRouterState();
   const currentPath = routerState.location.pathname;
 
-  const search = useSearch({ strict: false }) as any;
-  const navigate = useNavigate();
-
-  const searchCliente = search.searchCliente || "";
-  const setSearchCliente = (val: string) => {
-    navigate({
-      search: (prev: any) => ({ ...prev, searchCliente: val || undefined }),
-    } as any);
-  };
+  const { searchCliente, setSearchCliente } = useGlobalFilters();
+  const { session, profile, signOut, isSupabaseConfigured } = useAuthStore();
 
   const getTitle = (path: string) => {
     switch (path) {
@@ -132,6 +142,74 @@ export function Topbar({ rightPanelOpen, setRightPanelOpen }: TopbarProps) {
         >
           <LayoutDashboard className="h-4 w-4" />
         </button>
+
+        {/* Cloud Sync Status & User Profile Dropdown */}
+        {isSupabaseConfigured && (
+          <div className="flex items-center gap-2 border-l border-border pl-3 ml-1">
+            {session ? (
+              <>
+                <button
+                  onClick={() => SyncManager.syncAll(session.user.id)}
+                  className="h-8 w-8 rounded-lg hover:bg-muted flex items-center justify-center text-emerald-500 hover:text-emerald-600 transition-colors cursor-pointer"
+                  title="Sincronização em nuvem ativa. Clique para forçar sync."
+                >
+                  <Cloud className="h-4.5 w-4.5" />
+                </button>
+
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Avatar className="h-8 w-8 cursor-pointer hover:opacity-90 border border-border transition-all">
+                      <AvatarFallback className="bg-indigo-600 text-white font-bold text-xs uppercase">
+                        {(profile?.nome || session.user.email || "U").slice(0, 2)}
+                      </AvatarFallback>
+                    </Avatar>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56 rounded-xl border border-border shadow-lg p-1.5 bg-popover text-popover-foreground">
+                    <DropdownMenuLabel className="px-2.5 py-2">
+                      <div className="flex flex-col space-y-0.5">
+                        <p className="text-xs font-bold text-foreground">{profile?.nome || "Minha Conta"}</p>
+                        <p className="text-[10px] text-muted-foreground font-mono truncate">{session.user.email}</p>
+                        {profile?.empresa && (
+                          <p className="text-[9px] text-indigo-600 dark:text-indigo-400 font-semibold mt-1 bg-indigo-500/10 px-1.5 py-0.5 rounded-md w-fit">
+                            {profile.empresa}
+                          </p>
+                        )}
+                      </div>
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator className="my-1 border-t border-border" />
+                    <DropdownMenuItem
+                      onClick={() => SyncManager.syncAll(session.user.id)}
+                      className="flex items-center gap-2 px-2.5 py-2 text-xs rounded-lg hover:bg-muted cursor-pointer transition-colors"
+                    >
+                      <RefreshCw className="h-3.5 w-3.5" />
+                      Sincronizar Agora
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator className="my-1 border-t border-border" />
+                    <DropdownMenuItem
+                      onClick={() => signOut()}
+                      className="flex items-center gap-2 px-2.5 py-2 text-xs rounded-lg hover:bg-muted text-destructive hover:text-destructive cursor-pointer transition-colors"
+                    >
+                      <LogOut className="h-3.5 w-3.5" />
+                      Sair da Conta
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </>
+            ) : (
+              <>
+                <div className="h-8 w-8 rounded-lg flex items-center justify-center text-slate-400" title="Trabalhando em modo local (Offline)">
+                  <CloudOff className="h-4.5 w-4.5" />
+                </div>
+                <Link
+                  to="/login"
+                  className="text-xs font-bold text-indigo-600 hover:text-indigo-500 bg-indigo-500/10 px-3 py-1.5 rounded-xl transition-colors"
+                >
+                  Entrar
+                </Link>
+              </>
+            )}
+          </div>
+        )}
       </div>
     </header>
   );

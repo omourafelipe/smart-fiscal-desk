@@ -3,6 +3,8 @@ import { useState, useMemo, useEffect } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { z } from "zod";
 import { db, type ServiceClassification, type CategoryRule, type AuditLog } from "@/lib/db";
+import { useAuthStore } from "@/store/useAuthStore";
+import { SyncManager } from "@/lib/data-access/SyncManager";
 import {
   classificarServicoLocal,
   resolverServicoFiscal,
@@ -118,6 +120,7 @@ function formatarHora(isoString: string): string {
 }
 
 function CategoriasRouteComponent() {
+  const { session } = useAuthStore();
   const [tabActive, setTabActive] = useState<"classifications" | "pending" | "rules" | "audit">("classifications");
   const [searchCat, setSearchCat] = useState("");
   
@@ -414,6 +417,10 @@ function CategoriasRouteComponent() {
 
       await db.serviceClassifications.bulkPut(updatedClassifications);
 
+      if (session?.user?.id) {
+        SyncManager.syncAll(session.user.id);
+      }
+
       toast.success(
         editingCodes.length === 1
           ? "Classificação atualizada e regra salva com sucesso."
@@ -501,6 +508,9 @@ function CategoriasRouteComponent() {
       }
 
       toast.success("Regra de aprendizado salva.");
+      if (session?.user?.id) {
+        SyncManager.syncAll(session.user.id);
+      }
       setIsRuleDialogOpen(false);
     } catch (err) {
       console.error("Erro ao salvar regra:", err);
@@ -526,6 +536,9 @@ function CategoriasRouteComponent() {
       
       await db.serviceClassifications.put(reclassified);
       toast.success("Regra excluída e serviço reclassificado automaticamente.");
+      if (session?.user?.id) {
+        SyncManager.syncAll(session.user.id);
+      }
     } catch (err) {
       console.error("Erro ao deletar regra:", err);
       toast.error("Erro ao deletar regra.");

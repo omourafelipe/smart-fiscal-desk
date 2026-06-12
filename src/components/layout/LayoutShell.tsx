@@ -3,6 +3,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 import { ActivityLogDrawer } from "../shared/ActivityLogDrawer";
+import { GlobalFilterBar } from "../shared/GlobalFilterBar";
 
 export interface ActivityLogItem {
   id: string;
@@ -148,8 +149,11 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
 
         <Sidebar />
         
-        <div className="flex-1 flex flex-col min-w-0 overflow-y-auto h-screen">
+        <div className="flex-1 flex flex-col min-w-0 overflow-y-auto h-screen relative">
           <Topbar rightPanelOpen={rightPanelOpen} setRightPanelOpen={setRightPanelOpen} />
+          <div className="px-6 pt-4">
+            <GlobalFilterBar />
+          </div>
           {children}
         </div>
 

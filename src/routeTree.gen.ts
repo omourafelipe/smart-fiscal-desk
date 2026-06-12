@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TomadosRouteImport } from './routes/tomados'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as GrupoRouteImport } from './routes/grupo'
 import { Route as ConciliationRouteImport } from './routes/conciliation'
 import { Route as CategoriasRouteImport } from './routes/categorias'
@@ -18,6 +19,11 @@ import { Route as IndexRouteImport } from './routes/index'
 const TomadosRoute = TomadosRouteImport.update({
   id: '/tomados',
   path: '/tomados',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const GrupoRoute = GrupoRouteImport.update({
@@ -46,6 +52,7 @@ export interface FileRoutesByFullPath {
   '/categorias': typeof CategoriasRoute
   '/conciliation': typeof ConciliationRoute
   '/grupo': typeof GrupoRoute
+  '/login': typeof LoginRoute
   '/tomados': typeof TomadosRoute
 }
 export interface FileRoutesByTo {
@@ -53,6 +60,7 @@ export interface FileRoutesByTo {
   '/categorias': typeof CategoriasRoute
   '/conciliation': typeof ConciliationRoute
   '/grupo': typeof GrupoRoute
+  '/login': typeof LoginRoute
   '/tomados': typeof TomadosRoute
 }
 export interface FileRoutesById {
@@ -61,14 +69,28 @@ export interface FileRoutesById {
   '/categorias': typeof CategoriasRoute
   '/conciliation': typeof ConciliationRoute
   '/grupo': typeof GrupoRoute
+  '/login': typeof LoginRoute
   '/tomados': typeof TomadosRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/categorias' | '/conciliation' | '/grupo' | '/tomados'
+  fullPaths:
+    | '/'
+    | '/categorias'
+    | '/conciliation'
+    | '/grupo'
+    | '/login'
+    | '/tomados'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/categorias' | '/conciliation' | '/grupo' | '/tomados'
-  id: '__root__' | '/' | '/categorias' | '/conciliation' | '/grupo' | '/tomados'
+  to: '/' | '/categorias' | '/conciliation' | '/grupo' | '/login' | '/tomados'
+  id:
+    | '__root__'
+    | '/'
+    | '/categorias'
+    | '/conciliation'
+    | '/grupo'
+    | '/login'
+    | '/tomados'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -76,6 +98,7 @@ export interface RootRouteChildren {
   CategoriasRoute: typeof CategoriasRoute
   ConciliationRoute: typeof ConciliationRoute
   GrupoRoute: typeof GrupoRoute
+  LoginRoute: typeof LoginRoute
   TomadosRoute: typeof TomadosRoute
 }
 
@@ -86,6 +109,13 @@ declare module '@tanstack/react-router' {
       path: '/tomados'
       fullPath: '/tomados'
       preLoaderRoute: typeof TomadosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/grupo': {
@@ -124,6 +154,7 @@ const rootRouteChildren: RootRouteChildren = {
   CategoriasRoute: CategoriasRoute,
   ConciliationRoute: ConciliationRoute,
   GrupoRoute: GrupoRoute,
+  LoginRoute: LoginRoute,
   TomadosRoute: TomadosRoute,
 }
 export const routeTree = rootRouteImport

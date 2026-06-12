@@ -11,20 +11,20 @@ export interface FiscalFilters {
   searchCliente: string;
 }
 
+import { useGlobalFilters } from "@/store/useGlobalFilters";
+
 export function useFiscalData({
-  filters,
   periodType,
   xlsxRows,
   keyCol,
   statusCol,
 }: {
-  filters: FiscalFilters;
   periodType: "competencia" | "emissao";
   xlsxRows: any[];
   keyCol: string;
   statusCol: string;
 }) {
-  const { empresaFiltro, mesFiltro, anoFiltro, cServFiltro, searchCliente } = filters;
+  const { empresaFiltro, mesFiltro, anoFiltro, cServFiltro, searchCliente } = useGlobalFilters();
 
   const todasNotas = useLiveQuery(() => db.notas.toArray(), [], [] as NotaFiscal[]);
   const todasNotasTomadas = useLiveQuery(() => db.notasTomadas.toArray(), [], [] as NotaFiscalTomada[]);
