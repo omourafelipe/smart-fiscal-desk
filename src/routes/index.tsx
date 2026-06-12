@@ -149,7 +149,6 @@ function Dashboard() {
 
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
-  const [dragOver, setDragOver] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [tipoClienteFiltro, setTipoClienteFiltro] = useState<string>("__all__");
   const { searchCliente, setSearchCliente, cServFiltro, setCServFiltro } = useGlobalFilters();
@@ -358,11 +357,7 @@ function Dashboard() {
     [addActivity],
   );
 
-  const onDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(false);
-    if (e.dataTransfer.files) processFiles(e.dataTransfer.files);
-  };
+
 
   const exportCsv = () => {
     const headers = [
@@ -420,59 +415,38 @@ function Dashboard() {
           <h1 className="text-xl font-bold tracking-tight text-foreground">Cockpit Executivo Fiscal</h1>
           <p className="text-xs text-muted-foreground mt-1">Análise consolidada para a diretoria</p>
         </div>
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <input
+            id="file-input-fat"
+            type="file"
+            accept=".zip"
+            multiple
+            className="hidden"
+            onChange={(e) => e.target.files && processFiles(e.target.files)}
+          />
+          <Button
+            disabled={importing}
+            onClick={() => !importing && document.getElementById("file-input-fat")?.click()}
+            className="flex items-center gap-2 px-4 h-9 text-xs font-semibold rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs transition-all duration-300 hover:scale-[1.01] cursor-pointer"
+          >
+            {importing ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                {progress ? `Importando (${progress.done}/${progress.total})` : "Importando..."}
+              </>
+            ) : (
+              <>
+                <Upload className="h-4 w-4" />
+                Importar NFS-e (ZIP)
+              </>
+            )}
+          </Button>
+        </div>
       </div>
 
       <ExecutiveInsights insights={insights} />
 
-      {/* UPLOAD ZIP PANEL */}
-      <div
-        onDragOver={(e) => {
-          e.preventDefault();
-          setDragOver(true);
-        }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={onDrop}
-        onClick={() => !importing && document.getElementById("file-input-fat")?.click()}
-        className={`rounded-2xl border border-dashed p-6 text-center cursor-pointer transition-all duration-300 ${
-          dragOver
-            ? "border-indigo-500 bg-indigo-500/5 dark:bg-indigo-500/10 scale-[1.005] shadow-sm"
-            : "border-border bg-card text-card-foreground hover:border-indigo-500/50 hover:bg-slate-50/30 dark:hover:bg-slate-800/10"
-        }`}
-      >
-        <input
-          id="file-input-fat"
-          type="file"
-          accept=".zip"
-          multiple
-          className="hidden"
-          onChange={(e) => e.target.files && processFiles(e.target.files)}
-        />
-        <div className="flex flex-col items-center gap-2">
-          {importing ? (
-            <>
-              <Loader2 className="h-8 w-8 text-indigo-600 animate-spin" />
-              <p className="font-semibold text-xs text-foreground">Processando XMLs NFS-e...</p>
-              {progress && (
-                <p className="text-[10px] text-muted-foreground">
-                  {progress.done} / {progress.total} XMLs
-                </p>
-              )}
-            </>
-          ) : (
-            <>
-              <div className="h-10 w-10 rounded-xl bg-indigo-500/10 flex items-center justify-center">
-                <Upload className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
-              </div>
-              <p className="font-semibold text-xs text-foreground">
-                Arraste os arquivos .zip de XMLs aqui ou clique para selecionar
-              </p>
-              <p className="text-[10px] text-muted-foreground">
-                Suporta múltiplos arquivos ZIP contendo XMLs no padrão NFS-e Nacional (SPED v1.01)
-              </p>
-            </>
-          )}
-        </div>
-      </div>
+
 
       {/* METRICS / KPI GRID */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -883,7 +857,7 @@ function Dashboard() {
               {paginatedNotas.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={16} className="text-center text-muted-foreground py-12 text-xs">
-                    Nenhuma nota fiscal encontrada no banco local. Envie um ZIP com XMLs para começar.
+                    Nenhuma nota fiscal encontrada no banco local. Use o botão "Importar NFS-e (ZIP)" no cabeçalho para começar.
                   </TableCell>
                 </TableRow>
               ) : (

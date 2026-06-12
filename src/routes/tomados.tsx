@@ -24,6 +24,7 @@ import { db, type NotaFiscalTomada } from "@/lib/db";
 import { parseNfseXmlTomada } from "@/lib/parseXml";
 import { useLayoutShell } from "@/components/layout/LayoutShell";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -99,7 +100,6 @@ function TomadosRouteComponent() {
   const [searchTomadas, setSearchTomadas] = useState("");
   const [pageTomadas, setPageTomadas] = useState(1);
   const [categoriaFiltroTomadas, setCategoriaFiltroTomadas] = useState<string | "__all__">("__all__");
-  const [dragOverTomadas, setDragOverTomadas] = useState(false);
   const [importingTomadas, setImportingTomadas] = useState(false);
   const [progressTomadas, setProgressTomadas] = useState<{ done: number; total: number } | null>(null);
 
@@ -186,12 +186,6 @@ function TomadosRouteComponent() {
       setProgressTomadas(null);
     }
   }, [addActivity]);
-
-  const onDropTomadas = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOverTomadas(false);
-    if (e.dataTransfer.files?.length) processFilesTomadas(e.dataTransfer.files);
-  };
 
   const exportCsvTomadas = () => {
     const headers = [
@@ -414,38 +408,36 @@ function TomadosRouteComponent() {
               {anosDisp.map((a) => <SelectItem key={a} value={a}>{a}</SelectItem>)}
             </SelectContent>
           </Select>
+
+          <input
+            ref={fileRefTomadas}
+            type="file"
+            accept=".zip"
+            multiple
+            className="hidden"
+            onChange={(e) => e.target.files && processFilesTomadas(e.target.files)}
+          />
+          <Button
+            disabled={importingTomadas}
+            onClick={() => !importingTomadas && fileRefTomadas.current?.click()}
+            className="flex items-center gap-2 px-4 h-9 text-xs font-semibold rounded-xl bg-teal-600 hover:bg-teal-700 text-white shadow-xs transition-all duration-300 hover:scale-[1.01] cursor-pointer"
+          >
+            {importingTomadas ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                {progressTomadas ? `Importando (${progressTomadas.done}/${progressTomadas.total})` : "Importando..."}
+              </>
+            ) : (
+              <>
+                <ShoppingBag className="h-4 w-4" />
+                Importar Tomadas (ZIP)
+              </>
+            )}
+          </Button>
         </div>
       </div>
 
-      {/* Upload ZIP */}
-      <div
-        onDragOver={(e) => { e.preventDefault(); setDragOverTomadas(true); }}
-        onDragLeave={() => setDragOverTomadas(false)}
-        onDrop={onDropTomadas}
-        onClick={() => !importingTomadas && fileRefTomadas.current?.click()}
-        className={`rounded-2xl border border-dashed p-6 text-center cursor-pointer transition-all duration-300 ${
-          dragOverTomadas ? "border-teal-500 bg-teal-500/5 scale-[1.005] shadow-sm" : "border-border bg-card hover:border-teal-500/50 hover:bg-slate-50/30 dark:hover:bg-slate-800/10"
-        }`}
-      >
-        <input ref={fileRefTomadas} type="file" accept=".zip" multiple className="hidden" onChange={(e) => e.target.files && processFilesTomadas(e.target.files)} />
-        <div className="flex flex-col items-center gap-2">
-          {importingTomadas ? (
-            <>
-              <Loader2 className="h-8 w-8 text-teal-600 animate-spin" />
-              <p className="font-semibold text-xs text-foreground">Processando XMLs de Serviços Tomados...</p>
-              {progressTomadas && <p className="text-[10px] text-muted-foreground">{progressTomadas.done} / {progressTomadas.total} XMLs</p>}
-            </>
-          ) : (
-            <>
-              <div className="h-10 w-10 rounded-xl bg-teal-500/10 flex items-center justify-center">
-                <ShoppingBag className="h-5 w-5 text-teal-600 dark:text-teal-400" />
-              </div>
-              <p className="font-semibold text-xs text-foreground">Arraste ZIPs com NFS-e recebidas de fornecedores</p>
-              <p className="text-[10px] text-muted-foreground">O sistema identificará automaticamente as notas onde o CNPJ do grupo aparece como tomador</p>
-            </>
-          )}
-        </div>
-      </div>
+
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
@@ -749,7 +741,7 @@ function TomadosRouteComponent() {
                 <TableRow>
                   <TableCell colSpan={16} className="text-center text-muted-foreground py-12 text-xs">
                     {(todasNotasTomadas?.length ?? 0) === 0
-                      ? "Nenhum serviço tomado importado. Arraste um ZIP acima para começar."
+                      ? "Nenhum serviço tomado importado. Use o botão \"Importar Tomadas (ZIP)\" no cabeçalho para começar."
                       : "Nenhum resultado para os filtros selecionados."}
                   </TableCell>
                 </TableRow>
