@@ -177,6 +177,23 @@ function RootComponent() {
               </Link>
             </div>
           )}
+          {session && isSupabaseConfigured && (
+            <div className="bg-emerald-500/10 border-b border-emerald-500/20 px-6 py-2 flex items-center justify-between text-xs text-emerald-700 dark:text-emerald-400 font-medium">
+              <div className="flex items-center gap-2">
+                <RefreshCw className="h-4 w-4 text-emerald-500" />
+                <span>
+                  Conectado à nuvem. Se faltarem notas, clique em <strong>Sincronizar agora</strong> para baixar tudo novamente.
+                </span>
+              </div>
+              <button
+                onClick={() => SyncManager.syncAll(session.user.id, true)}
+                className="bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-700 dark:text-emerald-300 font-bold px-3 py-1 rounded-xl transition-colors flex items-center gap-1.5"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                Sincronizar agora
+              </button>
+            </div>
+          )}
           <Outlet />
         </LayoutShell>
       )}
