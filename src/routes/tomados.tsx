@@ -20,7 +20,7 @@ import {
 } from "recharts";
 import { Calendar, Building2, ShoppingBag, Loader2, Trash2, FileText, XCircle, Search, ChevronLeft, ChevronRight, Download } from "lucide-react";
 import { toast } from "sonner";
-import { db, type NotaFiscalTomada } from "@/lib/db";
+import { db, type NotaFiscalTomada, type ServiceClassification, type CategoryRule } from "@/lib/db";
 import { parseNfseXmlTomada } from "@/lib/parseXml";
 import { useLayoutShell } from "@/components/layout/LayoutShell";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -29,7 +29,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { categorizarServico, lc116CategoriasMap, lc116SubItemCategoriasMap, obterGrupoSintetico } from "@/lib/category-utils";
+import { classificarServicoLocal, lc116CategoriasMap, lc116SubItemCategoriasMap, obterGrupoSintetico } from "@/lib/category-utils";
 
 const searchSchema = z.object({
   mes: z.string().optional().catch("__all__"),
@@ -120,11 +120,31 @@ function TomadosRouteComponent() {
 
   // ── Database query ──────────────────────────────────────────────
   const todasNotasTomadas = useLiveQuery(() => db.notasTomadas.toArray(), [], [] as NotaFiscalTomada[]);
+  const classifications = useLiveQuery(() => db.serviceClassifications.toArray(), [], [] as ServiceClassification[]);
+  const rules = useLiveQuery(() => db.categoryRules.toArray(), [], [] as CategoryRule[]);
+
+  const classificationsMap = useMemo(() => {
+    const map = new Map<string, ServiceClassification>();
+    if (classifications) {
+      classifications.forEach((c) => {
+        if (c.codigo) map.set(c.codigo, c);
+      });
+    }
+    return map;
+  }, [classifications]);
 
   const categorizarComOverride = useCallback((servicoDesc: string, code?: string) => {
-    const todas = Object.values(lc116SubItemCategoriasMap);
-    return categorizarServico(servicoDesc, code, todas);
-  }, []);
+    if (!code) return "Sem categoria";
+    // 1. Verifica se já existe classificação no banco local
+    const existing = classificationsMap.get(code);
+    if (existing && existing.categoriaExecutiva) {
+      return existing.categoriaExecutiva;
+    }
+    // 2. Senão, roda a classificação automática (passando as regras manuais se existirem)
+    const ruleList = rules || [];
+    const res = classificarServicoLocal(code, servicoDesc, ruleList);
+    return res.categoriaExecutiva || "Outros Serviços";
+  }, [classificationsMap, rules]);
 
   // File processors
   const processFilesTomadas = useCallback(async (files: FileList) => {

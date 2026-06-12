@@ -8,32 +8,91 @@ export class SyncManager {
   /**
    * Sincroniza todos os dados locais com a nuvem (Push & Pull)
    */
-  public static async syncAll(userId: string): Promise<void> {
+  public static async syncAll(userId: string, showToast = false): Promise<void> {
     if (this.isSyncing || !isSupabaseConfigured || !supabase) return;
 
     this.isSyncing = true;
-    const toastId = toast.loading("Sincronizando seus dados com a nuvem...");
+    let toastId: string | number | undefined;
+    if (showToast) {
+      toastId = toast.loading("Sincronizando seus dados com a nuvem...");
+    }
 
     try {
-      // 1. Push dos dados locais para o Supabase (Upload)
-      await this.pushLocalToCloud(userId);
+      // Sincroniza com timeout de 30 segundos
+      await Promise.race([
+        (async () => {
+          // 1. Push dos dados locais para o Supabase (Upload)
+          await this.pushLocalToCloud(userId);
 
-      // 2. Pull dos dados do Supabase para o banco local (Download)
-      await this.pullCloudToLocal(userId);
+          // 2. Pull dos dados do Supabase para o banco local (Download)
+          await this.pullCloudToLocal(userId);
+        })(),
+        this.timeout(30000)
+      ]);
 
       const notasCount = await db.notas.count();
       const tomadasCount = await db.notasTomadas.count();
 
-      toast.success(
-        `Sincronização concluída! ${notasCount} notas emitidas e ${tomadasCount} notas tomadas estão em conformidade com a nuvem.`,
-        { id: toastId }
-      );
+      if (showToast && toastId) {
+        toast.success(
+          `Sincronização concluída! ${notasCount} notas emitidas e ${tomadasCount} notas tomadas estão em conformidade com a nuvem.`,
+          { id: toastId }
+        );
+      }
     } catch (err: any) {
       console.error("Erro durante a sincronização:", err);
-      toast.error(`Falha na sincronização: ${err.message || "Erro desconhecido"}`, { id: toastId });
+      if (showToast && toastId) {
+        toast.error(`Falha na sincronização: ${err.message || "Erro desconhecido"}`, { id: toastId });
+      }
     } finally {
       this.isSyncing = false;
     }
+  }
+
+  private static timeout(ms: number): Promise<never> {
+    return new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("A sincronização expirou devido a lentidão na rede.")), ms)
+    );
+  }
+
+  /**
+   * Helper genérico para baixar TODOS os dados de uma tabela no Supabase contornando o limite de 1000 linhas
+   */
+  private static async fetchAllFromCloud(
+    tableName: string,
+    userId: string,
+    orderKey: string
+  ): Promise<any[]> {
+    if (!supabase) return [];
+    
+    let allData: any[] = [];
+    let from = 0;
+    let to = 999;
+    let hasMore = true;
+
+    while (hasMore) {
+      const { data, error } = await supabase
+        .from(tableName)
+        .select("*")
+        .eq("user_id", userId)
+        .order(orderKey, { ascending: true })
+        .range(from, to);
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        allData = allData.concat(data);
+        from += 1000;
+        to += 1000;
+        if (data.length < 1000) {
+          hasMore = false;
+        }
+      } else {
+        hasMore = false;
+      }
+    }
+
+    return allData;
   }
 
   /**
@@ -211,12 +270,7 @@ export class SyncManager {
     if (!supabase) return;
 
     // --- 1. Baixar Notas Emitidas ---
-    const { data: cloudNotas, error: errNotas } = await supabase
-      .from("nfse_documents")
-      .select("*")
-      .eq("user_id", userId);
-    if (errNotas) throw errNotas;
-
+    const cloudNotas = await this.fetchAllFromCloud("nfse_documents", userId, "id");
     if (cloudNotas && cloudNotas.length > 0) {
       const mappedNotas = cloudNotas.map((n) => ({
         id: n.id,
@@ -249,12 +303,7 @@ export class SyncManager {
     }
 
     // --- 2. Baixar Notas Tomadas ---
-    const { data: cloudTomadas, error: errTomadas } = await supabase
-      .from("nfse_documents_tomadas")
-      .select("*")
-      .eq("user_id", userId);
-    if (errTomadas) throw errTomadas;
-
+    const cloudTomadas = await this.fetchAllFromCloud("nfse_documents_tomadas", userId, "id");
     if (cloudTomadas && cloudTomadas.length > 0) {
       const mappedTomadas = cloudTomadas.map((n) => ({
         id: n.id,
@@ -286,12 +335,7 @@ export class SyncManager {
     }
 
     // --- 3. Baixar Categorias Customizadas ---
-    const { data: cloudCats, error: errCats } = await supabase
-      .from("custom_categories")
-      .select("*")
-      .eq("user_id", userId);
-    if (errCats) throw errCats;
-
+    const cloudCats = await this.fetchAllFromCloud("custom_categories", userId, "id");
     if (cloudCats && cloudCats.length > 0) {
       const mappedCats = cloudCats.map((c) => ({
         id: c.id,
@@ -302,12 +346,7 @@ export class SyncManager {
     }
 
     // --- 4. Baixar Overrides ---
-    const { data: cloudOverrides, error: errOverrides } = await supabase
-      .from("category_overrides")
-      .select("*")
-      .eq("user_id", userId);
-    if (errOverrides) throw errOverrides;
-
+    const cloudOverrides = await this.fetchAllFromCloud("category_overrides", userId, "codigo");
     if (cloudOverrides && cloudOverrides.length > 0) {
       const mappedOverrides = cloudOverrides.map((o) => ({
         codigo: o.codigo,
@@ -317,12 +356,7 @@ export class SyncManager {
     }
 
     // --- 5. Baixar Classificações ---
-    const { data: cloudClass, error: errClass } = await supabase
-      .from("service_classifications")
-      .select("*")
-      .eq("user_id", userId);
-    if (errClass) throw errClass;
-
+    const cloudClass = await this.fetchAllFromCloud("service_classifications", userId, "codigo");
     if (cloudClass && cloudClass.length > 0) {
       const mappedClass = cloudClass.map((c) => ({
         codigo: c.codigo,
@@ -343,12 +377,7 @@ export class SyncManager {
     }
 
     // --- 6. Baixar Regras ---
-    const { data: cloudRules, error: errRules } = await supabase
-      .from("category_rules")
-      .select("*")
-      .eq("user_id", userId);
-    if (errRules) throw errRules;
-
+    const cloudRules = await this.fetchAllFromCloud("category_rules", userId, "id");
     if (cloudRules && cloudRules.length > 0) {
       const mappedRules = cloudRules.map((r) => ({
         id: Number(r.id),
@@ -361,12 +390,7 @@ export class SyncManager {
     }
 
     // --- 7. Baixar Logs de Auditoria ---
-    const { data: cloudLogs, error: errLogs } = await supabase
-      .from("audit_logs")
-      .select("*")
-      .eq("user_id", userId);
-    if (errLogs) throw errLogs;
-
+    const cloudLogs = await this.fetchAllFromCloud("audit_logs", userId, "id");
     if (cloudLogs && cloudLogs.length > 0) {
       const mappedLogs = cloudLogs.map((l) => ({
         id: Number(l.id),

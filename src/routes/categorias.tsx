@@ -132,8 +132,8 @@ function formatarHora(isoString: string): string {
 }
 
 function CategoriasRouteComponent() {
-  const { session } = useAuthStore();
-  const [tabActive, setTabActive] = useState<"classifications" | "pending" | "rules" | "audit">("classifications");
+  const { session, profile } = useAuthStore();
+  const [tabActive, setTabActive] = useState<"classifications" | "pending" | "rules" | "audit" | "categories_groups">("classifications");
   const [searchCat, setSearchCat] = useState("");
   
   // Selection states
@@ -144,8 +144,9 @@ function CategoriasRouteComponent() {
   const [editingCodes, setEditingCodes] = useState<string[]>([]);
   const [formExecutiva, setFormExecutiva] = useState("Saúde");
   const [formGrupo, setFormGrupo] = useState("");
-  const [formUser, setFormUser] = useState("Administrador");
+  const [formUser, setFormUser] = useState("");
   const [formJustification, setFormJustification] = useState("");
+  const [newCustomCategoryName, setNewCustomCategoryName] = useState("");
 
   // Rules Dialog state
   const [isRuleDialogOpen, setIsRuleDialogOpen] = useState(false);
@@ -161,6 +162,7 @@ function CategoriasRouteComponent() {
   const classifications = useLiveQuery(() => db.serviceClassifications.toArray(), [], []);
   const rules = useLiveQuery(() => db.categoryRules.toArray(), [], []);
   const auditLogs = useLiveQuery(() => db.auditLogs.orderBy("dataHora").reverse().toArray(), [], []);
+  const customCategories = useLiveQuery(() => db.customCategories.toArray(), [], []);
 
   // 1. Run background incremental classification whenever notes or rules change
   useEffect(() => {
@@ -275,6 +277,31 @@ function CategoriasRouteComponent() {
     const autoCount = rows.filter(r => r.origem !== "Manual" && r.origem !== "Não Classificada").length;
     return Math.round((autoCount / totalServices) * 100);
   }, [rows, totalServices]);
+
+  const categoriasExecutivas = useMemo(() => {
+    const set = new Set(DEFAULT_CATEGORIAS_EXECUTIVAS);
+    if (customCategories) {
+      customCategories.forEach(c => {
+        if (c.nome) set.add(c.nome);
+      });
+    }
+    return Array.from(set);
+  }, [customCategories]);
+
+  const gruposPorCategoriaMap = useMemo(() => {
+    const map: Record<string, Set<string>> = {};
+    if (classifications) {
+      classifications.forEach(c => {
+        if (c.categoriaExecutiva && c.grupoOperacional) {
+          if (!map[c.categoriaExecutiva]) {
+            map[c.categoriaExecutiva] = new Set<string>();
+          }
+          map[c.categoriaExecutiva].add(c.grupoOperacional);
+        }
+      });
+    }
+    return map;
+  }, [classifications]);
 
   // Aggregated data for Category Chart (Faturamento by Categoria Executiva)
   const categoryChartData = useMemo(() => {
@@ -442,6 +469,8 @@ function CategoriasRouteComponent() {
       setFormExecutiva("Saúde");
       setFormGrupo("");
     }
+    // Automatically set the logged in user as responsible
+    setFormUser(profile?.nome || session?.user?.email || "Administrador");
     setFormJustification("");
     setIsEditDialogOpen(true);
   };
@@ -466,19 +495,13 @@ function CategoriasRouteComponent() {
         // 1. Salva ou atualiza a regra de aprendizado (reutilização automática)
         // Usamos o código como chave da regra
         const existingRule = rules?.find(r => r.tipo === "codigo" && r.chave === code);
-        if (existingRule) {
-          await db.categoryRules.update(existingRule.id!, {
-            categoriaExecutiva: formExecutiva,
-            grupoOperacional: formGrupo
-          });
-        } else {
-          await db.categoryRules.put({
-            tipo: "codigo",
-            chave: code,
-            categoriaExecutiva: formExecutiva,
-            grupoOperacional: formGrupo
-          });
-        }
+        await db.categoryRules.put({
+          ...(existingRule?.id ? { id: existingRule.id } : {}),
+          tipo: "codigo",
+          chave: code,
+          categoriaExecutiva: formExecutiva,
+          grupoOperacional: formGrupo
+        });
 
         // 2. Atualiza o cache do ServiceClassification
         const { itemLC116, descricaoLC116, nbs, descricaoNbs } = resolverServicoFiscal(code);
@@ -487,7 +510,7 @@ function CategoriasRouteComponent() {
           categoriaExecutiva: formExecutiva,
           grupoOperacional: formGrupo,
           codigoLc116: itemLC116 || (code.length <= 4 ? code : ""),
-          descricaoLc116,
+          descricaoLc116: descricaoLC116,
           codigoNbs: nbs || (code.length >= 9 ? code : ""),
           descricaoNbs,
           origem: "Manual",
@@ -500,7 +523,7 @@ function CategoriasRouteComponent() {
         updatedClassifications.push(classificationUpdate);
 
         // 3. Grava o log de auditoria
-        await db.auditLogs.put({
+        await db.auditLogs.add({
           codigo: code,
           classificacaoAnterior: oldClass,
           classificacaoNova: newClass,
@@ -637,6 +660,45 @@ function CategoriasRouteComponent() {
     } catch (err) {
       console.error("Erro ao deletar regra:", err);
       toast.error("Erro ao deletar regra.");
+    }
+  };
+
+  const handleAddCustomCategory = async () => {
+    const name = newCustomCategoryName.trim();
+    if (!name) {
+      toast.error("Por favor, informe o nome da categoria.");
+      return;
+    }
+
+    if (DEFAULT_CATEGORIAS_EXECUTIVAS.map(c => c.toLowerCase()).includes(name.toLowerCase())) {
+      toast.error("Esta categoria já existe por padrão no sistema.");
+      return;
+    }
+
+    try {
+      await db.customCategories.put({ id: name, nome: name });
+      setNewCustomCategoryName("");
+      toast.success("Categoria customizada adicionada com sucesso!");
+      if (session?.user?.id) {
+        SyncManager.syncAll(session.user.id);
+      }
+    } catch (err) {
+      console.error("Erro ao adicionar categoria customizada:", err);
+      toast.error("Erro ao salvar categoria.");
+    }
+  };
+
+  const handleDeleteCustomCategory = async (id: string) => {
+    if (!confirm(`Tem certeza que deseja excluir a categoria customizada "${id}"?`)) return;
+    try {
+      await db.customCategories.delete(id);
+      toast.success("Categoria customizada removida.");
+      if (session?.user?.id) {
+        SyncManager.syncAll(session.user.id);
+      }
+    } catch (err) {
+      console.error("Erro ao remover categoria customizada:", err);
+      toast.error("Erro ao excluir categoria.");
     }
   };
 
@@ -921,36 +983,49 @@ function CategoriasRouteComponent() {
         >
           Histórico de Auditoria
         </button>
+
+        <button
+          onClick={() => { setTabActive("categories_groups"); setSearchCat(""); setSelectedCodes(new Set()); }}
+          className={`px-4 py-2.5 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
+            tabActive === "categories_groups"
+              ? "border-indigo-500 text-indigo-600 dark:text-indigo-400 bg-indigo-500/5 rounded-t-lg"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Categorias & Grupos
+        </button>
       </div>
 
       {/* Main Content Area */}
       <div className="space-y-4">
         
         {/* Search / Filter Utility Row */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-card border border-border p-4 rounded-xl">
-          <div className="relative w-full sm:max-w-xs">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-            <input
-              type="text"
-              placeholder="Buscar..."
-              value={searchCat}
-              onChange={(e) => setSearchCat(e.target.value)}
-              className="pl-9 pr-3 h-9 text-sm rounded-lg border border-border bg-muted/30 outline-hidden focus:ring-2 focus:ring-indigo-500/30 w-full text-foreground"
-            />
-          </div>
+        {tabActive !== "categories_groups" && (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-card border border-border p-4 rounded-xl">
+            <div className="relative w-full sm:max-w-xs">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Buscar..."
+                value={searchCat}
+                onChange={(e) => setSearchCat(e.target.value)}
+                className="pl-9 pr-3 h-9 text-sm rounded-lg border border-border bg-muted/30 outline-hidden focus:ring-2 focus:ring-indigo-500/30 w-full text-foreground"
+              />
+            </div>
 
-          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-            {tabActive === "rules" && (
-              <button
-                onClick={() => handleOpenRuleDialog(null)}
-                className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold h-9 px-3 rounded-lg transition-colors cursor-pointer"
-              >
-                <Plus className="h-4 w-4" />
-                Criar Regra
-              </button>
-            )}
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+              {tabActive === "rules" && (
+                <button
+                  onClick={() => handleOpenRuleDialog(null)}
+                  className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold h-9 px-3 rounded-lg transition-colors cursor-pointer"
+                >
+                  <Plus className="h-4 w-4" />
+                  Criar Regra
+                </button>
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Tab Content: Classifications */}
         {tabActive === "classifications" && (
@@ -1306,6 +1381,103 @@ function CategoriasRouteComponent() {
             )}
           </div>
         )}
+        {/* Tab Content: Categories and Operational Groups directory */}
+        {tabActive === "categories_groups" && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Seção 1: Categorias Executivas */}
+            <div className="bg-card border border-border rounded-2xl p-5 shadow-xs flex flex-col space-y-4">
+              <div>
+                <h3 className="text-sm font-bold text-foreground">Categorias Executivas (Nível 1)</h3>
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                  Visualização das categorias de faturamento e serviços do sistema.
+                </p>
+              </div>
+
+              {/* Form para Adicionar Categoria Customizada */}
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Nova categoria customizada..."
+                  value={newCustomCategoryName}
+                  onChange={(e) => setNewCustomCategoryName(e.target.value)}
+                  className="flex-1 text-xs rounded-lg border border-border bg-muted/20 h-9 px-3 outline-hidden focus:ring-2 focus:ring-indigo-500/30 text-foreground"
+                />
+                <button
+                  onClick={handleAddCustomCategory}
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold h-9 px-4 rounded-lg transition-colors cursor-pointer flex items-center gap-1 flex-shrink-0"
+                >
+                  <Plus className="h-4 w-4" />
+                  Adicionar
+                </button>
+              </div>
+
+              {/* Lista de Categorias */}
+              <div className="border border-border rounded-xl overflow-hidden divide-y divide-border max-h-[400px] overflow-y-auto bg-card">
+                {DEFAULT_CATEGORIAS_EXECUTIVAS.map(cat => (
+                  <div key={cat} className="px-4 py-2.5 flex items-center justify-between text-xs hover:bg-muted/30">
+                    <span className="font-semibold text-foreground">{cat}</span>
+                    <span className="text-[9px] font-bold bg-muted-foreground/10 text-muted-foreground px-2 py-0.5 rounded-md border border-border">
+                      Sistema
+                    </span>
+                  </div>
+                ))}
+                {(customCategories || []).map(cat => (
+                  <div key={cat.id} className="px-4 py-2.5 flex items-center justify-between text-xs hover:bg-muted/30 bg-indigo-500/5">
+                    <span className="font-bold text-indigo-600 dark:text-indigo-400">{cat.nome}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[9px] font-bold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded-md border border-indigo-500/20">
+                        Customizada
+                      </span>
+                      <button
+                        onClick={() => handleDeleteCustomCategory(cat.id)}
+                        className="text-muted-foreground hover:text-destructive p-1 rounded-md hover:bg-muted/80 transition-colors cursor-pointer"
+                        title="Excluir Categoria"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Seção 2: Grupos Operacionais */}
+            <div className="bg-card border border-border rounded-2xl p-5 shadow-xs flex flex-col space-y-4">
+              <div>
+                <h3 className="text-sm font-bold text-foreground">Diretório de Grupos Operacionais (Nível 2)</h3>
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                  Lista de grupos operacionais mapeados para cada categoria executiva em uso.
+                </p>
+              </div>
+
+              <div className="border border-border rounded-xl overflow-hidden divide-y divide-border max-h-[445px] overflow-y-auto bg-card">
+                {Object.keys(gruposPorCategoriaMap).length === 0 ? (
+                  <div className="p-8 text-center text-xs text-muted-foreground">
+                    Nenhum grupo operacional registrado nas classificações locais.
+                  </div>
+                ) : (
+                  Object.entries(gruposPorCategoriaMap).map(([executiva, grupos]) => (
+                    <div key={executiva} className="p-4 flex flex-col space-y-2">
+                      <h4 className="text-xs font-bold text-foreground border-b border-border/50 pb-1.5 flex items-center justify-between">
+                        <span>{executiva}</span>
+                        <span className="text-[9px] text-muted-foreground font-mono font-semibold bg-muted px-1.5 py-0.5 rounded-md border border-border">
+                          {grupos.size} grupo(s)
+                        </span>
+                      </h4>
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        {Array.from(grupos).map(g => (
+                          <span key={g} className="bg-muted text-muted-foreground border border-border px-2 py-1 rounded-lg text-[10px] font-semibold">
+                            {g}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Floating Bulk Action Bar */}
@@ -1337,8 +1509,8 @@ function CategoriasRouteComponent() {
       {/* Dialog: Reclassify / Edit classification */}
       {isEditDialogOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
-          <div className="bg-card border border-border w-full max-w-lg rounded-2xl shadow-xl overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="border-b border-border px-6 py-4 flex items-center justify-between">
+          <div className="bg-card border border-border w-full max-w-lg rounded-2xl shadow-xl overflow-hidden flex flex-col max-h-[90vh] sm:max-h-[85vh] animate-in zoom-in-95 duration-200">
+            <div className="border-b border-border px-6 py-4 flex items-center justify-between flex-shrink-0">
               <div>
                 <h3 className="text-base font-bold text-foreground">
                   {editingCodes.length === 1 ? "Reclassificar Serviço" : "Classificar Serviços em Lote"}
@@ -1355,7 +1527,7 @@ function CategoriasRouteComponent() {
               </button>
             </div>
 
-            <div className="px-6 py-5 space-y-4">
+            <div className="px-6 py-5 space-y-4 overflow-y-auto flex-1">
               {editingCodes.length === 1 ? (
                 <div className="p-3 bg-muted/40 border border-border rounded-xl">
                   <p className="text-[10px] font-bold text-muted-foreground uppercase">Código do Serviço</p>
@@ -1388,7 +1560,7 @@ function CategoriasRouteComponent() {
                       onChange={(e) => setFormExecutiva(e.target.value)}
                       className="w-full text-xs rounded-lg border border-border bg-card h-9 px-3 outline-hidden focus:ring-2 focus:ring-indigo-500/30 text-foreground cursor-pointer appearance-none"
                     >
-                      {DEFAULT_CATEGORIAS_EXECUTIVAS.map(cat => (
+                      {categoriasExecutivas.map(cat => (
                         <option key={cat} value={cat}>{cat}</option>
                       ))}
                     </select>
@@ -1466,8 +1638,8 @@ function CategoriasRouteComponent() {
       {/* Dialog: Create / Edit Rule */}
       {isRuleDialogOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
-          <div className="bg-card border border-border w-full max-w-lg rounded-2xl shadow-xl overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="border-b border-border px-6 py-4 flex items-center justify-between">
+          <div className="bg-card border border-border w-full max-w-lg rounded-2xl shadow-xl overflow-hidden flex flex-col max-h-[90vh] sm:max-h-[85vh] animate-in zoom-in-95 duration-200">
+            <div className="border-b border-border px-6 py-4 flex items-center justify-between flex-shrink-0">
               <div>
                 <h3 className="text-base font-bold text-foreground">
                   {editingRule ? "Editar Regra de Aprendizado" : "Nova Regra de Aprendizado"}
@@ -1484,7 +1656,7 @@ function CategoriasRouteComponent() {
               </button>
             </div>
 
-            <div className="px-6 py-5 space-y-4">
+            <div className="px-6 py-5 space-y-4 overflow-y-auto flex-1">
               <div className="grid grid-cols-1 gap-4">
                 <div>
                   <label className="text-xs font-bold text-muted-foreground uppercase block mb-1.5">
@@ -1537,7 +1709,7 @@ function CategoriasRouteComponent() {
                       onChange={(e) => setRuleExecutiva(e.target.value)}
                       className="w-full text-xs rounded-lg border border-border bg-card h-9 px-3 outline-hidden focus:ring-2 focus:ring-indigo-500/30 text-foreground cursor-pointer appearance-none"
                     >
-                      {DEFAULT_CATEGORIAS_EXECUTIVAS.map(cat => (
+                      {categoriasExecutivas.map(cat => (
                         <option key={cat} value={cat}>{cat}</option>
                       ))}
                     </select>

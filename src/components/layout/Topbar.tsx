@@ -155,7 +155,7 @@ export function Topbar({ rightPanelOpen, setRightPanelOpen }: TopbarProps) {
             {session ? (
               <>
                 <button
-                  onClick={() => SyncManager.syncAll(session.user.id)}
+                  onClick={() => SyncManager.syncAll(session.user.id, true)}
                   className="h-8 hover:bg-muted px-2.5 rounded-xl flex items-center gap-1.5 text-emerald-500 hover:text-emerald-600 transition-colors cursor-pointer border border-emerald-500/10 bg-emerald-500/5"
                   title={`Sincronização em nuvem ativa. ${totalDocumentos} documentos locais estão em conformidade com a nuvem. Clique para sincronizar agora.`}
                 >
@@ -187,7 +187,7 @@ export function Topbar({ rightPanelOpen, setRightPanelOpen }: TopbarProps) {
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator className="my-1 border-t border-border" />
                     <DropdownMenuItem
-                      onClick={() => SyncManager.syncAll(session.user.id)}
+                      onClick={() => SyncManager.syncAll(session.user.id, true)}
                       className="flex items-center gap-2 px-2.5 py-2 text-xs rounded-lg hover:bg-muted cursor-pointer transition-colors"
                     >
                       <RefreshCw className="h-3.5 w-3.5" />

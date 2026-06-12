@@ -211,11 +211,26 @@ export function obterGrupoSintetico(categoria: string): string {
   if (!categoria) return "Sem categoria";
   const key = categoria.trim().toLowerCase();
 
+  const defaultKeys = [
+    "saúde", "tecnologia", "educação", "consultoria", "engenharia", 
+    "jurídico", "construção civil", "serviços financeiros", 
+    "marketing", "logística", "administração", "outros serviços"
+  ];
+  if (defaultKeys.includes(key)) {
+    const idx = defaultKeys.indexOf(key);
+    const names = [
+      "Saúde", "Tecnologia", "Educação", "Consultoria", "Engenharia", 
+      "Jurídico", "Construção Civil", "Serviços Financeiros", 
+      "Marketing", "Logística", "Administração", "Outros Serviços"
+    ];
+    return names[idx];
+  }
+
   if (categoriaParaGrupoSinteticoMap.has(key)) {
     return categoriaParaGrupoSinteticoMap.get(key)!;
   }
 
-  return "Serviços Diversos";
+  return categoria;
 }
 
 export function normalizeString(str: string): string {
