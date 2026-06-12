@@ -18,6 +18,8 @@ import { useLayoutShell } from "./LayoutShell";
 import { useGlobalFilters } from "@/store/useGlobalFilters";
 import { useAuthStore } from "@/store/useAuthStore";
 import { SyncManager } from "@/lib/data-access/SyncManager";
+import { db } from "@/lib/db";
+import { useLiveQuery } from "dexie-react-hooks";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -47,6 +49,10 @@ export function Topbar({ rightPanelOpen, setRightPanelOpen }: TopbarProps) {
 
   const { searchCliente, setSearchCliente } = useGlobalFilters();
   const { session, profile, signOut, isSupabaseConfigured } = useAuthStore();
+
+  const totalNotasEmitidas = useLiveQuery(() => db.notas.count()) ?? 0;
+  const totalNotasTomadas = useLiveQuery(() => db.notasTomadas.count()) ?? 0;
+  const totalDocumentos = totalNotasEmitidas + totalNotasTomadas;
 
   const getTitle = (path: string) => {
     switch (path) {
@@ -150,10 +156,13 @@ export function Topbar({ rightPanelOpen, setRightPanelOpen }: TopbarProps) {
               <>
                 <button
                   onClick={() => SyncManager.syncAll(session.user.id)}
-                  className="h-8 w-8 rounded-lg hover:bg-muted flex items-center justify-center text-emerald-500 hover:text-emerald-600 transition-colors cursor-pointer"
-                  title="Sincronização em nuvem ativa. Clique para forçar sync."
+                  className="h-8 hover:bg-muted px-2.5 rounded-xl flex items-center gap-1.5 text-emerald-500 hover:text-emerald-600 transition-colors cursor-pointer border border-emerald-500/10 bg-emerald-500/5"
+                  title={`Sincronização em nuvem ativa. ${totalDocumentos} documentos locais estão em conformidade com a nuvem. Clique para sincronizar agora.`}
                 >
                   <Cloud className="h-4.5 w-4.5" />
+                  <span className="text-[10px] font-bold font-mono bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 px-1.5 py-0.5 rounded-md border border-emerald-500/20">
+                    {totalDocumentos}
+                  </span>
                 </button>
 
                 <DropdownMenu>
@@ -197,8 +206,11 @@ export function Topbar({ rightPanelOpen, setRightPanelOpen }: TopbarProps) {
               </>
             ) : (
               <>
-                <div className="h-8 w-8 rounded-lg flex items-center justify-center text-slate-400" title="Trabalhando em modo local (Offline)">
+                <div className="h-8 hover:bg-muted px-2.5 rounded-xl flex items-center gap-1.5 text-slate-400 hover:text-foreground transition-all cursor-pointer border border-border/40" title={`Trabalhando em modo local (Offline). ${totalDocumentos} documentos salvos no navegador.`}>
                   <CloudOff className="h-4.5 w-4.5" />
+                  <span className="text-[10px] font-bold font-mono bg-muted border border-border px-1.5 py-0.5 rounded-md text-muted-foreground">
+                    {totalDocumentos}
+                  </span>
                 </div>
                 <Link
                   to="/login"

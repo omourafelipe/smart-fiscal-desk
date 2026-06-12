@@ -3,6 +3,18 @@ import { useState, useMemo, useEffect } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { z } from "zod";
 import { db, type ServiceClassification, type CategoryRule, type AuditLog } from "@/lib/db";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip as RechartsTooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
+} from "recharts";
 import { useAuthStore } from "@/store/useAuthStore";
 import { SyncManager } from "@/lib/data-access/SyncManager";
 import {
@@ -263,6 +275,89 @@ function CategoriasRouteComponent() {
     const autoCount = rows.filter(r => r.origem !== "Manual" && r.origem !== "Não Classificada").length;
     return Math.round((autoCount / totalServices) * 100);
   }, [rows, totalServices]);
+
+  // Aggregated data for Category Chart (Faturamento by Categoria Executiva)
+  const categoryChartData = useMemo(() => {
+    if (!rows || rows.length === 0) return [];
+    const map = new Map<string, { faturamento: number; count: number }>();
+    
+    rows.forEach((r) => {
+      const cat = r.categoriaExecutiva || "Outros Serviços";
+      const val = r.valorFaturado || 0;
+      
+      const current = map.get(cat) || { faturamento: 0, count: 0 };
+      current.faturamento += val;
+      current.count += 1;
+      map.set(cat, current);
+    });
+
+    const hasFaturamento = Array.from(map.values()).some((v) => v.faturamento > 0);
+
+    return Array.from(map.entries())
+      .map(([name, stats]) => ({
+        name,
+        value: hasFaturamento ? stats.faturamento : stats.count,
+        faturamento: stats.faturamento,
+        count: stats.count,
+      }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 10); // Show top 10 categories
+  }, [rows]);
+
+  // Aggregated data for Status Chart (Classification status breakdown)
+  const statusChartData = useMemo(() => {
+    if (!rows || rows.length === 0) return [];
+    
+    let automaticoVal = 0;
+    let manualVal = 0;
+    let revisaoVal = 0;
+    
+    let automaticoCount = 0;
+    let manualCount = 0;
+    let revisaoCount = 0;
+
+    rows.forEach((r) => {
+      const val = r.valorFaturado || 0;
+      const needsReview = r.confianca < 90 || r.origem === "Não Classificada" || r.conflito || r.ausenteOficial;
+      
+      if (needsReview) {
+        revisaoVal += val;
+        revisaoCount += 1;
+      } else if (r.origem === "Manual") {
+        manualVal += val;
+        manualCount += 1;
+      } else {
+        automaticoVal += val;
+        automaticoCount += 1;
+      }
+    });
+
+    const hasFaturamento = (automaticoVal + manualVal + revisaoVal) > 0;
+
+    return [
+      {
+        name: "Automatizada",
+        value: hasFaturamento ? automaticoVal : automaticoCount,
+        faturamento: automaticoVal,
+        count: automaticoCount,
+        fill: "#6366f1",
+      },
+      {
+        name: "Manual",
+        value: hasFaturamento ? manualVal : manualCount,
+        faturamento: manualVal,
+        count: manualCount,
+        fill: "#10b981",
+      },
+      {
+        name: "Revisão Necessária",
+        value: hasFaturamento ? revisaoVal : revisaoCount,
+        faturamento: revisaoVal,
+        count: revisaoCount,
+        fill: "#f59e0b",
+      },
+    ].filter(d => d.value > 0);
+  }, [rows]);
 
   // Filtered rows for the active tab tables
   const filteredRows = useMemo(() => {
@@ -610,6 +705,166 @@ function CategoriasRouteComponent() {
             <p className="text-2xl font-extrabold text-foreground mt-0.5">
               R$ {totalValorFaturado.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Visual Analytics Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Bar Chart: Faturamento por Categoria */}
+        <div className="bg-card border border-border rounded-2xl p-5 shadow-xs lg:col-span-8 flex flex-col justify-between transition-colors duration-300">
+          <div>
+            <h3 className="text-xs font-bold text-foreground">Faturamento por Categoria Executiva</h3>
+            <p className="text-[10px] text-muted-foreground mt-0.5">
+              Top categorias com maior volume de faturamento ou serviços (inclui pendências de revisão)
+            </p>
+          </div>
+          <div className="h-[280px] mt-4 flex-1">
+            {categoryChartData.length === 0 ? (
+              <div className="h-full flex items-center justify-center text-xs text-muted-foreground">
+                Sem dados de classificação para exibir. Importe arquivos XML primeiro.
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={categoryChartData}
+                  layout="vertical"
+                  margin={{ top: 10, right: 30, left: 10, bottom: 5 }}
+                >
+                  <XAxis
+                    type="number"
+                    stroke="var(--color-muted-foreground)"
+                    fontSize={10}
+                    axisLine={false}
+                    tickLine={false}
+                    tickFormatter={(v) =>
+                      v >= 1000000 ? `R$ ${(v / 1000000).toFixed(1)}M` : v >= 1000 ? `R$ ${(v / 1000).toFixed(0)}k` : `R$ ${v}`
+                    }
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="name"
+                    stroke="var(--color-muted-foreground)"
+                    fontSize={10}
+                    axisLine={false}
+                    tickLine={false}
+                    width={130}
+                    tickFormatter={(name) => {
+                      if (name.length > 20) return `${name.substring(0, 18)}...`;
+                      return name;
+                    }}
+                  />
+                  <RechartsTooltip
+                    formatter={(v, name, props) => {
+                      const fVal = props.payload.faturado;
+                      const cVal = props.payload.count;
+                      return [
+                        fVal > 0 ? fVal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : `${cVal} serviço(s)`,
+                        fVal > 0 ? "Faturamento" : "Qtd. Serviços"
+                      ];
+                    }}
+                    contentStyle={{
+                      backgroundColor: "var(--color-popover)",
+                      borderColor: "var(--color-border)",
+                      borderRadius: 12,
+                      color: "var(--color-foreground)",
+                      boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.05)",
+                      fontSize: "10px"
+                    }}
+                  />
+                  <Bar dataKey="value" fill="#6366f1" radius={[0, 4, 4, 0]} name="Valor">
+                    {categoryChartData.map((entry, index) => {
+                      const colors = [
+                        "#6366f1", // Indigo
+                        "#14b8a6", // Teal
+                        "#f59e0b", // Amber
+                        "#ec4899", // Pink
+                        "#8b5cf6", // Violet
+                        "#ef4444", // Red
+                        "#06b6d4", // Cyan
+                        "#10b981", // Emerald
+                        "#3b82f6", // Blue
+                        "#64748b"  // Slate
+                      ];
+                      return <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />;
+                    })}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </div>
+
+        {/* Pie Chart: Status de Classificação */}
+        <div className="bg-card border border-border rounded-2xl p-5 shadow-xs lg:col-span-4 flex flex-col justify-between transition-colors duration-300">
+          <div>
+            <h3 className="text-xs font-bold text-foreground">Status de Classificação</h3>
+            <p className="text-[10px] text-muted-foreground mt-0.5">
+              Proporção de faturamento ou volume por necessidade de revisão
+            </p>
+          </div>
+          <div className="h-[180px] mt-4 flex items-center justify-center relative">
+            {statusChartData.length === 0 ? (
+              <div className="text-xs text-muted-foreground">Sem dados de status.</div>
+            ) : (
+              <>
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={statusChartData}
+                      dataKey="value"
+                      nameKey="name"
+                      innerRadius={55}
+                      outerRadius={75}
+                      paddingAngle={3}
+                      stroke="var(--color-card)"
+                      strokeWidth={3}
+                    >
+                      {statusChartData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.fill} />
+                      ))}
+                    </Pie>
+                    <RechartsTooltip
+                      formatter={(v, name, props) => {
+                        const fVal = props.payload.faturado;
+                        const cVal = props.payload.count;
+                        return [
+                          fVal > 0 ? fVal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : `${cVal} serviço(s)`,
+                          fVal > 0 ? "Faturamento" : "Qtd. Serviços"
+                        ];
+                      }}
+                      contentStyle={{
+                        backgroundColor: "var(--color-popover)",
+                        borderColor: "var(--color-border)",
+                        borderRadius: 12,
+                        color: "var(--color-foreground)",
+                        boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.05)",
+                        fontSize: "10px"
+                      }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                  <span className="text-[9px] font-bold text-muted-foreground uppercase">Serviços</span>
+                  <span className="text-sm font-extrabold text-foreground">{totalServices}</span>
+                </div>
+              </>
+            )}
+          </div>
+          <div className="flex flex-col gap-2 mt-4 pt-4 border-t border-border/50 text-[10px]">
+            {statusChartData.map((item, idx) => (
+              <div key={idx} className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-muted-foreground">
+                  <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: item.fill }} />
+                  <span className="font-semibold text-foreground/90">{item.name}</span>
+                </div>
+                <div className="text-right flex flex-col items-end">
+                  <span className="font-bold text-foreground">
+                    {item.faturado > 0 ? item.faturado.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : `${item.count} un`}
+                  </span>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </div>

@@ -21,7 +21,13 @@ export class SyncManager {
       // 2. Pull dos dados do Supabase para o banco local (Download)
       await this.pullCloudToLocal(userId);
 
-      toast.success("Dados sincronizados com a nuvem com sucesso!", { id: toastId });
+      const notasCount = await db.notas.count();
+      const tomadasCount = await db.notasTomadas.count();
+
+      toast.success(
+        `Sincronização concluída! ${notasCount} notas emitidas e ${tomadasCount} notas tomadas estão em conformidade com a nuvem.`,
+        { id: toastId }
+      );
     } catch (err: any) {
       console.error("Erro durante a sincronização:", err);
       toast.error(`Falha na sincronização: ${err.message || "Erro desconhecido"}`, { id: toastId });
