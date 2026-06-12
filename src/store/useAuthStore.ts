@@ -59,6 +59,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
         // Só rodamos a limpeza se tínhamos um usuário ativo antes para evitar loop na inicialização
         const currentUser = get().user;
         if (currentUser) {
+          set({ user: null, session: null, profile: null });
           await get().signOut();
         } else {
           set({ session: null, user: null, profile: null, loading: false });
@@ -238,7 +239,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
         }
 
         // 6. Resetar estado local do Auth Store
-        set({ session: null, user: null, profile: null, loading: false });
+        set({ session: null, user: null, profile: null, loading: false, initialized: false });
         
         toast.success("Você saiu da sua conta.");
 

@@ -141,12 +141,19 @@ function RootComponent() {
   const state = router.state;
   const isLoginPage = state.location.pathname === "/login";
 
-  const { session, checkSession, isSupabaseConfigured } = useAuthStore();
+  const { session, checkSession, isSupabaseConfigured, loading, initialized } = useAuthStore();
   const { groups, loading: tenantLoading } = useTenantStore();
 
   useEffect(() => {
     checkSession();
   }, [checkSession]);
+
+  useEffect(() => {
+    const pathname = router.state.location.pathname;
+    if (isSupabaseConfigured && !session && !loading && initialized && pathname !== "/login") {
+      router.navigate({ to: "/login", replace: true });
+    }
+  }, [session, isSupabaseConfigured, loading, initialized]);
 
   useEffect(() => {
     if (session?.user?.id) {

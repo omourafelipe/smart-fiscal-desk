@@ -177,7 +177,7 @@ export const useTenantStore = create<TenantState>((set, get) => ({
           selectedGroup = groupsList.find(g => g.id === storedGroupId) || null;
         }
         if (!selectedGroup) {
-          selectedGroup = groupsList[0];
+          selectedGroup = groupsList.find(g => g.owner_user_id === user.id) || groupsList[0];
         }
       }
 
@@ -209,6 +209,12 @@ export const useTenantStore = create<TenantState>((set, get) => ({
       if (membersError) throw membersError;
       const membersList = membersData || [];
 
+      const dbRole = roleMap.get(selectedGroup.id) || null;
+      let activeRole = toStoreRole(dbRole);
+      if (selectedGroup.owner_user_id === user.id) {
+        activeRole = "Owner";
+      }
+
       // Fetch member profiles
       if (membersList.length > 0) {
         const userIds = membersList.map(m => m.user_id);
@@ -227,20 +233,8 @@ export const useTenantStore = create<TenantState>((set, get) => ({
           }
         }));
 
-        set({ members: mappedMembers as GroupMember[] });
-
-        // Set user's active role (with translation and owner fallback)
-        const dbRole = roleMap.get(selectedGroup.id) || null;
-        let activeRole = toStoreRole(dbRole);
-        if (selectedGroup.owner_user_id === user.id) {
-          activeRole = "Owner";
-        }
-        set({ activeRole });
+        set({ members: mappedMembers as GroupMember[], activeRole });
       } else {
-        let activeRole: 'Owner' | 'Admin' | 'Analyst' | 'Viewer' | null = null;
-        if (selectedGroup.owner_user_id === user.id) {
-          activeRole = "Owner";
-        }
         set({ members: [], activeRole });
       }
 
