@@ -244,10 +244,12 @@ export function FiscalAssistantDrawer({ assistantOpen, setAssistantOpen }: Fisca
       const historyToSend = messages.slice(1).map(m => ({ role: m.role, content: m.content })); // skip welcome
 
       const reply = await perguntarAoAssistente({
-        message: query,
-        history: historyToSend,
-        contextSummary: contextSummary,
-        userApiKey: savedKey
+        data: {
+          message: query,
+          history: historyToSend,
+          contextSummary: contextSummary,
+          userApiKey: savedKey
+        }
       });
 
       const assistantMsg: Message = {

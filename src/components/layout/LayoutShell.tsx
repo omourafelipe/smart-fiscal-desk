@@ -8,7 +8,7 @@ import { FiscalAssistantDrawer } from "../shared/FiscalAssistantDrawer";
 
 export interface ActivityLogItem {
   id: string;
-  type: "upload" | "conciliation" | "clear" | "update";
+  type: "upload" | "conciliation" | "clear" | "update" | "export";
   title: string;
   description: string;
   time: Date;

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.21.0";
 import { XMLParser } from "https://esm.sh/fast-xml-parser@4.2.2";
@@ -107,7 +108,7 @@ function getNbsCode(inf: any): string {
   ).trim();
 }
 
-serve(async (req) => {
+serve(async (req: any) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
@@ -182,7 +183,7 @@ serve(async (req) => {
       .eq("group_id", group_id);
 
     const groupCnpjs = new Set(
-      (companies || []).map((c) => c.cnpj.replace(/\D/g, "")).filter(Boolean)
+      (companies || []).map((c: any) => c.cnpj.replace(/\D/g, "")).filter(Boolean)
     );
 
     const xmlList = Array.isArray(xml) ? xml : [xml];

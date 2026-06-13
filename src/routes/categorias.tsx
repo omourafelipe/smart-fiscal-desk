@@ -734,9 +734,11 @@ function CategoriasRouteComponent() {
       const savedKey = localStorage.getItem("anthropic_api_key") || undefined;
       
       const result = await categorizarPorIa({
-        description: desc || code,
-        topCategories,
-        userApiKey: savedKey
+        data: {
+          description: desc || code,
+          topCategories,
+          userApiKey: savedKey
+        }
       });
 
       const { itemLC116, descricaoLC116, nbs, descricaoNbs } = resolverServicoFiscal(code);

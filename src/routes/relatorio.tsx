@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useMemo } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { z } from "zod";

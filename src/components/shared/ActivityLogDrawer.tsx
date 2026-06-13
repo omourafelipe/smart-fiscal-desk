@@ -50,6 +50,7 @@ export function ActivityLogDrawer({ rightPanelOpen, setRightPanelOpen }: Activit
                   conciliation: "bg-purple-500",
                   clear: "bg-rose-500",
                   update: "bg-emerald-500",
+                  export: "bg-teal-500",
                 };
                 return (
                   <div key={act.id} className="relative group animate-in fade-in slide-in-from-top-1 duration-255">
