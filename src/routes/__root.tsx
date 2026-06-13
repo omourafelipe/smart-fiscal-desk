@@ -150,10 +150,16 @@ function RootComponent() {
 
   useEffect(() => {
     const pathname = router.state.location.pathname;
-    if (isSupabaseConfigured && !session && !loading && initialized && pathname !== "/login") {
+    if (
+      isSupabaseConfigured === true &&
+      session === null &&
+      initialized === true &&
+      pathname !== "/login" &&
+      pathname !== "/accept-invite"
+    ) {
       router.navigate({ to: "/login", replace: true });
     }
-  }, [session, isSupabaseConfigured, loading, initialized]);
+  }, [session, isSupabaseConfigured, initialized, router.state.location.pathname]);
 
   useEffect(() => {
     if (session?.user?.id) {

@@ -169,16 +169,12 @@ export const useTenantStore = create<TenantState>((set, get) => ({
 
       // 2. Select active group
       let selectedGroup: Group | null = null;
-      if (groupsList.length === 1) {
-        selectedGroup = groupsList[0];
-      } else if (groupsList.length > 1) {
-        const storedGroupId = typeof window !== "undefined" ? localStorage.getItem("active_group_id") : null;
-        if (storedGroupId) {
-          selectedGroup = groupsList.find(g => g.id === storedGroupId) || null;
-        }
-        if (!selectedGroup) {
-          selectedGroup = groupsList.find(g => g.owner_user_id === user.id) || groupsList[0];
-        }
+      const storedGroupId = typeof window !== "undefined" ? localStorage.getItem("active_group_id") : null;
+      if (storedGroupId) {
+        selectedGroup = groupsList.find(g => g.id === storedGroupId) || null;
+      }
+      if (!selectedGroup && groupsList.length > 0) {
+        selectedGroup = groupsList.find(g => g.owner_user_id === user.id) || groupsList[0];
       }
 
       if (!selectedGroup) {

@@ -13,6 +13,7 @@ import {
   LogOut,
   User as UserIcon,
   RefreshCw,
+  Sparkles,
 } from "lucide-react";
 import { useLayoutShell } from "./LayoutShell";
 import { useGlobalFilters } from "@/store/useGlobalFilters";
@@ -33,9 +34,11 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 interface TopbarProps {
   rightPanelOpen: boolean;
   setRightPanelOpen: (open: boolean) => void;
+  assistantOpen: boolean;
+  setAssistantOpen: (open: boolean) => void;
 }
 
-export function Topbar({ rightPanelOpen, setRightPanelOpen }: TopbarProps) {
+export function Topbar({ rightPanelOpen, setRightPanelOpen, assistantOpen, setAssistantOpen }: TopbarProps) {
   const {
     theme,
     toggleTheme,
@@ -147,6 +150,19 @@ export function Topbar({ rightPanelOpen, setRightPanelOpen }: TopbarProps) {
           title="Ver Atividades"
         >
           <LayoutDashboard className="h-4 w-4" />
+        </button>
+
+        {/* Fiscal Assistant Toggle Button */}
+        <button
+          onClick={() => setAssistantOpen(!assistantOpen)}
+          className={`h-8 w-8 rounded-lg border flex items-center justify-center transition-all cursor-pointer ${
+            assistantOpen 
+              ? "bg-indigo-600 border-indigo-600 text-white shadow-xs hover:bg-indigo-700" 
+              : "border-border hover:bg-muted/80 text-muted-foreground hover:text-foreground"
+          }`}
+          title="Assistente Fiscal IA"
+        >
+          <Sparkles className="h-4 w-4" />
         </button>
 
         {/* Cloud Sync Status & User Profile Dropdown */}

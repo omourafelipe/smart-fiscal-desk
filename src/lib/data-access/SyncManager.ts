@@ -32,6 +32,8 @@ export class SyncManager {
       // Obter contagem total de registros na nuvem para progresso preciso
       updateProgress("Calculando total de registros na nuvem...");
       let totalToSync = 0;
+      let totalEmitidasCloud = 0;
+      let totalTomadasCloud = 0;
       
       try {
         let queryEmitidas = supabase.from("nfse_documents").select("id", { count: "exact", head: true });
@@ -50,7 +52,9 @@ export class SyncManager {
           queryTomadas
         ]);
         
-        totalToSync = (resEmitidas.count || 0) + (resTomadas.count || 0);
+        totalEmitidasCloud = resEmitidas.count || 0;
+        totalTomadasCloud = resTomadas.count || 0;
+        totalToSync = totalEmitidasCloud + totalTomadasCloud;
       } catch (err) {
         console.error("Erro ao obter contagem de registros na nuvem:", err);
       }
@@ -71,29 +75,39 @@ export class SyncManager {
       const reportPullProgress = (tableKey: string, count: number) => {
         downloadedMap.set(tableKey, count);
         
-        let totalDownloaded = 0;
-        downloadedMap.forEach((val) => {
-          totalDownloaded += val;
-        });
-        
-        const elapsed = Date.now() - startTime;
-        let progressMsg = `Sincronizando: ${totalDownloaded}`;
-        
-        if (totalToSync > 0) {
-          const percent = Math.min(100, Math.round((totalDownloaded / totalToSync) * 100));
-          const speed = totalDownloaded / elapsed; // registros por ms
-          const remaining = totalToSync - totalDownloaded;
-          const etaSeconds = speed > 0 ? Math.round(remaining / (speed * 1000)) : 0;
-          
-          progressMsg = `Sincronizando: ${totalDownloaded} de ${totalToSync} (${percent}%)`;
-          if (etaSeconds > 0) {
-            progressMsg += ` - Est. ${etaSeconds}s restantes`;
-          }
+        if (tableKey === "emitidas") {
+          const formattedCount = count.toLocaleString("pt-BR");
+          const formattedTotal = totalEmitidasCloud.toLocaleString("pt-BR");
+          updateProgress(`Baixando notas emitidas… ${formattedCount} / ${formattedTotal}`);
+        } else if (tableKey === "tomadas") {
+          const formattedCount = count.toLocaleString("pt-BR");
+          const formattedTotal = totalTomadasCloud.toLocaleString("pt-BR");
+          updateProgress(`Baixando notas tomadas… ${formattedCount} / ${formattedTotal}`);
         } else {
-          progressMsg += ` registros baixados...`;
+          let totalDownloaded = 0;
+          downloadedMap.forEach((val) => {
+            totalDownloaded += val;
+          });
+          
+          const elapsed = Date.now() - startTime;
+          let progressMsg = `Sincronizando: ${totalDownloaded}`;
+          
+          if (totalToSync > 0) {
+            const percent = Math.min(100, Math.round((totalDownloaded / totalToSync) * 100));
+            const speed = totalDownloaded / elapsed; // registros por ms
+            const remaining = totalToSync - totalDownloaded;
+            const etaSeconds = speed > 0 ? Math.round(remaining / (speed * 1000)) : 0;
+            
+            progressMsg = `Sincronizando: ${totalDownloaded} de ${totalToSync} (${percent}%)`;
+            if (etaSeconds > 0) {
+              progressMsg += ` - Est. ${etaSeconds}s restantes`;
+            }
+          } else {
+            progressMsg += ` registros baixados...`;
+          }
+          
+          updateProgress(progressMsg);
         }
-        
-        updateProgress(progressMsg);
       };
 
       const totalPulled = await this.pullCloudToLocal(userId, reportPullProgress);
@@ -208,9 +222,9 @@ export class SyncManager {
         raw: n.raw,
       }));
 
-      // Upsert em lotes de 100 para evitar payload gigante
-      for (let i = 0; i < mappedNotas.length; i += 100) {
-        const batch = mappedNotas.slice(i, i + 100);
+      // Upsert em lotes de 500 para evitar payload gigante
+      for (let i = 0; i < mappedNotas.length; i += 500) {
+        const batch = mappedNotas.slice(i, i + 500);
         const { error } = await supabase.from("nfse_documents").upsert(batch);
         if (error) throw error;
       }
@@ -248,8 +262,8 @@ export class SyncManager {
         raw: n.raw,
       }));
 
-      for (let i = 0; i < mappedTomadas.length; i += 100) {
-        const batch = mappedTomadas.slice(i, i + 100);
+      for (let i = 0; i < mappedTomadas.length; i += 500) {
+        const batch = mappedTomadas.slice(i, i + 500);
         const { error } = await supabase.from("nfse_documents_tomadas").upsert(batch);
         if (error) throw error;
       }
@@ -302,8 +316,8 @@ export class SyncManager {
         conflito: c.conflito,
         ausente_oficial: c.ausenteOficial,
       }));
-      for (let i = 0; i < mappedClass.length; i += 100) {
-        const batch = mappedClass.slice(i, i + 100);
+      for (let i = 0; i < mappedClass.length; i += 500) {
+        const batch = mappedClass.slice(i, i + 500);
         const { error } = await supabase.from("service_classifications").upsert(batch);
         if (error) throw error;
       }
@@ -393,6 +407,28 @@ export class SyncManager {
       }));
       await db.notas.bulkPut(mappedNotas);
       totalPulled += mappedNotas.length;
+
+      // Comparação da contagem local x nuvem das notas emitidas
+      try {
+        const { useTenantStore } = await import("@/store/useTenantStore");
+        const activeGroupId = useTenantStore.getState().activeGroup?.id;
+        let queryEmitidas = supabase.from("nfse_documents").select("id", { count: "exact", head: true });
+        if (activeGroupId) {
+          queryEmitidas = queryEmitidas.eq("group_id", activeGroupId);
+        } else {
+          queryEmitidas = queryEmitidas.eq("user_id", userId);
+        }
+        const { count, error } = await queryEmitidas;
+        if (!error && count !== null) {
+          const localCount = await db.notas.count();
+          if (localCount !== count) {
+            console.warn(`[SyncManager] Divergência detectada nas Notas Emitidas. Local: ${localCount}, Supabase: ${count}`);
+            toast.warning(`Aviso de Sincronização: Notas Emitidas locais (${localCount}) divergem do total na nuvem (${count}).`);
+          }
+        }
+      } catch (countErr) {
+        console.error("[SyncManager] Erro ao validar contagem de notas emitidas com o Supabase:", countErr);
+      }
     }
 
     // --- 2. Baixar Notas Tomadas ---

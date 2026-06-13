@@ -18,7 +18,7 @@ import {
   Bar,
   Legend,
 } from "recharts";
-import { AlertCircle, FileSpreadsheet, Download, Upload, CheckCircle2, FileJson, X, Search, Filter, TrendingUp, DollarSign, Activity, Settings2, Trash2, Calendar, Building2, ShoppingBag, Loader2, FileText, XCircle, ChevronLeft, ChevronRight } from "lucide-react";
+import { AlertCircle, FileSpreadsheet, Download, Upload, CheckCircle2, FileJson, X, Search, Filter, TrendingUp, DollarSign, Activity, Settings2, Trash2, Calendar, Building2, ShoppingBag, Loader2, FileText, XCircle, ChevronLeft, ChevronRight, Printer } from "lucide-react";
 import { PermissionService } from "@/lib/services/PermissionService";
 import { toast } from "sonner";
 import { db, type NotaFiscalTomada, type ServiceClassification, type CategoryRule } from "@/lib/db";
@@ -94,10 +94,29 @@ function TomadosRouteComponent() {
   const search = Route.useSearch();
   const navigate = useNavigate({ from: Route.id });
 
-  const { addActivity } = useLayoutShell();
+  const { periodType, addActivity } = useLayoutShell();
   const { activeRole } = useTenantStore();
   const canEdit = PermissionService.canEdit(activeRole);
   const [activePieIndex, setActivePieIndex] = useState<number | null>(null);
+
+  const [selectedNotaForPrint, setSelectedNotaForPrint] = useState<NotaFiscalTomada | null>(null);
+
+  const getDateField = useCallback((n: { dhEmi: string; dCompet?: string }) => {
+    if (periodType === "competencia" && n.dCompet) {
+      return n.dCompet.split("T")[0];
+    }
+    return (n.dhEmi || "").split("T")[0];
+  }, [periodType]);
+
+  const handlePrintNota = (n: NotaFiscalTomada) => {
+    setSelectedNotaForPrint(n);
+    setTimeout(() => {
+      document.body.classList.add("print-receipt-mode");
+      window.print();
+      document.body.classList.remove("print-receipt-mode");
+      setSelectedNotaForPrint(null);
+    }, 150);
+  };
 
   // Filters from URL Search Params
   const mesFiltroTomadas = search.mes || "__all__";
@@ -269,11 +288,38 @@ function TomadosRouteComponent() {
     URL.revokeObjectURL(url);
   };
 
+  const handleExportExcel = async () => {
+    // 1. Carregar notas emitidas da base de dados e aplicar os mesmos filtros da página de tomados
+    const emitidas = await db.notas.toArray();
+    const filteredEmitidas = emitidas.filter((n) => {
+      const ds = getDateField(n);
+      if (mesFiltroTomadas !== "__all__" && ds.slice(5, 7) !== mesFiltroTomadas) return false;
+      if (anoFiltroTomadas !== "__all__" && ds.slice(0, 4) !== anoFiltroTomadas) return false;
+      if (empresaFiltroTomadas !== "__all__" && n.cnpjPrestador !== empresaFiltroTomadas) return false;
+      if (searchTomadas) {
+        const query = searchTomadas.toLowerCase().trim();
+        const matchCliente = (n.cliente || "").toLowerCase().includes(query);
+        const matchNFS = (n.nNFSe || "").toLowerCase().includes(query);
+        if (!matchCliente && !matchNFS) return false;
+      }
+      return true;
+    });
+
+    try {
+      const { exportToXlsx } = await import("@/lib/exports/exportXlsx");
+      await exportToXlsx(filteredEmitidas, notasTomValidas, periodType);
+      toast.success("Relatório Excel exportado com sucesso!");
+    } catch (err) {
+      console.error(err);
+      toast.error("Erro ao exportar arquivo Excel.");
+    }
+  };
+
   // ── Derived data ─────────────────────────────────────────
   const notasTomValidasSemCategoria = useMemo(() => {
     return (todasNotasTomadas ?? []).filter((n) => {
       if (n.status !== "válida") return false;
-      const ds = (n.dCompet || n.dhEmi || "").slice(0, 10);
+      const ds = getDateField(n);
       if (mesFiltroTomadas !== "__all__" && ds.slice(5, 7) !== mesFiltroTomadas) return false;
       if (anoFiltroTomadas !== "__all__" && ds.slice(0, 4) !== anoFiltroTomadas) return false;
       if (empresaFiltroTomadas !== "__all__" && n.cnpjTomador !== empresaFiltroTomadas) return false;
@@ -285,7 +331,7 @@ function TomadosRouteComponent() {
       }
       return true;
     });
-  }, [todasNotasTomadas, mesFiltroTomadas, anoFiltroTomadas, empresaFiltroTomadas, searchTomadas]);
+  }, [todasNotasTomadas, mesFiltroTomadas, anoFiltroTomadas, empresaFiltroTomadas, searchTomadas, getDateField]);
 
   const { servicoData, top12Keys } = useMemo(() => {
     const servicoMap = new Map<string, number>();
@@ -332,8 +378,8 @@ function TomadosRouteComponent() {
 
   // Anos/meses disponíveis para filtros
   const anosDisp = useMemo(() => {
-    return Array.from(new Set((todasNotasTomadas ?? []).map((n) => (n.dCompet || n.dhEmi || "").slice(0, 4)).filter(Boolean))).sort().reverse();
-  }, [todasNotasTomadas]);
+    return Array.from(new Set((todasNotasTomadas ?? []).map((n) => getDateField(n).slice(0, 4)).filter(Boolean))).sort().reverse();
+  }, [todasNotasTomadas, getDateField]);
 
   const tomadoresDist = useMemo(() => {
     return Array.from(new Set((todasNotasTomadas ?? []).map((n) => n.cnpjTomador).filter(Boolean)));
@@ -343,14 +389,14 @@ function TomadosRouteComponent() {
   const evolucaoData = useMemo(() => {
     const evolucaoMap = new Map<string, number>();
     notasTomValidas.forEach((n) => {
-      const key = (n.dCompet || n.dhEmi || "").slice(0, 7);
+      const key = getDateField(n).slice(0, 7);
       if (key) evolucaoMap.set(key, (evolucaoMap.get(key) ?? 0) + n.valor);
     });
     return Array.from(evolucaoMap.entries()).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => ({
       label: ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"][parseInt(k.slice(5,7))-1] + "/" + k.slice(2,4),
       valor: v,
     }));
-  }, [notasTomValidas]);
+  }, [notasTomValidas, getDateField]);
 
   // Gráfico C — top 8 fornecedores
   const topFornecedores = useMemo(() => {
@@ -366,7 +412,7 @@ function TomadosRouteComponent() {
   const retData = useMemo(() => {
     const retMap = new Map<string, { ISS: number; IRRF: number; CSPN: number; INSS: number }>();
     notasTomValidas.forEach((n) => {
-      const key = (n.dCompet || n.dhEmi || "").slice(0, 7);
+      const key = getDateField(n).slice(0, 7);
       if (!key) return;
       const e = retMap.get(key) ?? { ISS: 0, IRRF: 0, CSPN: 0, INSS: 0 };
       retMap.set(key, {
@@ -380,7 +426,7 @@ function TomadosRouteComponent() {
       label: ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"][parseInt(k.slice(5,7))-1] + "/" + k.slice(2,4),
       ...v,
     }));
-  }, [notasTomValidas]);
+  }, [notasTomValidas, getDateField]);
 
   // Paginação tabela
   const totalPagesTomadas = Math.ceil(notasTomValidas.length / PAGE_SIZE_TOMADAS);
@@ -751,6 +797,12 @@ function TomadosRouteComponent() {
                 >
                   <Download className="h-3.5 w-3.5" /> Exportar CSV
                 </button>
+                <button
+                  onClick={handleExportExcel}
+                  className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-colors cursor-pointer"
+                >
+                  <FileSpreadsheet className="h-3.5 w-3.5" /> Exportar Excel
+                </button>
                 {canEdit && (
                   <button
                     onClick={async () => {
@@ -788,12 +840,13 @@ function TomadosRouteComponent() {
                 <TableHead className="text-right font-medium text-muted-foreground h-9">PIS</TableHead>
                 <TableHead className="text-right font-medium text-muted-foreground h-9">COFINS</TableHead>
                 <TableHead className="text-right font-medium text-muted-foreground h-9">INSS</TableHead>
+                <TableHead className="font-medium text-muted-foreground h-9 text-center no-print">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {paginatedTomadas.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={16} className="text-center text-muted-foreground py-12 text-xs">
+                  <TableCell colSpan={17} className="text-center text-muted-foreground py-12 text-xs">
                     {(todasNotasTomadas?.length ?? 0) === 0
                       ? "Nenhum serviço tomado importado. Use o botão \"Importar Tomadas (ZIP)\" no cabeçalho para começar."
                       : "Nenhum resultado para os filtros selecionados."}
@@ -833,6 +886,17 @@ function TomadosRouteComponent() {
                     <TableCell className="text-right text-muted-foreground">{n.vlrPis > 0 ? fmtBRL(n.vlrPis) : "—"}</TableCell>
                     <TableCell className="text-right text-muted-foreground">{n.vlrCofins > 0 ? fmtBRL(n.vlrCofins) : "—"}</TableCell>
                     <TableCell className="text-right text-muted-foreground">{n.vlrInss > 0 ? fmtBRL(n.vlrInss) : "—"}</TableCell>
+                    <TableCell className="text-center no-print">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handlePrintNota(n)}
+                        className="h-7 w-7 rounded-lg text-muted-foreground hover:text-foreground cursor-pointer hover:bg-muted"
+                        title="Imprimir Recibo"
+                      >
+                        <Printer className="h-3.5 w-3.5" />
+                      </Button>
+                    </TableCell>
                   </TableRow>
                 );
               })}
@@ -854,6 +918,195 @@ function TomadosRouteComponent() {
           </div>
         )}
       </div>
+
+      {selectedNotaForPrint && (
+        <div className="receipt-container hidden print:block">
+          <style>{`
+            @media print {
+              body.print-receipt-mode aside,
+              body.print-receipt-mode header,
+              body.print-receipt-mode main > *:not(.receipt-container),
+              body.print-receipt-mode .no-print {
+                display: none !important;
+              }
+              body.print-receipt-mode .receipt-container {
+                display: block !important;
+                background: white !important;
+                color: black !important;
+                padding: 1.5cm !important;
+                font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+              }
+            }
+          `}</style>
+          
+          <div className="border-2 border-slate-800 p-6 rounded-lg max-w-[800px] mx-auto bg-white text-slate-900 shadow-sm print:shadow-none print:border print:p-4">
+            {/* Cabecalho */}
+            <div className="flex justify-between items-start border-b border-slate-300 pb-4 mb-6">
+              <div>
+                <h1 className="text-xl font-bold tracking-tight uppercase text-slate-900">Comprovante de Serviço Tomado (NFS-e)</h1>
+                <p className="text-[10px] text-slate-500 mt-1">Smart Fiscal Desk • Documento Auxiliar da NFS-e</p>
+              </div>
+              <div className="text-right">
+                <span className={`inline-flex px-3 py-1 rounded-full text-xs font-bold border ${
+                  selectedNotaForPrint.status === "válida" 
+                    ? "bg-emerald-50 text-emerald-800 border-emerald-300 print:bg-white print:text-emerald-900 print:border-emerald-400" 
+                    : "bg-rose-50 text-rose-800 border-rose-300 print:bg-white print:text-rose-900 print:border-rose-400"
+                }`}>
+                  {selectedNotaForPrint.status === "válida" ? "VÁLIDA" : "CANCELADA"}
+                </span>
+              </div>
+            </div>
+
+            {/* Info Basica */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-slate-50 p-4 rounded-lg border border-slate-200 mb-6 print:bg-slate-50 print:border-slate-200 text-xs">
+              <div>
+                <div className="font-bold text-slate-500 uppercase text-[9px] tracking-wider">Número NFS-e</div>
+                <div className="font-semibold text-slate-900 mt-0.5 font-mono">{selectedNotaForPrint.nNFSe}</div>
+              </div>
+              <div>
+                <div className="font-bold text-slate-500 uppercase text-[9px] tracking-wider">Data de Emissão</div>
+                <div className="font-semibold text-slate-900 mt-0.5">{formatarData(selectedNotaForPrint.dhEmi)}</div>
+              </div>
+              <div>
+                <div className="font-bold text-slate-500 uppercase text-[9px] tracking-wider">Competência</div>
+                <div className="font-semibold text-slate-900 mt-0.5">{selectedNotaForPrint.dCompet ? selectedNotaForPrint.dCompet.slice(0, 7) : "—"}</div>
+              </div>
+              <div>
+                <div className="font-bold text-slate-500 uppercase text-[9px] tracking-wider">Valor Bruto</div>
+                <div className="font-bold text-indigo-700 mt-0.5 font-mono print:text-slate-900">{fmtBRL(selectedNotaForPrint.valor)}</div>
+              </div>
+            </div>
+
+            {/* Prestador / Tomador */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 border-b border-slate-200 pb-6 mb-6">
+              {/* Prestador */}
+              <div className="border border-slate-200 rounded-lg p-4 bg-white print:border-slate-200">
+                <div className="font-extrabold text-[10px] text-slate-500 uppercase tracking-wider border-b border-slate-100 pb-1.5 mb-2.5">
+                  Prestador de Serviços (Fornecedor)
+                </div>
+                <div className="space-y-1.5 text-xs">
+                  <div>
+                    <span className="font-semibold text-slate-500">Razão Social:</span>
+                    <div className="font-bold text-slate-900">{selectedNotaForPrint.nomePrestador || "—"}</div>
+                  </div>
+                  <div>
+                    <span className="font-semibold text-slate-500">CNPJ:</span>
+                    <div className="font-mono text-slate-900 font-semibold">{formatarCnpjCpf(selectedNotaForPrint.cnpjPrestador)}</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Tomador */}
+              <div className="border border-slate-200 rounded-lg p-4 bg-white print:border-slate-200">
+                <div className="font-extrabold text-[10px] text-slate-500 uppercase tracking-wider border-b border-slate-100 pb-1.5 mb-2.5">
+                  Tomador de Serviços (Empresa do Grupo)
+                </div>
+                <div className="space-y-1.5 text-xs">
+                  <div>
+                    <span className="font-semibold text-slate-500">Razão Social / Nome:</span>
+                    <div className="font-bold text-slate-900">
+                      {selectedNotaForPrint.nomeTomador || "—"}
+                    </div>
+                  </div>
+                  <div>
+                    <span className="font-semibold text-slate-500">CNPJ / CPF:</span>
+                    <div className="font-mono text-slate-900 font-semibold">
+                      {formatarCnpjCpf(selectedNotaForPrint.cnpjTomador)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Descricao do Servico */}
+            <div className="border border-slate-200 rounded-lg p-4 mb-6 bg-slate-50/50 print:bg-slate-50/50 text-xs">
+              <div className="font-extrabold text-[10px] text-slate-500 uppercase tracking-wider border-b border-slate-200 pb-1.5 mb-2.5">
+                Discriminação dos Serviços
+              </div>
+              <div className="whitespace-pre-line text-slate-800 leading-relaxed font-mono text-[11px]">
+                {selectedNotaForPrint.servico || "—"}
+              </div>
+              <div className="mt-4 pt-3 border-t border-slate-200 grid grid-cols-2 gap-4 text-[10px]">
+                <div>
+                  <span className="font-semibold text-slate-500 uppercase">Cód. Tributação Nacional:</span>
+                  <span className="font-mono font-semibold text-slate-900 ml-1">
+                    {selectedNotaForPrint.codTribNacional || "—"}
+                  </span>
+                </div>
+                <div>
+                  <span className="font-semibold text-slate-500 uppercase">Chave de Acesso:</span>
+                  <span className="font-mono font-semibold text-slate-900 ml-1 break-all select-all">
+                    {selectedNotaForPrint.chave || "—"}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Quadro de Retencoes / Valores */}
+            <div className="border border-slate-300 rounded-lg overflow-hidden text-xs">
+              <div className="bg-slate-800 text-white font-bold px-4 py-2 uppercase text-[10px] tracking-wider flex justify-between print:bg-slate-800 print:text-white">
+                <span>Detalhamento Financeiro</span>
+                <span>Valores</span>
+              </div>
+              <div className="divide-y divide-slate-200 bg-white">
+                <div className="flex justify-between px-4 py-2">
+                  <span className="font-medium text-slate-600">Valor Bruto do Serviço</span>
+                  <span className="font-bold text-slate-900 font-mono">{fmtBRL(selectedNotaForPrint.valor)}</span>
+                </div>
+
+                <div className="px-4 py-2.5 bg-slate-50/50 print:bg-slate-50/50">
+                  <div className="font-bold text-[9px] text-slate-500 uppercase tracking-wider mb-2">Retenções na Fonte</div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-y-2 gap-x-4 text-[11px]">
+                    <div className="flex justify-between border-r border-slate-100 pr-4">
+                      <span className="text-slate-500">ISS Retido ({selectedNotaForPrint.issRetido})</span>
+                      <span className="font-mono text-slate-700">
+                        {fmtBRL(
+                          selectedNotaForPrint.vlrIssRet !== undefined
+                            ? selectedNotaForPrint.vlrIssRet
+                            : selectedNotaForPrint.vlrIss ?? 0
+                        )}
+                      </span>
+                    </div>
+                    <div className="flex justify-between border-r border-slate-100 pr-4">
+                      <span className="text-slate-500">PIS</span>
+                      <span className="font-mono text-slate-700">{fmtBRL(selectedNotaForPrint.vlrPis ?? 0)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">COFINS</span>
+                      <span className="font-mono text-slate-700">{fmtBRL(selectedNotaForPrint.vlrCofins ?? 0)}</span>
+                    </div>
+                    <div className="flex justify-between border-r border-slate-100 pr-4 pt-1.5 border-t border-slate-100/50">
+                      <span className="text-slate-500">IRRF</span>
+                      <span className="font-mono text-slate-700">{fmtBRL(selectedNotaForPrint.vlrIrrf ?? 0)}</span>
+                    </div>
+                    <div className="flex justify-between border-r border-slate-100 pr-4 pt-1.5 border-t border-slate-100/50">
+                      <span className="text-slate-500">CSLL</span>
+                      <span className="font-mono text-slate-700">{fmtBRL(selectedNotaForPrint.vlrCsll ?? 0)}</span>
+                    </div>
+                    <div className="flex justify-between pt-1.5 border-t border-slate-100/50">
+                      <span className="text-slate-500">INSS</span>
+                      <span className="font-mono text-slate-700">{fmtBRL(selectedNotaForPrint.vlrInss ?? 0)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-between px-4 py-3 bg-slate-900/5 print:bg-slate-100/60 text-sm">
+                  <span className="font-extrabold text-slate-950 uppercase tracking-wide">Valor Líquido Pago</span>
+                  <span className="font-extrabold text-slate-950 font-mono text-base">
+                    {fmtBRL(selectedNotaForPrint.vlrLiquido ?? selectedNotaForPrint.valor)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Rodapé do comprovante */}
+            <div className="text-center text-[9px] text-slate-400 mt-8 pt-4 border-t border-slate-200">
+              <p>Smart Fiscal Desk • Processado localmente via XML NFS-e em {new Date().toLocaleDateString('pt-BR')} às {new Date().toLocaleTimeString('pt-BR')}</p>
+              <p className="mt-1">Este documento é uma representação gráfica simplificada baseada no arquivo XML importado e não substitui a NFS-e original.</p>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

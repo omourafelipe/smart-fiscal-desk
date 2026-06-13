@@ -30,6 +30,9 @@ import {
   Calendar,
   Tag,
   Search,
+  FileSpreadsheet,
+  Printer,
+  AlertTriangle,
 } from "lucide-react";
 
 import { db, type NotaFiscal } from "@/lib/db";
@@ -38,9 +41,12 @@ import { CategoryLabelService } from "@/lib/services/CategoryLabelService";
 import { useLayoutShell } from "@/components/layout/LayoutShell";
 import { useFiscalData } from "@/hooks/useFiscalData";
 import { useInsightsEngine } from "@/hooks/useInsightsEngine";
+import { useAnomalias } from "@/hooks/useAnomalias";
 import { ExecutiveInsights } from "@/components/dashboard/ExecutiveInsights";
 import { BarChartRanking } from "@/components/dashboard/charts/BarChartRanking";
 import { KpiCardNew } from "@/components/shared/KpiCardNew";
+import { UpcomingObligationsWidget } from "@/components/dashboard/UpcomingObligationsWidget";
+import { calcularProximasObrigacoes } from "@/lib/obrigacoes";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/store/useAuthStore";
@@ -195,6 +201,20 @@ function Dashboard() {
   const [activePieIndex1, setActivePieIndex1] = useState<number | null>(null);
   const [activePieIndex2, setActivePieIndex2] = useState<number | null>(null);
 
+  const [selectedNotaForPrint, setSelectedNotaForPrint] = useState<NotaFiscal | null>(null);
+
+  const [obligationsTrigger, setObligationsTrigger] = useState(0);
+
+  const handlePrintNota = (n: NotaFiscal) => {
+    setSelectedNotaForPrint(n);
+    setTimeout(() => {
+      document.body.classList.add("print-receipt-mode");
+      window.print();
+      document.body.classList.remove("print-receipt-mode");
+      setSelectedNotaForPrint(null);
+    }, 150);
+  };
+
   const {
     empresas,
     anos,
@@ -228,12 +248,33 @@ function Dashboard() {
     prevFaturamento,
     prevNotasCount,
     ticketMedio,
+    todasNotasTomadas,
   } = useFiscalData({
     periodType,
     xlsxRows: [],
     keyCol: "",
     statusCol: "",
   });
+
+  const uniqueMuniCodes = useMemo(() => {
+    const set = new Set<string>();
+    notasAtivas.forEach((n) => {
+      if (n.issRetido === "Não" && (n.vlrIss ?? 0) > 0 && n.codTribNacional) {
+        set.add(n.codTribNacional);
+      }
+    });
+    (todasNotasTomadas || []).forEach((n) => {
+      if (n.status === "válida" && n.issRetido === "Sim" && (n.vlrIssRet ?? 0) > 0 && n.codTribNacional) {
+        set.add(n.codTribNacional);
+      }
+    });
+    return Array.from(set);
+  }, [notasAtivas, todasNotasTomadas]);
+
+  const obligations = useMemo(() => {
+    const activeTomadas = (todasNotasTomadas || []).filter((n) => n.status === "válida");
+    return calcularProximasObrigacoes(notasAtivas, activeTomadas, new Date());
+  }, [notasAtivas, todasNotasTomadas, obligationsTrigger]);
 
   const insights = useInsightsEngine({
     faturamento,
@@ -244,6 +285,22 @@ function Dashboard() {
     pieData,
     lineChartData,
   });
+
+  const { activeCompanyAnomaly } = useAnomalias();
+
+  const combinedInsights = useMemo(() => {
+    const list = [...insights];
+    if (activeCompanyAnomaly) {
+      list.unshift({
+        id: "anomaly-alert",
+        type: "warning",
+        title: "Alerta de Anomalia de Faturamento",
+        description: activeCompanyAnomaly.description,
+        icon: AlertTriangle,
+      });
+    }
+    return list;
+  }, [insights, activeCompanyAnomaly]);
 
   // Calculate local chart breakdown data (PJ vs PF type of contracting)
   const pjPfData = useMemo(() => {
@@ -454,6 +511,33 @@ function Dashboard() {
     URL.revokeObjectURL(url);
   };
 
+  const handleExportExcel = async () => {
+    const { empresaFiltro, mesFiltro, anoFiltro } = useGlobalFilters.getState();
+    const filteredTomadas = (todasNotasTomadas || []).filter((n) => {
+      const dateStr = (periodType === "competencia" && n.dCompet ? n.dCompet : n.dhEmi || "");
+      const ds = dateStr.slice(0, 10);
+      if (mesFiltro !== "__all__" && ds.slice(5, 7) !== mesFiltro) return false;
+      if (anoFiltro !== "__all__" && ds.slice(0, 4) !== anoFiltro) return false;
+      if (empresaFiltro !== "__all__" && n.cnpjTomador !== empresaFiltro) return false;
+      if (searchCliente) {
+        const query = searchCliente.toLowerCase().trim();
+        const matchFornecedor = (n.nomePrestador || "").toLowerCase().includes(query);
+        const matchNFS = (n.nNFSe || "").toLowerCase().includes(query);
+        if (!matchFornecedor && !matchNFS) return false;
+      }
+      return true;
+    });
+
+    try {
+      const { exportToXlsx } = await import("@/lib/exports/exportXlsx");
+      await exportToXlsx(notasFiltradas, filteredTomadas, periodType);
+      toast.success("Relatório Excel exportado com sucesso!");
+    } catch (err) {
+      console.error(err);
+      toast.error("Erro ao exportar arquivo Excel.");
+    }
+  };
+
   return (
     <main className="flex-1 p-6 md:p-8 max-w-[1400px] w-full mx-auto space-y-6">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 flex-wrap bg-card p-5 rounded-2xl border border-border shadow-xs transition-colors duration-300">
@@ -490,7 +574,7 @@ function Dashboard() {
         </div>
       </div>
 
-      <ExecutiveInsights insights={insights} />
+      <ExecutiveInsights insights={combinedInsights} />
 
 
 
@@ -507,6 +591,8 @@ function Dashboard() {
               subtext="comparado ao período anterior"
               tone="blue"
               showComparison={hasComparison && !!faturamentoTrend}
+              hasAnomaly={!!activeCompanyAnomaly}
+              anomalyTooltip={activeCompanyAnomaly?.description || ""}
             />
             <KpiCardNew
               label="Plano de Saúde"
@@ -539,51 +625,63 @@ function Dashboard() {
         );
       })()}
 
-      {/* TAXES SUMMARY PANEL */}
-      <div className="bg-card border border-border rounded-2xl p-5 shadow-xs transition-colors duration-300">
-        <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-4">Detalhamento de Impostos & Tributos</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-          {/* ISS Retido */}
-          <div className="p-4 rounded-xl bg-muted/40 border border-border/50 flex items-start justify-between">
-            <div>
-              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">ISS Retido</p>
-              <p className="text-lg font-bold text-foreground mt-1.5">{fmtBRL(issRetidoTotal)}</p>
-              <p className="text-[10px] text-muted-foreground mt-1">Retido na fonte pelo tomador</p>
-            </div>
-            <div className="h-8 w-8 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
-              <Building2 className="h-4.5 w-4.5" />
-            </div>
-          </div>
-
-          {/* ISS a Recolher */}
-          <div className="p-4 rounded-xl bg-muted/40 border border-border/50 flex items-start justify-between">
-            <div>
-              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">ISS a Recolher</p>
-              <p className="text-lg font-bold text-foreground mt-1.5">{fmtBRL(issARecolherTotal)}</p>
-              <p className="text-[10px] text-muted-foreground mt-1">Recolhimento próprio do prestador</p>
-            </div>
-            <div className="h-8 w-8 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center">
-              <Receipt className="h-4.5 w-4.5" />
-            </div>
-          </div>
-
-          {/* Demais Tributos Federais */}
-          <div className="p-4 rounded-xl bg-muted/40 border border-border/50 flex items-start justify-between">
-            <div className="flex-1">
-              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">Tributos Federais</p>
-              <p className="text-lg font-bold text-foreground mt-1.5">{fmtBRL(tributosFederaisTotal)}</p>
-              <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 mt-2 pt-1 border-t border-border/50 text-[9px] text-muted-foreground font-mono">
-                <div>PIS: <span className="text-foreground/85 font-semibold">{fmtBRL(pisTotal)}</span></div>
-                <div>COFINS: <span className="text-foreground/85 font-semibold">{fmtBRL(cofinsTotal)}</span></div>
-                <div>CSLL: <span className="text-foreground/85 font-semibold">{fmtBRL(csllTotal)}</span></div>
-                <div>IRRF: <span className="text-foreground/85 font-semibold">{fmtBRL(irrfTotal)}</span></div>
-                <div className="col-span-2">INSS: <span className="text-foreground/85 font-semibold">{fmtBRL(inssTotal)}</span></div>
+      {/* TAXES & OBLIGATIONS GRID */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* TAXES SUMMARY PANEL */}
+        <div className="bg-card border border-border rounded-2xl p-5 shadow-xs transition-colors duration-300 lg:col-span-8">
+          <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-4 font-semibold">Detalhamento de Impostos & Tributos</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            {/* ISS Retido */}
+            <div className="p-4 rounded-xl bg-muted/40 border border-border/50 flex items-start justify-between">
+              <div>
+                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">ISS Retido</p>
+                <p className="text-lg font-bold text-foreground mt-1.5">{fmtBRL(issRetidoTotal)}</p>
+                <p className="text-[10px] text-muted-foreground mt-1">Retido na fonte pelo tomador</p>
+              </div>
+              <div className="h-8 w-8 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                <Building2 className="h-4.5 w-4.5" />
               </div>
             </div>
-            <div className="h-8 w-8 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center flex-shrink-0">
-              <TrendingUp className="h-4.5 w-4.5" />
+
+            {/* ISS a Recolher */}
+            <div className="p-4 rounded-xl bg-muted/40 border border-border/50 flex items-start justify-between">
+              <div>
+                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">ISS a Recolher</p>
+                <p className="text-lg font-bold text-foreground mt-1.5">{fmtBRL(issARecolherTotal)}</p>
+                <p className="text-[10px] text-muted-foreground mt-1">Recolhimento próprio do prestador</p>
+              </div>
+              <div className="h-8 w-8 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center">
+                <Receipt className="h-4.5 w-4.5" />
+              </div>
+            </div>
+
+            {/* Demais Tributos Federais */}
+            <div className="p-4 rounded-xl bg-muted/40 border border-border/50 flex items-start justify-between">
+              <div className="flex-1">
+                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">Tributos Federais</p>
+                <p className="text-lg font-bold text-foreground mt-1.5">{fmtBRL(tributosFederaisTotal)}</p>
+                <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 mt-2 pt-1 border-t border-border/50 text-[9px] text-muted-foreground font-mono">
+                  <div>PIS: <span className="text-foreground/85 font-semibold">{fmtBRL(pisTotal)}</span></div>
+                  <div>COFINS: <span className="text-foreground/85 font-semibold">{fmtBRL(cofinsTotal)}</span></div>
+                  <div>CSLL: <span className="text-foreground/85 font-semibold">{fmtBRL(csllTotal)}</span></div>
+                  <div>IRRF: <span className="text-foreground/85 font-semibold">{fmtBRL(irrfTotal)}</span></div>
+                  <div className="col-span-2">INSS: <span className="text-foreground/85 font-semibold">{fmtBRL(inssTotal)}</span></div>
+                </div>
+              </div>
+              <div className="h-8 w-8 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center flex-shrink-0">
+                <TrendingUp className="h-4.5 w-4.5" />
+              </div>
             </div>
           </div>
+        </div>
+
+        {/* UPCOMING OBLIGATIONS WIDGET */}
+        <div className="lg:col-span-4">
+          <UpcomingObligationsWidget
+            obligations={obligations}
+            uniqueMuniCodes={uniqueMuniCodes}
+            onConfigChange={() => setObligationsTrigger((prev) => prev + 1)}
+          />
         </div>
       </div>
 
@@ -1044,6 +1142,13 @@ function Dashboard() {
             >
               <Download className="h-3.5 w-3.5" /> Exportar CSV
             </button>
+            <button
+              onClick={handleExportExcel}
+              disabled={!notasFiltradas.length && (!todasNotasTomadas || !todasNotasTomadas.length)}
+              className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-emerald-600 hover:bg-emerald-500/10 rounded-lg transition-colors cursor-pointer border border-emerald-500/25 disabled:opacity-50"
+            >
+              <FileSpreadsheet className="h-3.5 w-3.5" /> Exportar Excel
+            </button>
           </div>
         </div>
 
@@ -1067,12 +1172,13 @@ function Dashboard() {
                 <TableHead className="text-right font-medium text-muted-foreground h-9">COFINS</TableHead>
                 <TableHead className="text-right font-medium text-muted-foreground h-9">INSS</TableHead>
                 <TableHead className="font-medium text-muted-foreground h-9">Serviço</TableHead>
+                <TableHead className="font-medium text-muted-foreground h-9 text-center no-print">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {paginatedNotas.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={16} className="text-center text-muted-foreground py-12 text-xs">
+                  <TableCell colSpan={17} className="text-center text-muted-foreground py-12 text-xs">
                     Nenhuma nota fiscal encontrada no banco local. Use o botão "Importar NFS-e (ZIP)" no cabeçalho para começar.
                   </TableCell>
                 </TableRow>
@@ -1120,6 +1226,17 @@ function Dashboard() {
                     >
                       {n.codTribNacional ? CategoryLabelService.getFriendlyName(n.codTribNacional) : "—"}
                     </TableCell>
+                    <TableCell className="text-center no-print">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handlePrintNota(n)}
+                        className="h-7 w-7 rounded-lg text-muted-foreground hover:text-foreground cursor-pointer hover:bg-muted"
+                        title="Imprimir Recibo"
+                      >
+                        <Printer className="h-3.5 w-3.5" />
+                      </Button>
+                    </TableCell>
                   </TableRow>
                 ))
               )}
@@ -1164,6 +1281,195 @@ function Dashboard() {
       <footer className="text-center text-[10px] text-muted-foreground pt-8 border-t border-border/80">
         🔒 Processamento 100% Client-Side local — Seus XMLs NFS-e e planilhas financeiras nunca saem do seu navegador.
       </footer>
+
+      {selectedNotaForPrint && (
+        <div className="receipt-container hidden print:block">
+          <style>{`
+            @media print {
+              body.print-receipt-mode aside,
+              body.print-receipt-mode header,
+              body.print-receipt-mode main > *:not(.receipt-container),
+              body.print-receipt-mode .no-print {
+                display: none !important;
+              }
+              body.print-receipt-mode .receipt-container {
+                display: block !important;
+                background: white !important;
+                color: black !important;
+                padding: 1.5cm !important;
+                font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+              }
+            }
+          `}</style>
+          
+          <div className="border-2 border-slate-800 p-6 rounded-lg max-w-[800px] mx-auto bg-white text-slate-900 shadow-sm print:shadow-none print:border print:p-4">
+            {/* Cabecalho */}
+            <div className="flex justify-between items-start border-b border-slate-300 pb-4 mb-6">
+              <div>
+                <h1 className="text-xl font-bold tracking-tight uppercase text-slate-900">Comprovante de Serviço (NFS-e)</h1>
+                <p className="text-[10px] text-slate-500 mt-1">Smart Fiscal Desk • Documento Auxiliar da NFS-e</p>
+              </div>
+              <div className="text-right">
+                <span className={`inline-flex px-3 py-1 rounded-full text-xs font-bold border ${
+                  selectedNotaForPrint.status === "válida" 
+                    ? "bg-emerald-50 text-emerald-800 border-emerald-300 print:bg-white print:text-emerald-900 print:border-emerald-400" 
+                    : "bg-rose-50 text-rose-800 border-rose-300 print:bg-white print:text-rose-900 print:border-rose-400"
+                }`}>
+                  {selectedNotaForPrint.status === "válida" ? "VÁLIDA" : "CANCELADA"}
+                </span>
+              </div>
+            </div>
+
+            {/* Info Basica */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-slate-50 p-4 rounded-lg border border-slate-200 mb-6 print:bg-slate-50 print:border-slate-200 text-xs">
+              <div>
+                <div className="font-bold text-slate-500 uppercase text-[9px] tracking-wider">Número NFS-e</div>
+                <div className="font-semibold text-slate-900 mt-0.5 font-mono">{selectedNotaForPrint.nNFSe}</div>
+              </div>
+              <div>
+                <div className="font-bold text-slate-500 uppercase text-[9px] tracking-wider">Data de Emissão</div>
+                <div className="font-semibold text-slate-900 mt-0.5">{formatarData(selectedNotaForPrint.dhEmi)}</div>
+              </div>
+              <div>
+                <div className="font-bold text-slate-500 uppercase text-[9px] tracking-wider">Competência</div>
+                <div className="font-semibold text-slate-900 mt-0.5">{selectedNotaForPrint.dCompet ? formatarCompetencia(selectedNotaForPrint.dCompet) : "—"}</div>
+              </div>
+              <div>
+                <div className="font-bold text-slate-500 uppercase text-[9px] tracking-wider">Valor Bruto</div>
+                <div className="font-bold text-indigo-700 mt-0.5 font-mono print:text-slate-900">{fmtBRL(selectedNotaForPrint.valor)}</div>
+              </div>
+            </div>
+
+            {/* Prestador / Tomador */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 border-b border-slate-200 pb-6 mb-6">
+              {/* Prestador */}
+              <div className="border border-slate-200 rounded-lg p-4 bg-white print:border-slate-200">
+                <div className="font-extrabold text-[10px] text-slate-500 uppercase tracking-wider border-b border-slate-100 pb-1.5 mb-2.5">
+                  Prestador de Serviços
+                </div>
+                <div className="space-y-1.5 text-xs">
+                  <div>
+                    <span className="font-semibold text-slate-500">Razão Social:</span>
+                    <div className="font-bold text-slate-900">{selectedNotaForPrint.nomePrestador || "—"}</div>
+                  </div>
+                  <div>
+                    <span className="font-semibold text-slate-500">CNPJ:</span>
+                    <div className="font-mono text-slate-900 font-semibold">{formatarCnpjCpf(selectedNotaForPrint.cnpjPrestador)}</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Tomador */}
+              <div className="border border-slate-200 rounded-lg p-4 bg-white print:border-slate-200">
+                <div className="font-extrabold text-[10px] text-slate-500 uppercase tracking-wider border-b border-slate-100 pb-1.5 mb-2.5">
+                  Tomador de Serviços
+                </div>
+                <div className="space-y-1.5 text-xs">
+                  <div>
+                    <span className="font-semibold text-slate-500">Razão Social / Nome:</span>
+                    <div className="font-bold text-slate-900">
+                      {selectedNotaForPrint.cliente || "—"}
+                    </div>
+                  </div>
+                  <div>
+                    <span className="font-semibold text-slate-500">CNPJ / CPF:</span>
+                    <div className="font-mono text-slate-900 font-semibold">
+                      {formatarCnpjCpf(selectedNotaForPrint.cnpjCpfCliente)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Descricao do Servico */}
+            <div className="border border-slate-200 rounded-lg p-4 mb-6 bg-slate-50/50 print:bg-slate-50/50 text-xs">
+              <div className="font-extrabold text-[10px] text-slate-500 uppercase tracking-wider border-b border-slate-200 pb-1.5 mb-2.5">
+                Discriminação dos Serviços
+              </div>
+              <div className="whitespace-pre-line text-slate-800 leading-relaxed font-mono text-[11px]">
+                {selectedNotaForPrint.servico || "—"}
+              </div>
+              <div className="mt-4 pt-3 border-t border-slate-200 grid grid-cols-2 gap-4 text-[10px]">
+                <div>
+                  <span className="font-semibold text-slate-500 uppercase">Cód. Tributação Nacional:</span>
+                  <span className="font-mono font-semibold text-slate-900 ml-1">
+                    {selectedNotaForPrint.codTribNacional || "—"}
+                  </span>
+                </div>
+                <div>
+                  <span className="font-semibold text-slate-500 uppercase">Chave de Acesso:</span>
+                  <span className="font-mono font-semibold text-slate-900 ml-1 break-all select-all">
+                    {selectedNotaForPrint.chave || "—"}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Quadro de Retencoes / Valores */}
+            <div className="border border-slate-300 rounded-lg overflow-hidden text-xs">
+              <div className="bg-slate-800 text-white font-bold px-4 py-2 uppercase text-[10px] tracking-wider flex justify-between print:bg-slate-800 print:text-white">
+                <span>Detalhamento Financeiro</span>
+                <span>Valores</span>
+              </div>
+              <div className="divide-y divide-slate-200 bg-white">
+                <div className="flex justify-between px-4 py-2">
+                  <span className="font-medium text-slate-600">Valor Bruto do Serviço</span>
+                  <span className="font-bold text-slate-900 font-mono">{fmtBRL(selectedNotaForPrint.valor)}</span>
+                </div>
+
+                <div className="px-4 py-2.5 bg-slate-50/50 print:bg-slate-50/50">
+                  <div className="font-bold text-[9px] text-slate-500 uppercase tracking-wider mb-2">Retenções na Fonte</div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-y-2 gap-x-4 text-[11px]">
+                    <div className="flex justify-between border-r border-slate-100 pr-4">
+                      <span className="text-slate-500">ISS Retido ({selectedNotaForPrint.issRetido})</span>
+                      <span className="font-mono text-slate-700">
+                        {fmtBRL(
+                          selectedNotaForPrint.vlrIssRet !== undefined
+                            ? selectedNotaForPrint.vlrIssRet
+                            : selectedNotaForPrint.vlrIss ?? 0
+                        )}
+                      </span>
+                    </div>
+                    <div className="flex justify-between border-r border-slate-100 pr-4">
+                      <span className="text-slate-500">PIS</span>
+                      <span className="font-mono text-slate-700">{fmtBRL(selectedNotaForPrint.vlrPis ?? 0)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">COFINS</span>
+                      <span className="font-mono text-slate-700">{fmtBRL(selectedNotaForPrint.vlrCofins ?? 0)}</span>
+                    </div>
+                    <div className="flex justify-between border-r border-slate-100 pr-4 pt-1.5 border-t border-slate-100/50">
+                      <span className="text-slate-500">IRRF</span>
+                      <span className="font-mono text-slate-700">{fmtBRL(selectedNotaForPrint.vlrIrrf ?? 0)}</span>
+                    </div>
+                    <div className="flex justify-between border-r border-slate-100 pr-4 pt-1.5 border-t border-slate-100/50">
+                      <span className="text-slate-500">CSLL</span>
+                      <span className="font-mono text-slate-700">{fmtBRL(selectedNotaForPrint.vlrCsll ?? 0)}</span>
+                    </div>
+                    <div className="flex justify-between pt-1.5 border-t border-slate-100/50">
+                      <span className="text-slate-500">INSS</span>
+                      <span className="font-mono text-slate-700">{fmtBRL(selectedNotaForPrint.vlrInss ?? 0)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-between px-4 py-3 bg-slate-900/5 print:bg-slate-100/60 text-sm">
+                  <span className="font-extrabold text-slate-950 uppercase tracking-wide">Valor Líquido Recebido</span>
+                  <span className="font-extrabold text-slate-950 font-mono text-base">
+                    {fmtBRL(selectedNotaForPrint.vlrLiquido ?? selectedNotaForPrint.valor)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Rodapé do comprovante */}
+            <div className="text-center text-[9px] text-slate-400 mt-8 pt-4 border-t border-slate-200">
+              <p>Smart Fiscal Desk • Processado localmente via XML NFS-e em {new Date().toLocaleDateString('pt-BR')} às {new Date().toLocaleTimeString('pt-BR')}</p>
+              <p className="mt-1">Este documento é uma representação gráfica simplificada baseada no arquivo XML importado e não substitui a NFS-e original.</p>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

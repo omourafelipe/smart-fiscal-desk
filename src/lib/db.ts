@@ -79,7 +79,7 @@ export interface ServiceClassification {
   descricaoLc116: string;
   codigoNbs: string;
   descricaoNbs: string;
-  origem: "Manual" | "Automática LC 116" | "Automática NBS" | "Similaridade" | "Não Classificada";
+  origem: "Manual" | "Automática LC 116" | "Automática NBS" | "Similaridade" | "Não Classificada" | "ai";
   confianca: number;          // 0 a 100
   metodo: string;             // Ex: "Regra Manual", "LC 116/NBS", etc.
   dataClassificacao: string;  // ISO

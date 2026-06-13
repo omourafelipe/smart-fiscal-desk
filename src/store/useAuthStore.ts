@@ -172,7 +172,8 @@ export const useAuthStore = create<AuthState>((set, get) => {
     },
 
     signOut: async () => {
-      set({ loading: true });
+      // Limpar user, session e profile no store antes de chamar o signOut do Supabase para evitar o loop
+      set({ user: null, session: null, profile: null, loading: true });
       try {
         if (isSupabaseConfigured && supabase) {
           await supabase.auth.signOut();

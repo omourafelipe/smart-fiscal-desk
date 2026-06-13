@@ -2,8 +2,6 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMemo } from "react";
 import { z } from "zod";
 import {
-  AreaChart,
-  Area,
   XAxis,
   YAxis,
   Tooltip,
@@ -13,7 +11,16 @@ import {
   Bar,
   Legend,
 } from "recharts";
-import { Calendar, Tag, Building2 } from "lucide-react";
+import { 
+  Calendar, 
+  Tag, 
+  Building2, 
+  FileSpreadsheet, 
+  TrendingUp, 
+  ShoppingBag,
+  Users,
+  Download
+} from "lucide-react";
 import { useLayoutShell } from "@/components/layout/LayoutShell";
 import { useFiscalData } from "@/hooks/useFiscalData";
 import { KpiCardNew } from "@/components/shared/KpiCardNew";
@@ -21,6 +28,8 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { db, type NotaFiscal, type NotaFiscalTomada } from "@/lib/db";
+import { toast } from "sonner";
 
 const searchSchema = z.object({
   mes: z.string().optional().catch("__all__"),
@@ -48,6 +57,19 @@ const mesesOpcoes = [
   { value: "10", label: "Outubro" },
   { value: "11", label: "Novembro" },
   { value: "12", label: "Dezembro" },
+];
+
+const BAR_COLORS = [
+  "#6366f1", // Indigo
+  "#14b8a6", // Teal
+  "#f59e0b", // Amber
+  "#ec4899", // Pink
+  "#8b5cf6", // Violet
+  "#ef4444", // Red
+  "#06b6d4", // Cyan
+  "#10b981", // Emerald
+  "#3b82f6", // Blue
+  "#f97316", // Orange
 ];
 
 const fmtBRL = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -95,7 +117,7 @@ function GrupoRouteComponent() {
   const search = Route.useSearch();
   const navigate = useNavigate({ from: Route.id });
 
-  const { periodType, setPeriodType, addActivity } = useLayoutShell();
+  const { periodType, addActivity } = useLayoutShell();
 
   const mesFiltro = search.mes || "__all__";
   const anoFiltro = search.ano || "__all__";
@@ -103,8 +125,10 @@ function GrupoRouteComponent() {
 
   const {
     groupStats,
-    groupLineChartData,
     anos,
+    notasAtivas,
+    todasNotasTomadas,
+    getDateField,
   } = useFiscalData({
     filters: {
       empresaFiltro: "__all__", // consolidado do grupo ignora empresa
@@ -123,18 +147,152 @@ function GrupoRouteComponent() {
   const setAnoFiltro = (val: string) => navigate({ search: (prev: any) => ({ ...prev, ano: val === "__all__" ? undefined : val }) });
   const setCServFiltro = (val: string) => navigate({ search: (prev: any) => ({ ...prev, cServ: val === "__all__" ? undefined : val }) });
 
+  // Get active companies (unique prestadores in the DB)
+  const empresas = useMemo(() => {
+    const map = new Map<string, string>();
+    notasAtivas?.forEach((n) => {
+      if (!map.has(n.cnpjPrestador)) {
+        map.set(n.cnpjPrestador, n.nomePrestador || n.cnpjPrestador);
+      }
+    });
+    return Array.from(map.entries()).map(([cnpj, nome]) => ({ cnpj, nome }));
+  }, [notasAtivas]);
+
+  // Derived active tomadas for group
+  const notasTomadasAtivas = useMemo(() => {
+    if (!todasNotasTomadas) return [];
+    return todasNotasTomadas.filter((n) => {
+      if (n.status !== "válida") return false;
+      const dateStr = (periodType === "competencia" && n.dCompet ? n.dCompet : n.dhEmi || "").slice(0, 10);
+      if (mesFiltro !== "__all__" && dateStr.slice(5, 7) !== mesFiltro) return false;
+      if (anoFiltro !== "__all__" && dateStr.slice(0, 4) !== anoFiltro) return false;
+      return true;
+    });
+  }, [todasNotasTomadas, mesFiltro, anoFiltro, periodType]);
+
+  // 1. Calculate taxes withheld (ISS retido + federal retidos on both emitidas and tomadas)
+  const totalRetido = useMemo(() => {
+    const emitidasRetidas = notasAtivas.reduce((sum, n) => {
+      const iss = n.issRetido === "Sim" ? (n.vlrIssRet ?? n.vlrIss ?? 0) : 0;
+      const fed = (n.vlrCsll ?? 0) + (n.vlrIrrf ?? 0) + (n.vlrPis ?? 0) + (n.vlrCofins ?? 0) + (n.vlrInss ?? 0);
+      return sum + iss + fed;
+    }, 0);
+
+    const tomadasRetidas = notasTomadasAtivas.reduce((sum, n) => {
+      const iss = n.issRetido === "Sim" ? (n.vlrIssRet ?? 0) : 0;
+      const fed = (n.vlrCsll ?? 0) + (n.vlrIrrf ?? 0) + (n.vlrPis ?? 0) + (n.vlrCofins ?? 0) + (n.vlrInss ?? 0);
+      return sum + iss + fed;
+    }, 0);
+
+    return emitidasRetidas + tomadasRetidas;
+  }, [notasAtivas, notasTomadasAtivas]);
+
+  // 2. Stacked Bar Chart: billing by company over the active year's months
+  const faturamentoPorEmpresaMensal = useMemo(() => {
+    const monthlyMap = new Map<string, Record<string, number>>();
+    
+    // Initialize months 01-12
+    for (let i = 1; i <= 12; i++) {
+      const mStr = String(i).padStart(2, "0");
+      monthlyMap.set(mStr, {});
+    }
+
+    // Sum active billing of the year/period
+    notasAtivas.forEach((n) => {
+      const dateStr = getDateField(n);
+      if (!dateStr) return;
+      const month = dateStr.slice(5, 7); // MM
+      const cnpj = n.cnpjPrestador;
+      const currentMonthData = monthlyMap.get(month) || {};
+      currentMonthData[cnpj] = (currentMonthData[cnpj] || 0) + n.valor;
+      monthlyMap.set(month, currentMonthData);
+    });
+
+    const mesesAbrev = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+    return Array.from(monthlyMap.entries()).map(([month, companyVals]) => {
+      const idx = parseInt(month, 10) - 1;
+      const item: any = { label: mesesAbrev[idx] };
+      empresas.forEach((emp) => {
+        item[emp.cnpj] = companyVals[emp.cnpj] || 0;
+      });
+      return item;
+    });
+  }, [notasAtivas, empresas, getDateField]);
+
+  // 3. Top 10 clients cross-company ranking
+  const top10Clientes = useMemo(() => {
+    const map = new Map<string, { cnpjCpf: string; nome: string; total: number; count: number }>();
+    
+    notasAtivas.forEach((n) => {
+      const key = n.cnpjCpfCliente || "Desconhecido";
+      const curr = map.get(key) || { cnpjCpf: key, nome: n.cliente || "Desconhecido", total: 0, count: 0 };
+      curr.total += n.valor;
+      curr.count += 1;
+      map.set(key, curr);
+    });
+
+    return Array.from(map.values())
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 10);
+  }, [notasAtivas]);
+
+  // 4. Excel Consolidated Export Trigger
+  const handleExportConsolidado = async () => {
+    try {
+      const { exportConsolidadoXlsx } = await import("@/lib/exports/exportXlsx");
+      
+      // Fetch full arrays from DB to filter
+      const allEmitidas = await db.notas.toArray();
+      const allTomadas = await db.notasTomadas.toArray();
+
+      // Apply current month/year filters
+      const filteredEmitidas = allEmitidas.filter((n) => {
+        const ds = getDateField(n);
+        if (mesFiltro !== "__all__" && ds.slice(5, 7) !== mesFiltro) return false;
+        if (anoFiltro !== "__all__" && ds.slice(0, 4) !== anoFiltro) return false;
+        return true;
+      });
+
+      const filteredTomadas = allTomadas.filter((n) => {
+        const ds = (periodType === "competencia" && n.dCompet ? n.dCompet : n.dhEmi || "").slice(0, 10);
+        if (mesFiltro !== "__all__" && ds.slice(5, 7) !== mesFiltro) return false;
+        if (anoFiltro !== "__all__" && ds.slice(0, 4) !== anoFiltro) return false;
+        return true;
+      });
+
+      await exportConsolidadoXlsx(filteredEmitidas, filteredTomadas, empresas, periodType);
+      addActivity("export", "Excel Consolidado Exportado", "Relatório multi-empresa gerado com sucesso.");
+      toast.success("Excel consolidado do grupo exportado com sucesso!");
+    } catch (err) {
+      console.error(err);
+      toast.error("Erro ao gerar relatório Excel.");
+    }
+  };
+
   return (
     <main className="flex-1 p-6 md:p-8 max-w-[1400px] w-full mx-auto space-y-6">
       {/* PAGE MAIN HEADER / FILTERS PANEL */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 flex-wrap bg-card p-5 rounded-2xl border border-border shadow-xs transition-colors duration-300">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-foreground">Resumo Consolidado do Grupo</h1>
+          <h1 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
+            <Building2 className="h-5 w-5 text-indigo-600" />
+            Resumo Consolidado do Grupo
+          </h1>
           <p className="text-[10px] text-muted-foreground mt-0.5">
-            Faturamento consolidado do grupo · Filtros de empresa individual e busca são ignorados nesta aba
+            Métricas acumuladas de todas as empresas do grupo ativo · Regime: {periodType === "competencia" ? "Competência" : "Emissão"}
           </p>
         </div>
         
         <div className="flex items-center gap-2.5 flex-wrap">
+          {/* Export XLS button */}
+          <Button
+            onClick={handleExportConsolidado}
+            className="flex items-center gap-2 px-4 h-9 text-xs font-semibold rounded-xl bg-teal-600 hover:bg-teal-700 text-white shadow-xs cursor-pointer hover:scale-[1.01] transition-all"
+          >
+            <Download className="h-4 w-4" />
+            Exportar Consolidado XLSX
+          </Button>
+
           {/* Month Select */}
           <Select value={mesFiltro} onValueChange={setMesFiltro}>
             <SelectTrigger className="w-[130px] h-9 text-xs rounded-xl bg-muted border-border hover:bg-muted/80 transition-colors cursor-pointer">
@@ -189,153 +347,60 @@ function GrupoRouteComponent() {
           value={fmtBRL(groupStats.totalGroupBilling)}
           trendText="Consolidado"
           isPositive={true}
-          subtext="Soma de todas as NFS-e válidas"
+          subtext="Total emitido pelas empresas"
           tone="blue"
         />
         <KpiCardNew
-          label="Eliminação Intergrupo"
-          value={fmtBRL(groupStats.totalIntergrupoBilling)}
-          trendText={`${(groupStats.totalGroupBilling > 0 ? (groupStats.totalIntergrupoBilling / groupStats.totalGroupBilling * 100) : 0).toFixed(1)}%`}
-          isPositive={false}
-          subtext="Faturamento entre empresas do grupo"
+          label="Tributos Retidos na Fonte"
+          value={fmtBRL(totalRetido)}
+          trendText="Total"
+          isPositive={true}
+          subtext="ISS e federais retidos"
           tone="rose"
         />
         <KpiCardNew
-          label="Faturamento Líquido (Externo)"
-          value={fmtBRL(groupStats.totalExternalBilling)}
-          trendText={`${(groupStats.totalGroupBilling > 0 ? (groupStats.totalExternalBilling / groupStats.totalGroupBilling * 100) : 0).toFixed(1)}%`}
+          label="Notas Emitidas"
+          value={`${notasAtivas.length} NFS-e`}
+          trendText="Serviços Prestados"
           isPositive={true}
-          subtext="Faturamento gerado com terceiros"
+          subtext="Notas de faturamento emitidas"
           tone="green"
         />
         <KpiCardNew
-          label="Transações Intergrupo"
-          value={`${groupStats.intergroupNotes.length} notas`}
-          trendText="Interno"
+          label="Notas Tomadas"
+          value={`${notasTomadasAtivas.length} NFS-e`}
+          trendText="Serviços Contratados"
           isPositive={true}
-          subtext="Notas emitidas entre empresas do grupo"
+          subtext="Notas recebidas de fornecedores"
           tone="amber"
         />
       </div>
 
-      {/* Evolução do Faturamento Mensal do Grupo */}
-      <div className="bg-card border border-border rounded-2xl p-5 shadow-xs transition-colors duration-300">
-        <div className="flex items-center justify-between gap-4 mb-5 flex-wrap">
-          <div>
-            <h3 className="text-xs font-bold text-foreground">Evolução Mensal do Faturamento do Grupo</h3>
-            <p className="text-[10px] text-muted-foreground mt-0.5">Faturamento bruto consolidado, faturamento líquido e eliminações intergrupo</p>
-          </div>
-          <div className="flex items-center gap-4 text-[10px] font-medium text-muted-foreground">
-            <div className="flex items-center gap-1.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#6366f1]" />
-              <span>Faturamento Bruto</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#10b981]" />
-              <span>Faturamento Líquido (Externo)</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#ef4444]" />
-              <span>Eliminação Intergrupo</span>
-            </div>
-          </div>
-        </div>
-        
-        <div className="h-[280px]">
-          {groupLineChartData.length === 0 ? (
-            <EmptyState />
-          ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart
-                data={groupLineChartData}
-                margin={{ top: 10, right: 30, left: 10, bottom: 5 }}
-              >
-                <defs>
-                  <linearGradient id="colorBruto" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.15}/>
-                    <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
-                  </linearGradient>
-                  <linearGradient id="colorLiquido" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.15}/>
-                    <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                  </linearGradient>
-                  <linearGradient id="colorIntergrupo" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#ef4444" stopOpacity={0.1}/>
-                    <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-border)" opacity={0.4} />
-                <XAxis dataKey="label" stroke="var(--color-muted-foreground)" fontSize={10} axisLine={false} tickLine={false} />
-                <YAxis
-                  stroke="var(--color-muted-foreground)"
-                  fontSize={10}
-                  axisLine={false}
-                  tickLine={false}
-                  tickFormatter={(v) =>
-                    v >= 1000000 ? `R$ ${(v / 1000000).toFixed(1)}M` : v >= 1000 ? `R$ ${(v / 1000).toFixed(0)}k` : `R$ ${v}`
-                  }
-                />
-                <Tooltip
-                  formatter={(v) => fmtBRL(Number(v))}
-                  contentStyle={{
-                    backgroundColor: "var(--color-popover)",
-                    borderColor: "var(--color-border)",
-                    borderRadius: 12,
-                    color: "var(--color-foreground)",
-                    boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.05)"
-                  }}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="Faturamento Bruto"
-                  stroke="#6366f1"
-                  strokeWidth={2}
-                  fillOpacity={1}
-                  fill="url(#colorBruto)"
-                />
-                <Area
-                  type="monotone"
-                  dataKey="Faturamento Líquido"
-                  stroke="#10b981"
-                  strokeWidth={2}
-                  fillOpacity={1}
-                  fill="url(#colorLiquido)"
-                />
-                <Area
-                  type="monotone"
-                  dataKey="Faturamento Intergrupo"
-                  stroke="#ef4444"
-                  strokeWidth={1.5}
-                  strokeDasharray="4 4"
-                  fillOpacity={1}
-                  fill="url(#colorIntergrupo)"
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-      </div>
-
-      {/* ANALYTICS GRID */}
+      {/* CHARTS CONTAINER GRID */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Recharts Stacked Bar Chart */}
         <div className="bg-card border border-border rounded-2xl p-5 shadow-xs lg:col-span-7 transition-colors duration-300">
           <h3 className="text-xs font-bold text-foreground mb-1">Faturamento por Empresa</h3>
-          <p className="text-[10px] text-muted-foreground mb-4">Breakdown por faturamento externo e transações internas (intergrupo)</p>
+          <p className="text-[10px] text-muted-foreground mb-4 font-medium">Comparação mensal da sazonalidade de faturamento entre os CNPJs do grupo</p>
           
           <div className="h-[320px]">
-            {groupStats.companyList.length === 0 ? (
+            {empresas.length === 0 ? (
               <EmptyState />
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
-                  data={groupStats.companyList}
-                  layout="vertical"
+                  data={faturamentoPorEmpresaMensal}
                   margin={{ top: 10, right: 30, left: 10, bottom: 5 }}
                 >
-                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--color-border)" opacity={0.4} />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-border)" opacity={0.4} />
                   <XAxis
-                    type="number"
+                    dataKey="label"
+                    stroke="var(--color-muted-foreground)"
+                    fontSize={10}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis
                     stroke="var(--color-muted-foreground)"
                     fontSize={10}
                     axisLine={false}
@@ -343,19 +408,6 @@ function GrupoRouteComponent() {
                     tickFormatter={(v) =>
                       v >= 1000000 ? `R$ ${(v / 1000000).toFixed(1)}M` : v >= 1000 ? `R$ ${(v / 1000).toFixed(0)}k` : `R$ ${v}`
                     }
-                  />
-                  <YAxis
-                    type="category"
-                    dataKey="nome"
-                    stroke="var(--color-muted-foreground)"
-                    fontSize={10}
-                    axisLine={false}
-                    tickLine={false}
-                    width={130}
-                    tickFormatter={(name) => {
-                      if (name.length > 20) return `${name.substring(0, 18)}...`;
-                      return name;
-                    }}
                   />
                   <Tooltip
                     formatter={(v) => fmtBRL(Number(v))}
@@ -367,42 +419,55 @@ function GrupoRouteComponent() {
                       boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.05)"
                     }}
                   />
-                  <Legend wrapperStyle={{ fontSize: 10, paddingTop: 10 }} />
-                  <Bar dataKey="externo" name="Faturamento Externo" stackId="a" fill="#6366f1" radius={[0, 0, 0, 0]} />
-                  <Bar dataKey="intergrupo" name="Faturamento Intergrupo" stackId="a" fill="#14b8a6" radius={[0, 4, 4, 0]} />
+                  <Legend wrapperStyle={{ fontSize: 9, paddingTop: 10 }} />
+                  {empresas.map((emp, index) => (
+                    <Bar
+                      key={emp.cnpj}
+                      dataKey={emp.cnpj}
+                      name={emp.nome.length > 20 ? `${emp.nome.substring(0, 18)}...` : emp.nome}
+                      stackId="a"
+                      fill={BAR_COLORS[index % BAR_COLORS.length]}
+                    />
+                  ))}
                 </BarChart>
               </ResponsiveContainer>
             )}
           </div>
         </div>
 
-        {/* Company Share Breakdown List */}
+        {/* TOP 10 CLIENTS CROSS-COMPANY */}
         <div className="bg-card border border-border rounded-2xl p-5 shadow-xs lg:col-span-5 flex flex-col justify-between transition-colors duration-300">
           <div>
-            <h3 className="text-xs font-bold text-foreground mb-1">Participação no Faturamento</h3>
-            <p className="text-[10px] text-muted-foreground mb-4">Share de cada empresa sobre o faturamento bruto consolidado do grupo</p>
+            <h3 className="text-xs font-bold text-foreground flex items-center gap-2 mb-1">
+              <Users className="h-4 w-4 text-muted-foreground" />
+              Top 10 Tomadores do Grupo
+            </h3>
+            <p className="text-[10px] text-muted-foreground mb-4">Maiores clientes considerando o faturamento unificado de todas as empresas</p>
             
-            <div className="space-y-4 max-h-[260px] overflow-y-auto pr-1">
-              {groupStats.companyList.length === 0 ? (
+            <div className="space-y-4 max-h-[280px] overflow-y-auto pr-1">
+              {top10Clientes.length === 0 ? (
                 <EmptyState />
               ) : (
-                groupStats.companyList.map((c, i) => (
-                  <div key={i} className="space-y-1">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-semibold text-foreground/90 truncate max-w-[200px]" title={c.nome}>
-                        {c.nome}
-                      </span>
-                      <span className="font-bold text-foreground">{c.share.toFixed(1)}%</span>
+                top10Clientes.map((c, i) => {
+                  const share = groupStats.totalGroupBilling > 0 ? (c.total / groupStats.totalGroupBilling) * 100 : 0;
+                  return (
+                    <div key={i} className="space-y-1">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-semibold text-foreground/90 truncate max-w-[220px]" title={c.nome}>
+                          {i + 1}. {c.nome}
+                        </span>
+                        <span className="font-bold text-foreground">{fmtBRL(c.total)}</span>
+                      </div>
+                      <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden flex">
+                        <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${share}%` }} />
+                      </div>
+                      <div className="flex justify-between text-[8px] text-muted-foreground font-mono">
+                        <span>Doc: {formatarCnpjCpf(c.cnpjCpf)}</span>
+                        <span>Share: {share.toFixed(2)}% · {c.count} notas</span>
+                      </div>
                     </div>
-                    <div className="h-2 w-full bg-muted rounded-full overflow-hidden flex">
-                      <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${c.share}%` }} />
-                    </div>
-                    <div className="flex justify-between text-[9px] text-muted-foreground font-mono">
-                      <span>Externo: {fmtBRL(c.externo)}</span>
-                      <span>Intergrupo: {fmtBRL(c.intergrupo)}</span>
-                    </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>

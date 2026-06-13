@@ -4,6 +4,7 @@ import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 import { ActivityLogDrawer } from "../shared/ActivityLogDrawer";
 import { GlobalFilterBar } from "../shared/GlobalFilterBar";
+import { FiscalAssistantDrawer } from "../shared/FiscalAssistantDrawer";
 
 export interface ActivityLogItem {
   id: string;
@@ -84,6 +85,7 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
 
   // Right Panel / Notification Drawer state
   const [rightPanelOpen, setRightPanelOpen] = useState(false);
+  const [assistantOpen, setAssistantOpen] = useState(false);
 
   // Date period state (Competência vs Emissão)
   const [periodType, setPeriodTypeState] = useState<"competencia" | "emissao">("competencia");
@@ -150,7 +152,12 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
         <Sidebar />
         
         <div className="flex-1 flex flex-col min-w-0 overflow-y-auto h-screen relative">
-          <Topbar rightPanelOpen={rightPanelOpen} setRightPanelOpen={setRightPanelOpen} />
+          <Topbar 
+            rightPanelOpen={rightPanelOpen} 
+            setRightPanelOpen={setRightPanelOpen} 
+            assistantOpen={assistantOpen} 
+            setAssistantOpen={setAssistantOpen} 
+          />
           <div className="px-6 pt-4">
             <GlobalFilterBar />
           </div>
@@ -158,6 +165,7 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
         </div>
 
         <ActivityLogDrawer rightPanelOpen={rightPanelOpen} setRightPanelOpen={setRightPanelOpen} />
+        <FiscalAssistantDrawer assistantOpen={assistantOpen} setAssistantOpen={setAssistantOpen} />
       </div>
     </LayoutContext.Provider>
   );

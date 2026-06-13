@@ -12,6 +12,7 @@ import {
   Settings,
   Users,
   LogOut,
+  FileBarChart,
 } from "lucide-react";
 import { toast } from "sonner";
 import { db } from "@/lib/db";
@@ -287,6 +288,24 @@ export function Sidebar() {
                 </div>
               </Link>
             )}
+          </div>
+
+          {/* Relatórios Section */}
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider px-1">Relatórios</span>
+            
+            {/* Relatório DRE */}
+            <Link
+              to="/relatorio"
+              search={(prev: any) => prev}
+              className={`flex items-center justify-between px-3 py-2 text-xs font-medium rounded-xl transition-all w-full text-left ${
+                currentPath === "/relatorio" ? "bg-muted text-foreground font-semibold" : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <FileBarChart className="h-4 w-4" /> DRE Simplificada
+              </div>
+            </Link>
           </div>
 
           {/* Quick Actions Category */}

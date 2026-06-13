@@ -24,6 +24,8 @@ import {
   resolverServicoFiscal,
   getServicoDescricao
 } from "@/lib/category-utils";
+import { categorizarPorIa } from "@/lib/ai/categorizador";
+import { Loader2, Sparkles } from "lucide-react";
 import {
   Search,
   CheckCircle2,
@@ -134,9 +136,11 @@ function CategoriasRouteComponent() {
   const { session, profile } = useAuthStore();
   const { activeRole } = useTenantStore();
   const canEdit = PermissionService.canEdit(activeRole);
-  const [tabActive, setTabActive] = useState<"classifications" | "pending" | "rules" | "audit" | "categories_groups">("classifications");
+  const [tabActive, setTabActive] = useState<"classifications" | "pending" | "rules" | "audit" | "categories_groups" | "ai_pending">("classifications");
   const [activePieIndex, setActivePieIndex] = useState<number | null>(null);
   const [searchCat, setSearchCat] = useState("");
+  
+  const [processingAiCode, setProcessingAiCode] = useState<string | null>(null);
   
   // Selection states
   const [selectedCodes, setSelectedCodes] = useState<Set<string>>(new Set());
@@ -268,6 +272,25 @@ function CategoriasRouteComponent() {
       r.ausenteOficial
     );
   }, [rows]);
+
+  const unclassifiedRows = useMemo(() => {
+    return rows.filter(r => 
+      r.origem === "Não Classificada" || 
+      (r.confianca && r.confianca < 60) || 
+      r.origem === "ai"
+    );
+  }, [rows]);
+
+  const filteredAiRows = useMemo(() => {
+    const query = searchCat.toLowerCase().trim();
+    if (!query) return unclassifiedRows;
+    return unclassifiedRows.filter(r =>
+      r.codigo.toLowerCase().includes(query) ||
+      (r.categoriaExecutiva && r.categoriaExecutiva.toLowerCase().includes(query)) ||
+      (r.grupoOperacional && r.grupoOperacional.toLowerCase().includes(query)) ||
+      (r.descricaoLc116 && r.descricaoLc116.toLowerCase().includes(query))
+    );
+  }, [unclassifiedRows, searchCat]);
 
   // Statistics calculations
   const totalServices = rows.length;
@@ -704,6 +727,107 @@ function CategoriasRouteComponent() {
     }
   };
 
+  const handleRequestAiSuggestion = async (code: string, desc: string) => {
+    setProcessingAiCode(code);
+    try {
+      const topCategories = categoryChartData.map(c => c.name);
+      const savedKey = localStorage.getItem("anthropic_api_key") || undefined;
+      
+      const result = await categorizarPorIa({
+        description: desc || code,
+        topCategories,
+        userApiKey: savedKey
+      });
+
+      const { itemLC116, descricaoLC116, nbs, descricaoNbs } = resolverServicoFiscal(code);
+      
+      const suggestedClassification: ServiceClassification = {
+        codigo: code,
+        categoriaExecutiva: result.categoriaExecutiva,
+        grupoOperacional: result.grupoOperacional,
+        codigoLc116: result.codigoLc116 || itemLC116 || "",
+        descricaoLc116: descricaoLC116,
+        codigoNbs: nbs || "",
+        descricaoNbs: descricaoNbs,
+        origem: "ai",
+        confianca: 75,
+        metodo: "IA (Anthropic Claude)",
+        dataClassificacao: new Date().toISOString(),
+        conflito: false,
+        ausenteOficial: !itemLC116 && !nbs
+      };
+
+      await db.serviceClassifications.put(suggestedClassification);
+      toast.success(`Sugestão de IA recebida para o código ${code}!`);
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || "Falha ao obter sugestão da IA. Certifique-se de configurar a Chave de API.");
+    } finally {
+      setProcessingAiCode(null);
+    }
+  };
+
+  const handleAcceptAiSuggestion = async (row: any) => {
+    try {
+      const nowStr = new Date().toISOString();
+      const code = row.codigo;
+      
+      const existingRule = rules?.find(r => r.tipo === "codigo" && r.chave === code);
+      await db.categoryRules.put({
+        ...(existingRule?.id ? { id: existingRule.id } : {}),
+        tipo: "codigo",
+        chave: code,
+        categoriaExecutiva: row.categoriaExecutiva,
+        grupoOperacional: row.grupoOperacional
+      });
+
+      const updated: ServiceClassification = {
+        ...row,
+        origem: "Manual",
+        confianca: 100,
+        metodo: "IA Aprovada",
+        dataClassificacao: nowStr
+      };
+
+      await db.serviceClassifications.put(updated);
+
+      await db.auditLogs.add({
+        codigo: code,
+        classificacaoAnterior: "Sugestão de IA (Pendente)",
+        classificacaoNova: `${row.categoriaExecutiva} > ${row.grupoOperacional}`,
+        usuario: profile?.nome || session?.user?.email || "Administrador",
+        dataHora: nowStr,
+        justificativa: "Sugestão de IA aceita pelo usuário"
+      });
+
+      if (session?.user?.id) {
+        SyncManager.syncAll(session.user.id);
+      }
+
+      toast.success("Sugestão de IA aprovada com sucesso!");
+    } catch (err: any) {
+      console.error(err);
+      toast.error("Erro ao aceitar sugestão.");
+    }
+  };
+
+  const handleRejectAiSuggestion = async (row: any) => {
+    try {
+      const code = row.codigo;
+      const desc = todasNotas?.find(n => n.codTribNacional === code)?.servico || todasNotasTomadas?.find(n => n.codTribNacional === code)?.servico || "";
+      
+      const recalculated = classificarServicoLocal(code, desc, rules);
+      recalculated.origem = "Não Classificada";
+      recalculated.confianca = 50;
+
+      await db.serviceClassifications.put(recalculated);
+      toast.success("Sugestão de IA descartada.");
+    } catch (err: any) {
+      console.error(err);
+      toast.error("Erro ao rejeitar sugestão.");
+    }
+  };
+
   return (
     <main className="flex-1 p-6 md:p-8 max-w-[1450px] w-full mx-auto space-y-6">
       
@@ -974,6 +1098,22 @@ function CategoriasRouteComponent() {
           {pendingCount > 0 && (
             <span className="text-xs bg-amber-500 text-white font-bold px-2 py-0.5 rounded-full animate-pulse">
               {pendingCount}
+            </span>
+          )}
+        </button>
+
+        <button
+          onClick={() => { setTabActive("ai_pending"); setSearchCat(""); setSelectedCodes(new Set()); }}
+          className={`px-4 py-2.5 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
+            tabActive === "ai_pending"
+              ? "border-indigo-500 text-indigo-600 dark:text-indigo-400 bg-indigo-500/5 rounded-t-lg"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Sugestões de IA
+          {unclassifiedRows.filter(r => r.origem === "ai").length > 0 && (
+            <span className="text-xs bg-indigo-600 text-white font-bold px-2 py-0.5 rounded-full animate-pulse">
+              {unclassifiedRows.filter(r => r.origem === "ai").length}
             </span>
           )}
         </button>
@@ -1276,6 +1416,129 @@ function CategoriasRouteComponent() {
                               >
                                 <Edit className="h-4 w-4" />
                               </button>
+                            </td>
+                          )}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Tab Content: AI suggestions pending */}
+        {tabActive === "ai_pending" && (
+          <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-xs">
+            {filteredAiRows.length === 0 ? (
+              <div className="p-12 text-center text-muted-foreground flex flex-col items-center justify-center gap-3">
+                <CheckCircle2 className="h-10 w-10 text-green-500" />
+                <div>
+                  <p className="font-semibold text-foreground text-sm">Nenhuma pendência para IA encontrada!</p>
+                  <p className="text-xs mt-1 text-muted-foreground">Todos os serviços possuem classificação automática de alta confiança ou foram revisados manualmente.</p>
+                </div>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <div className="bg-indigo-500/10 border-b border-indigo-500/20 px-4 py-3 flex items-center gap-2 text-xs text-indigo-800 dark:text-indigo-400">
+                  <Cpu className="h-4 w-4 shrink-0" />
+                  <span>
+                    Estes serviços não possuem regras manuais e contam com <strong>Baixa Confiança (&lt;60%)</strong> ou são <strong>Não Classificados</strong>. Solicite sugestões à IA Anthropic ou aprove-as abaixo.
+                  </span>
+                </div>
+                
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-border bg-muted/40 font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">
+                      <th className="px-4 py-3.5 w-24">Código</th>
+                      <th className="px-4 py-3.5">Descrição LC 116 / Serviço</th>
+                      <th className="px-4 py-3.5">Qtd Notas</th>
+                      <th className="px-4 py-3.5 text-right w-32">Valor Faturado</th>
+                      <th className="px-4 py-3.5">Status / Sugestão IA</th>
+                      {canEdit && <th className="px-4 py-3.5 text-center w-40">Ações</th>}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {filteredAiRows.map((linha) => {
+                      const descOriginal = todasNotas?.find(n => n.codTribNacional === linha.codigo)?.servico || todasNotasTomadas?.find(n => n.codTribNacional === linha.codigo)?.servico || "";
+                      const isSuggested = linha.origem === "ai";
+                      
+                      return (
+                        <tr key={linha.codigo} className="hover:bg-muted/30 transition-colors">
+                          <td className="px-4 py-3">
+                            <span className="font-mono bg-muted border border-border px-1.5 py-0.5 rounded-md font-semibold text-foreground/95">
+                              {linha.codigo}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-muted-foreground max-w-[220px] truncate" title={linha.descricaoLc116 || descOriginal}>
+                            {linha.descricaoLc116 || descOriginal || "—"}
+                          </td>
+                          <td className="px-4 py-3 text-center text-foreground font-semibold">
+                            {linha.quantidadeNotas}
+                          </td>
+                          <td className="px-4 py-3 text-right font-mono text-foreground font-semibold">
+                            {linha.valorFaturado.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                          </td>
+                          <td className="px-4 py-3">
+                            {isSuggested ? (
+                              <div className="space-y-0.5 bg-indigo-50/70 dark:bg-indigo-950/20 p-2 rounded-lg border border-indigo-100/50 animate-in fade-in duration-300">
+                                <div className="text-[10px] text-indigo-700 dark:text-indigo-400 font-bold uppercase tracking-wider flex items-center gap-1">
+                                  <Sparkles className="h-3 w-3 animate-pulse" /> Sugestão da IA:
+                                </div>
+                                <div className="text-[11px] font-semibold text-foreground">
+                                  {linha.categoriaExecutiva} &gt; {linha.grupoOperacional}
+                                </div>
+                                {linha.codigoLc116 && (
+                                  <div className="text-[9px] text-muted-foreground font-mono">
+                                    LC 116: {linha.codigoLc116}
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-200">
+                                Sem sugestão (Pendente)
+                              </span>
+                            )}
+                          </td>
+                          {canEdit && (
+                            <td className="px-4 py-3 text-center">
+                              {isSuggested ? (
+                                <div className="flex gap-1.5 justify-center">
+                                  <button
+                                    onClick={() => handleAcceptAiSuggestion(linha)}
+                                    className="px-2.5 py-1 bg-green-600 hover:bg-green-700 text-white rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-xs"
+                                    title="Aprovar e salvar como regra"
+                                  >
+                                    <Check className="h-3 w-3" /> Aceitar
+                                  </button>
+                                  <button
+                                    onClick={() => handleRejectAiSuggestion(linha)}
+                                    className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/20 text-rose-600 hover:text-rose-700 dark:hover:text-rose-400 rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-colors border border-rose-200/50"
+                                    title="Descartar sugestão"
+                                  >
+                                    <X className="h-3 w-3" /> Rejeitar
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  disabled={processingAiCode === linha.codigo}
+                                  onClick={() => handleRequestAiSuggestion(linha.codigo, descOriginal)}
+                                  className="mx-auto px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-xs hover:scale-[1.01]"
+                                >
+                                  {processingAiCode === linha.codigo ? (
+                                    <>
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                      Consultando...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Cpu className="h-3 w-3" />
+                                      Sugerir via IA
+                                    </>
+                                  )}
+                                </button>
+                              )}
                             </td>
                           )}
                         </tr>

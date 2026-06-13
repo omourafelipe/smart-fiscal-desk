@@ -1,3 +1,5 @@
+import { AlertTriangle } from "lucide-react";
+
 export function KpiCardNew({
   label,
   value,
@@ -6,6 +8,8 @@ export function KpiCardNew({
   subtext,
   tone,
   showComparison = true,
+  hasAnomaly = false,
+  anomalyTooltip = "",
 }: {
   label: string;
   value: string;
@@ -14,6 +18,8 @@ export function KpiCardNew({
   subtext: string;
   tone: "blue" | "purple" | "green" | "rose" | "amber";
   showComparison?: boolean;
+  hasAnomaly?: boolean;
+  anomalyTooltip?: string;
 }) {
   const borderColors = {
     blue: "border-blue-100 dark:border-blue-900/50 hover:border-blue-300 dark:hover:border-blue-800/60",
@@ -42,7 +48,14 @@ export function KpiCardNew({
   return (
     <div className={`p-4 sm:p-5 xl:p-4 2xl:p-5 rounded-2xl border bg-card text-card-foreground flex flex-col justify-between shadow-xs ${borderColors[tone]} ${glowEffects[tone]} transition-all duration-300 hover:-translate-y-0.5`}>
       <div className="space-y-1">
-        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">{label}</p>
+        <div className="flex justify-between items-start">
+          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">{label}</p>
+          {hasAnomaly && (
+            <div className="text-amber-500 animate-bounce cursor-help" title={anomalyTooltip}>
+              <AlertTriangle className="h-4 w-4" />
+            </div>
+          )}
+        </div>
         <p className={`${valueFontSize} text-foreground`}>{value}</p>
       </div>
 
