@@ -92,7 +92,8 @@ function ConfiguracoesRouteComponent() {
     changeMemberRole,
     removeMember,
     createCompany,
-    deleteCompany
+    deleteCompany,
+    createGroup
   } = useTenantStore();
 
   // New item states
@@ -101,6 +102,8 @@ function ConfiguracoesRouteComponent() {
   const [companyNome, setCompanyNome] = useState("");
   const [companyCnpj, setCompanyCnpj] = useState("");
   const [groupNome, setGroupNome] = useState("");
+  const [newGroupName, setNewGroupName] = useState("");
+  const [creatingGroup, setCreatingGroup] = useState(false);
   
   const [copiedTokenId, setCopiedTokenId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -217,6 +220,23 @@ function ConfiguracoesRouteComponent() {
     setTimeout(() => setCopiedTokenId(null), 2000);
   };
 
+  const handleCreateGroupSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newGroupName.trim()) {
+      toast.error("Por favor, digite um nome para o grupo.");
+      return;
+    }
+
+    setCreatingGroup(true);
+    const created = await createGroup(newGroupName.trim());
+    setCreatingGroup(false);
+
+    if (created) {
+      setNewGroupName("");
+      toast.success("Grupo criado com sucesso!");
+    }
+  };
+
   // Permission Checks
   const isOwner = PermissionService.isOwner(activeRole);
   const isAdmin = PermissionService.canManageUsers(activeRole);
@@ -243,7 +263,51 @@ function ConfiguracoesRouteComponent() {
         </div>
       </div>
 
-      {/* KPI Stats summary */}
+      {!activeGroup ? (
+        <Card className="border-slate-800 bg-slate-900/60 backdrop-blur-xl border border-border max-w-md mx-auto">
+          <CardHeader>
+            <CardTitle className="text-sm font-bold text-white flex items-center gap-2">
+              <Building className="h-4.5 w-4.5 text-indigo-400" />
+              Criar Novo Grupo Econômico
+            </CardTitle>
+            <CardDescription className="text-xs text-slate-400">
+              Você não possui nenhum grupo ou empresa ativa associada. Crie um novo grupo para começar a gerenciar empresas, convidar membros e importar NFS-e.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleCreateGroupSubmit} className="space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="newGroupName" className="text-xs font-semibold text-slate-300">
+                  Nome do Grupo Econômico
+                </Label>
+                <Input
+                  id="newGroupName"
+                  placeholder="Ex: Grupo Samel Faturamento"
+                  value={newGroupName}
+                  onChange={(e) => setNewGroupName(e.target.value)}
+                  className="bg-slate-950/40 border-slate-800 text-white text-xs rounded-xl focus-visible:ring-indigo-500/30"
+                />
+              </div>
+              <Button
+                type="submit"
+                disabled={creatingGroup}
+                className="w-full bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl cursor-pointer"
+              >
+                {creatingGroup ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Criando...
+                  </>
+                ) : (
+                  "Criar Grupo"
+                )}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          {/* KPI Stats summary */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card className="bg-card border-border">
           <CardHeader className="p-4 pb-2">
@@ -738,6 +802,8 @@ function ConfiguracoesRouteComponent() {
           </Card>
         </TabsContent>
       </Tabs>
+      </>
+      )}
     </main>
   );
 }
