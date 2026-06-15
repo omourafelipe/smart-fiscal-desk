@@ -33,10 +33,11 @@ import {
   FileSpreadsheet,
   Printer,
   AlertTriangle,
+  ShoppingBag,
 } from "lucide-react";
 
-import { db, type NotaFiscal } from "@/lib/db";
-import { parseNfseXml } from "@/lib/parseXml";
+import { db, type NotaFiscal, type NotaFiscalTomada } from "@/lib/db";
+import { parseNfseXml, parseNfseXmlTomada } from "@/lib/parseXml";
 import { CategoryLabelService } from "@/lib/services/CategoryLabelService";
 import { useLayoutShell } from "@/components/layout/LayoutShell";
 import { useFiscalData } from "@/hooks/useFiscalData";
@@ -50,6 +51,8 @@ import { calcularProximasObrigacoes } from "@/lib/obrigacoes";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/store/useAuthStore";
+import { useTenantStore } from "@/store/useTenantStore";
+import { supabase } from "@/lib/supabaseClient";
 import { SyncManager } from "@/lib/data-access/SyncManager";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -446,10 +449,54 @@ function Dashboard() {
       }
 
       if (allNotas.length) {
-        await db.notas.bulkPut(allNotas);
-        addActivity("upload", `${allNotas.length} Notas Importadas`, "Importação de XMLs finalizada com sucesso.");
-        if (session?.user?.id) {
-          SyncManager.syncAll(session.user.id);
+        if (session?.user?.id && supabase) {
+          const activeGroupId = useTenantStore.getState().activeGroup?.id;
+          const mappedNotas = allNotas.map((n) => ({
+            id: n.id,
+            user_id: session.user.id,
+            group_id: activeGroupId || null,
+            n_nfse: n.nNFSe,
+            cnpj_prestador: n.cnpjPrestador,
+            nome_prestador: n.nomePrestador,
+            dh_emi: n.dhEmi,
+            valor: n.valor,
+            cliente: n.cliente,
+            servico: n.servico,
+            c_stat: n.cStat,
+            status: n.status,
+            chave: n.chave,
+            cnpj_cpf_cliente: n.cnpjCpfCliente,
+            vlr_liquido: n.vlrLiquido,
+            vlr_iss: n.vlrIss,
+            vlr_iss_ret: n.vlrIssRet || 0,
+            vlr_iss_recolher: n.vlrIssRecolher || 0,
+            iss_retido: n.issRetido,
+            vlr_csll: n.vlrCsll,
+            vlr_irrf: n.vlrIrrf,
+            vlr_pis: n.vlrPis,
+            vlr_cofins: n.vlrCofins,
+            vlr_inss: n.vlrInss,
+            cod_trib_nacional: n.codTribNacional,
+            d_compet: n.dCompet,
+            raw: n.raw,
+          }));
+
+          const { error } = await supabase.from("nfse_documents").upsert(mappedNotas);
+          if (error) {
+            if (import.meta.env.DEV) {
+              console.error("Erro ao gravar notas no Supabase:", error);
+            }
+            toast.error(`Erro ao persistir notas na nuvem: ${error.message}`);
+            setProgress(null);
+            setImporting(false);
+            return;
+          }
+
+          addActivity("upload", `${allNotas.length} Notas Importadas`, "Importação de XMLs finalizada com sucesso na nuvem.");
+          await SyncManager.syncAll(session.user.id, true);
+        } else {
+          await db.notas.bulkPut(allNotas);
+          addActivity("upload", `${allNotas.length} Notas Importadas`, "Importação de XMLs finalizada com sucesso localmente.");
         }
       }
       setProgress(null);
@@ -458,7 +505,125 @@ function Dashboard() {
         `${allNotas.length} nota(s) importada(s). ${skipped ? skipped + " ignorada(s)." : ""}`,
       );
     },
-    [addActivity],
+    [addActivity, session],
+  );
+
+  // File import processor for Taken Services (Serviços Tomados)
+  const processFilesTomadas = useCallback(
+    async (files: FileList | File[]) => {
+      setImporting(true);
+      const arr = Array.from(files).filter((f) => f.name.toLowerCase().endsWith(".zip"));
+      if (!arr.length) {
+        toast.error("Envie arquivos .zip contendo XMLs NFS-e de serviços tomados.");
+        setImporting(false);
+        return;
+      }
+
+      const existingNotas = await db.notas.toArray();
+      const existingNotasTomadas = await db.notasTomadas.toArray();
+      const cnpjsGrupo = new Set([
+        ...existingNotas.map((n) => n.cnpjPrestador.replace(/\D/g, "")),
+        ...existingNotasTomadas.map((n) => n.cnpjTomador.replace(/\D/g, ""))
+      ].filter(Boolean));
+
+      const allNotasTomadas: NotaFiscalTomada[] = [];
+      let skipped = 0;
+      let totalXmls = 0;
+      const { default: JSZip } = await import("jszip");
+      const zipEntries: { zip: JSZip; entries: JSZip.JSZipObject[] }[] = [];
+
+      for (const file of arr) {
+        try {
+          const zip = await JSZip.loadAsync(file);
+          const xmlEntries = Object.values(zip.files).filter(
+            (f) => !f.dir && f.name.toLowerCase().endsWith(".xml"),
+          );
+          totalXmls += xmlEntries.length;
+          zipEntries.push({ zip, entries: xmlEntries });
+        } catch (e) {
+          console.error(e);
+          toast.error(`Erro ao abrir o arquivo ZIP ${file.name}`);
+        }
+      }
+
+      let doneXmls = 0;
+      setProgress({ done: 0, total: totalXmls });
+
+      for (const { zip, entries } of zipEntries) {
+        for (const entry of entries) {
+          try {
+            const xml = await entry.async("string");
+            const nota = parseNfseXmlTomada(xml, cnpjsGrupo);
+            if (nota) allNotasTomadas.push(nota);
+            else skipped++;
+          } catch (e) {
+            console.error(e);
+            skipped++;
+          }
+          doneXmls++;
+          if (doneXmls % 25 === 0 || doneXmls === totalXmls) {
+            setProgress({ done: doneXmls, total: totalXmls });
+          }
+        }
+      }
+
+      if (allNotasTomadas.length) {
+        if (session?.user?.id && supabase) {
+          const activeGroupId = useTenantStore.getState().activeGroup?.id;
+          const mappedTomadas = allNotasTomadas.map((n) => ({
+            id: n.id,
+            user_id: session.user.id,
+            group_id: activeGroupId || null,
+            n_nfse: n.nNFSe,
+            cnpj_tomador: n.cnpjTomador,
+            nome_tomador: n.nomeTomador,
+            cnpj_prestador: n.cnpjPrestador,
+            nome_prestador: n.nomePrestador,
+            dh_emi: n.dhEmi,
+            d_compet: n.dCompet,
+            valor: n.valor,
+            vlr_liquido: n.vlrLiquido,
+            servico: n.servico,
+            cod_trib_nacional: n.codTribNacional,
+            c_stat: n.cStat,
+            status: n.status,
+            chave: n.chave,
+            iss_retido: n.issRetido,
+            vlr_iss_ret: n.vlrIssRet,
+            vlr_iss: n.vlrIss || 0,
+            vlr_irrf: n.vlrIrrf,
+            vlr_csll: n.vlrCsll,
+            vlr_pis: n.vlrPis,
+            vlr_cofins: n.vlrCofins,
+            vlr_inss: n.vlrInss,
+            raw: n.raw,
+          }));
+
+          const { error } = await supabase.from("nfse_documents_tomadas").upsert(mappedTomadas);
+          if (error) {
+            if (import.meta.env.DEV) {
+              console.error("Erro ao gravar tomadas no Supabase:", error);
+            }
+            toast.error(`Erro ao persistir notas tomadas na nuvem: ${error.message}`);
+            setProgress(null);
+            setImporting(false);
+            return;
+          }
+
+          addActivity("upload", `${allNotasTomadas.length} Tomadas Importadas`, "Importação de serviços tomados finalizada na nuvem.");
+          await SyncManager.syncAll(session.user.id, true);
+        } else {
+          await db.notasTomadas.bulkPut(allNotasTomadas);
+          addActivity("upload", `${allNotasTomadas.length} Tomadas Importadas`, "Importação de serviços tomados finalizada localmente.");
+        }
+      }
+      setProgress(null);
+      setImporting(false);
+      toast.success(
+        `${allNotasTomadas.length} nota(s) de serviço tomado importada(s). ${skipped ? skipped + " ignorada(s)." : ""}`,
+      );
+    },
+    [addActivity, session],
   );
 
 
@@ -555,6 +720,14 @@ function Dashboard() {
             className="hidden"
             onChange={(e) => e.target.files && processFiles(e.target.files)}
           />
+          <input
+            id="file-input-tomadas"
+            type="file"
+            accept=".zip"
+            multiple
+            className="hidden"
+            onChange={(e) => e.target.files && processFilesTomadas(e.target.files)}
+          />
           <Button
             disabled={importing}
             onClick={() => !importing && document.getElementById("file-input-fat")?.click()}
@@ -568,7 +741,24 @@ function Dashboard() {
             ) : (
               <>
                 <Upload className="h-4 w-4" />
-                Importar NFS-e (ZIP)
+                Importar Serviços Prestados
+              </>
+            )}
+          </Button>
+          <Button
+            disabled={importing}
+            onClick={() => !importing && document.getElementById("file-input-tomadas")?.click()}
+            className="flex items-center gap-2 px-4 h-9 text-xs font-semibold rounded-xl bg-teal-600 hover:bg-teal-700 text-white shadow-xs transition-all duration-300 hover:scale-[1.01] cursor-pointer"
+          >
+            {importing ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                {progress ? `Importando (${progress.done}/${progress.total})` : "Importando..."}
+              </>
+            ) : (
+              <>
+                <ShoppingBag className="h-4 w-4" />
+                Importar Serviços Tomados
               </>
             )}
           </Button>

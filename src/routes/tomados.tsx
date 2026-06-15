@@ -25,6 +25,9 @@ import { db, type NotaFiscalTomada, type ServiceClassification, type CategoryRul
 import { parseNfseXmlTomada } from "@/lib/parseXml";
 import { useLayoutShell } from "@/components/layout/LayoutShell";
 import { useTenantStore } from "@/store/useTenantStore";
+import { useAuthStore } from "@/store/useAuthStore";
+import { supabase } from "@/lib/supabaseClient";
+import { SyncManager } from "@/lib/data-access/SyncManager";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -96,6 +99,7 @@ function TomadosRouteComponent() {
 
   const { periodType, addActivity } = useLayoutShell();
   const { activeRole } = useTenantStore();
+  const { session } = useAuthStore();
   const canEdit = PermissionService.canEdit(activeRole);
   const [activePieIndex, setActivePieIndex] = useState<number | null>(null);
 
@@ -215,9 +219,55 @@ function TomadosRouteComponent() {
       }
 
       if (batch.length > 0) {
-        await db.notasTomadas.bulkPut(batch);
-        addActivity("upload", `${batch.length} Tomadas Importadas`, `Importação de serviços tomados finalizada.`);
-        toast.success(`${batch.length} nota(s) de serviço tomado importada(s).`);
+        if (session?.user?.id && supabase) {
+          const activeGroupId = useTenantStore.getState().activeGroup?.id;
+          const mappedTomadas = batch.map((n) => ({
+            id: n.id,
+            user_id: session.user.id,
+            group_id: activeGroupId || null,
+            n_nfse: n.nNFSe,
+            cnpj_tomador: n.cnpjTomador,
+            nome_tomador: n.nomeTomador,
+            cnpj_prestador: n.cnpjPrestador,
+            nome_prestador: n.nomePrestador,
+            dh_emi: n.dhEmi,
+            d_compet: n.dCompet,
+            valor: n.valor,
+            vlr_liquido: n.vlrLiquido,
+            servico: n.servico,
+            cod_trib_nacional: n.codTribNacional,
+            c_stat: n.cStat,
+            status: n.status,
+            chave: n.chave,
+            iss_retido: n.issRetido,
+            vlr_iss_ret: n.vlrIssRet,
+            vlr_iss: n.vlrIss || 0,
+            vlr_irrf: n.vlrIrrf,
+            vlr_csll: n.vlrCsll,
+            vlr_pis: n.vlrPis,
+            vlr_cofins: n.vlrCofins,
+            vlr_inss: n.vlrInss,
+            raw: n.raw,
+          }));
+
+          const { error } = await supabase.from("nfse_documents_tomadas").upsert(mappedTomadas);
+          if (error) {
+            if (import.meta.env.DEV) {
+              console.error("Erro ao gravar tomadas no Supabase:", error);
+            }
+            toast.error(`Erro ao persistir notas tomadas na nuvem: ${error.message}`);
+            setProgressTomadas(null);
+            setImportingTomadas(false);
+            return;
+          }
+
+          addActivity("upload", `${batch.length} Tomadas Importadas`, "Importação de serviços tomados finalizada na nuvem.");
+          await SyncManager.syncAll(session.user.id, true);
+        } else {
+          await db.notasTomadas.bulkPut(batch);
+          addActivity("upload", `${batch.length} Tomadas Importadas`, `Importação de serviços tomados finalizada localmente.`);
+          toast.success(`${batch.length} nota(s) de serviço tomado importada(s).`);
+        }
       } else {
         if (cnpjsGrupo.size > 0) {
           toast.warning("Nenhuma nota com CNPJ do grupo como tomador foi encontrada.");
@@ -226,13 +276,15 @@ function TomadosRouteComponent() {
         }
       }
     } catch (e) {
-      console.error(e);
+      if (import.meta.env.DEV) {
+        console.error(e);
+      }
       toast.error("Erro ao importar arquivos tomados.");
     } finally {
       setImportingTomadas(false);
       setProgressTomadas(null);
     }
-  }, [addActivity]);
+  }, [addActivity, session]);
 
   const exportCsvTomadas = () => {
     const headers = [

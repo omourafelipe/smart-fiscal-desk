@@ -72,7 +72,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
     user: null,
     session: null,
     profile: null,
-    loading: isSupabaseConfigured, // Só fica em loading no início se o Supabase estiver configurado
+    loading: false, // Inicia como false para permitir edição imediata dos campos
     isSupabaseConfigured,
     initialized: false,
 
@@ -158,7 +158,39 @@ export const useAuthStore = create<AuthState>((set, get) => {
 
         if (data.session) {
           toast.success("Login efetuado com sucesso!");
-          // O listener de AuthStateChange vai pegar a sessão e carregar o perfil
+          
+          let profileData = null;
+          try {
+            const { data: prof, error: profErr } = await supabase
+              .from("profiles")
+              .select("*")
+              .eq("id", data.session.user.id)
+              .single();
+            if (!profErr && prof) {
+              profileData = prof;
+            }
+          } catch (e) {
+            if (import.meta.env.DEV) {
+              console.error("Erro ao buscar perfil:", e);
+            }
+          }
+
+          if (!profileData) {
+            const metadata = data.session.user.user_metadata;
+            profileData = {
+              id: data.session.user.id,
+              nome: metadata?.nome || "Usuário",
+              empresa: metadata?.empresa || "Empresa"
+            };
+          }
+
+          set({
+            session: data.session,
+            user: data.session.user,
+            profile: profileData,
+            loading: false,
+            initialized: true
+          });
           return true;
         }
 

@@ -146,4 +146,9 @@
     font-family: var(--font-sans);
     transition: background-color 0.3s ease, color 0.3s ease;
   }
+
+  /* Fix Radix UI Dialog/Popover pointer-events bug */
+  body[style*="pointer-events: none"] {
+    pointer-events: auto !important;
+  }
 }
