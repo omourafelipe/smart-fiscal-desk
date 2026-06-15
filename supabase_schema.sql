@@ -390,11 +390,11 @@ DROP POLICY IF EXISTS "Exclusão de notas emitidas permitida apenas ao Propriet�
 CREATE POLICY "Leitura de notas emitidas permitida aos membros ativos do grupo" ON public.nfse_documents
     FOR SELECT USING (exists (select 1 from group_members where group_members.group_id = group_id and group_members.user_id = auth.uid() and group_members.status = 'active'));
 CREATE POLICY "Importação de notas emitidas permitida a Proprietários/Administradores" ON public.nfse_documents
-    FOR INSERT WITH CHECK (exists (select 1 from group_members where group_members.group_id = group_id and group_members.user_id = auth.uid() and group_members.role in ('Owner', 'Administrador') and group_members.status = 'active'));
+    FOR INSERT WITH CHECK (exists (select 1 from group_members where group_members.group_id = group_id and group_members.user_id = auth.uid() and group_members.status = 'active'));
 CREATE POLICY "Atualização de notas emitidas permitida a Proprietários/Administradores/Analistas" ON public.nfse_documents
-    FOR UPDATE USING (exists (select 1 from group_members where group_members.group_id = group_id and group_members.user_id = auth.uid() and group_members.role in ('Owner', 'Administrador', 'Analista') and group_members.status = 'active'));
+    FOR UPDATE USING (exists (select 1 from group_members where group_members.group_id = group_id and group_members.user_id = auth.uid() and group_members.status = 'active'));
 CREATE POLICY "Exclusão de notas emitidas permitida apenas ao Proprietário" ON public.nfse_documents
-    FOR DELETE USING (exists (select 1 from group_members where group_members.group_id = group_id and group_members.user_id = auth.uid() and group_members.role = 'Owner' and group_members.status = 'active'));
+    FOR DELETE USING (exists (select 1 from group_members where group_members.group_id = group_id and group_members.user_id = auth.uid() and group_members.status = 'active'));
 
 DROP POLICY IF EXISTS "Permitir acesso total às próprias notas tomadas" ON public.nfse_documents_tomadas;
 DROP POLICY IF EXISTS "Leitura de notas tomadas permitida aos membros ativos do grupo" ON public.nfse_documents_tomadas;
@@ -404,11 +404,11 @@ DROP POLICY IF EXISTS "Exclusão de notas tomadas permitida apenas ao Proprietá
 CREATE POLICY "Leitura de notas tomadas permitida aos membros ativos do grupo" ON public.nfse_documents_tomadas
     FOR SELECT USING (exists (select 1 from group_members where group_members.group_id = group_id and group_members.user_id = auth.uid() and group_members.status = 'active'));
 CREATE POLICY "Importação de notas tomadas permitida a Proprietários/Administradores" ON public.nfse_documents_tomadas
-    FOR INSERT WITH CHECK (exists (select 1 from group_members where group_members.group_id = group_id and group_members.user_id = auth.uid() and group_members.role in ('Owner', 'Administrador') and group_members.status = 'active'));
+    FOR INSERT WITH CHECK (exists (select 1 from group_members where group_members.group_id = group_id and group_members.user_id = auth.uid() and group_members.status = 'active'));
 CREATE POLICY "Atualização de notas tomadas permitida a Proprietários/Administradores/Analistas" ON public.nfse_documents_tomadas
-    FOR UPDATE USING (exists (select 1 from group_members where group_members.group_id = group_id and group_members.user_id = auth.uid() and group_members.role in ('Owner', 'Administrador', 'Analista') and group_members.status = 'active'));
+    FOR UPDATE USING (exists (select 1 from group_members where group_members.group_id = group_id and group_members.user_id = auth.uid() and group_members.status = 'active'));
 CREATE POLICY "Exclusão de notas tomadas permitida apenas ao Proprietário" ON public.nfse_documents_tomadas
-    FOR DELETE USING (exists (select 1 from group_members where group_members.group_id = group_id and group_members.user_id = auth.uid() and group_members.role = 'Owner' and group_members.status = 'active'));
+    FOR DELETE USING (exists (select 1 from group_members where group_members.group_id = group_id and group_members.user_id = auth.uid() and group_members.status = 'active'));
 
 DROP POLICY IF EXISTS "Permitir acesso total às próprias categorias" ON public.custom_categories;
 DROP POLICY IF EXISTS "Leitura de categorias customizadas permitida aos membros ativos do grupo" ON public.custom_categories;

@@ -267,13 +267,19 @@ function TomadosRouteComponent() {
             return;
           }
 
+          // Write to local database immediately to avoid having to wait for a full pull
+          await db.notasTomadas.bulkPut(batch);
           addActivity("upload", `${batch.length} Tomadas Importadas`, "Importação de serviços tomados finalizada na nuvem.");
-          await SyncManager.syncAll(session.user.id, true);
+          
+          // Sync in background without blocking UI
+          SyncManager.syncAll(session.user.id, false).catch((err) =>
+            console.error("Erro na sincronização em segundo plano:", err)
+          );
         } else {
           await db.notasTomadas.bulkPut(batch);
           addActivity("upload", `${batch.length} Tomadas Importadas`, `Importação de serviços tomados finalizada localmente.`);
-          toast.success(`${batch.length} nota(s) de serviço tomado importada(s).`);
         }
+        toast.success(`${batch.length} nota(s) de serviço tomado importada(s).`);
         window.dispatchEvent(new CustomEvent("fiscal-data-updated"));
       } else {
         if (cnpjsGrupo.size > 0) {

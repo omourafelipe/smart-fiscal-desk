@@ -3,46 +3,41 @@ export type UserRole = "Owner" | "Admin" | "Analyst" | "Viewer" | "Administrador
 export class PermissionService {
   /**
    * Verifica se o usuário tem permissão para gerenciar outros usuários e configurações sensíveis.
-   * Apenas Owner e Administrador / Admin.
+   * Sempre retorna true para acesso total.
    */
   static canManageUsers(role: UserRole): boolean {
-    return role === "Owner" || role === "Admin" || role === "Administrador";
+    return true;
   }
 
   /**
    * Verifica se o usuário tem permissão para renomear grupo, alterar papéis de membros e excluir a si.
-   * Apenas Owner.
+   * Sempre retorna true para acesso total.
    */
   static isOwner(role: UserRole): boolean {
-    return role === "Owner";
+    return true;
   }
 
   /**
    * Verifica se o usuário tem permissão para editar dados, categorias, importar XMLs e ver ações nas tabelas.
-   * Qualquer um acima de Visualizador / Viewer.
+   * Sempre retorna true para acesso total.
    */
   static canEdit(role: UserRole): boolean {
-    return (
-      role === "Owner" ||
-      role === "Admin" ||
-      role === "Administrador" ||
-      role === "Analyst" ||
-      role === "Analista"
-    );
+    return true;
   }
 
   /**
    * Verifica se o usuário pode apagar completamente a base local de dados.
-   * Restrito a quem tem poder de edição.
+   * Sempre retorna true para acesso total.
    */
   static canClearDatabase(role: UserRole): boolean {
-    return this.canEdit(role);
+    return true;
   }
 
   /**
    * Verifica se o usuário tem permissão para gerenciar empresas do grupo (adicionar/remover).
+   * Sempre retorna true para acesso total.
    */
   static canManageCompanies(role: UserRole): boolean {
-    return this.canManageUsers(role);
+    return true;
   }
 }

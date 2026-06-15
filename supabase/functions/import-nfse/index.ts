@@ -14,6 +14,7 @@ const parser = new XMLParser({
   attributeNamePrefix: "@_",
   parseTagValue: false,
   trimValues: true,
+  removeNSPrefix: true, // Strips namespace prefixes (e.g. tc:infNFSe -> infNFSe)
 });
 
 function pick(obj: any, path: string[]): any {
@@ -25,22 +26,55 @@ function pick(obj: any, path: string[]): any {
   return cur;
 }
 
-// Find NFSe node regardless of envelope wrapper
+// Recursively converts all keys in an object/array to lowercase
+function lowercaseKeys(obj: unknown): unknown {
+  if (obj === null || typeof obj !== "object") {
+    return obj;
+  }
+  if (Array.isArray(obj)) {
+    return obj.map(lowercaseKeys);
+  }
+  const record = obj as Record<string, unknown>;
+  const result: Record<string, unknown> = {};
+  for (const key of Object.keys(record)) {
+    result[key.toLowerCase()] = lowercaseKeys(record[key]);
+  }
+  return result;
+}
+
+// Find NFSe node regardless of envelope wrapper (casing-agnostic search)
 function findNFSe(obj: any): any {
   if (!obj || typeof obj !== "object") return null;
-  if (obj.NFSe && typeof obj.NFSe === "object") {
-    if (obj.NFSe.infNFSe) return obj.NFSe;
+  const record = obj as Record<string, unknown>;
+
+  // If the object itself has infnfse or infdps, then this is the NFSe node
+  if (record.infnfse || record.infdps) {
+    return record;
   }
-  for (const k of Object.keys(obj)) {
-    const found = findNFSe(obj[k]);
-    if (found) return found;
+
+  // If we have a nested nfse property
+  if (record.nfse && typeof record.nfse === "object") {
+    const nfse = record.nfse as Record<string, unknown>;
+    if (nfse.infnfse || nfse.infdps) return nfse;
+  }
+
+  for (const k of Object.keys(record)) {
+    if (Array.isArray(record[k])) {
+      for (const item of record[k]) {
+        const found = findNFSe(item);
+        if (found) return found;
+      }
+    } else {
+      const found = findNFSe(record[k]);
+      if (found) return found;
+    }
   }
   return null;
 }
 
 function getNumberFallback(root: any, relativePaths: string[][]): number {
   for (const rel of relativePaths) {
-    let val = pick(root, ["DPS", "infDPS", "valores", ...rel]);
+    let val = pick(root, ["dps", "infdps", "valores", ...rel]);
     if (val !== undefined && val !== null && val !== "") {
       const num = Number(val);
       if (!isNaN(num)) return num;
@@ -50,7 +84,7 @@ function getNumberFallback(root: any, relativePaths: string[][]): number {
       const num = Number(val);
       if (!isNaN(num)) return num;
     }
-    val = pick(root, ["DPS", "infDPS", ...rel]);
+    val = pick(root, ["dps", "infdps", ...rel]);
     if (val !== undefined && val !== null && val !== "") {
       const num = Number(val);
       if (!isNaN(num)) return num;
@@ -65,10 +99,10 @@ function getNumberFallback(root: any, relativePaths: string[][]): number {
 }
 
 function getIssRetido(root: any): "Sim" | "Não" {
-  const rawVal = pick(root, ["DPS", "infDPS", "valores", "trib", "tribMun", "tpRetISSQN"]) ??
-                 pick(root, ["valores", "trib", "tribMun", "tpRetISSQN"]) ??
-                 pick(root, ["DPS", "infDPS", "valores", "tpRetISSQN"]) ??
-                 pick(root, ["valores", "tpRetISSQN"]);
+  const rawVal = pick(root, ["dps", "infdps", "valores", "trib", "tribmun", "tpretissqn"]) ??
+                 pick(root, ["valores", "trib", "tribmun", "tpretissqn"]) ??
+                 pick(root, ["dps", "infdps", "valores", "tpretissqn"]) ??
+                 pick(root, ["valores", "tpretissqn"]);
   if (rawVal === undefined || rawVal === null) return "Não";
 
   const tpRetISSQN = String(rawVal).trim().toLowerCase();
@@ -78,32 +112,38 @@ function getIssRetido(root: any): "Sim" | "Não" {
 
 function getMunicipalCode(inf: any): string {
   return String(
-    pick(inf, ["DPS", "infDPS", "serv", "cServ", "cTribMun"]) ??
-    pick(inf, ["serv", "cServ", "cTribMun"]) ??
-    pick(inf, ["DPS", "infDPS", "serv", "CodigoTributacaoMunicipio"]) ??
-    pick(inf, ["servico", "CodigoTributacaoMunicipio"]) ??
-    pick(inf, ["Servico", "CodigoTributacaoMunicipio"]) ??
-    pick(inf, ["CodigoTributacaoMunicipio"]) ??
-    pick(inf, ["DPS", "infDPS", "serv", "CodigoServicoMunicipio"]) ??
-    pick(inf, ["servico", "CodigoServicoMunicipio"]) ??
-    pick(inf, ["Servico", "CodigoServicoMunicipio"]) ??
-    pick(inf, ["CodigoServicoMunicipio"]) ??
-    pick(inf, ["DPS", "infDPS", "serv", "cServ"]) ??
-    pick(inf, ["serv", "cServ"]) ??
+    // Padrão Nacional
+    pick(inf, ["dps", "infdps", "serv", "cserv", "ctribmun"]) ??
+    pick(inf, ["serv", "cserv", "ctribmun"]) ??
+    
+    // ABRASF / Outros
+    pick(inf, ["dps", "infdps", "serv", "codigotributacaomunicipio"]) ??
+    pick(inf, ["servico", "codigotributacaomunicipio"]) ??
+    pick(inf, ["codigotributacaomunicipio"]) ??
+
+    pick(inf, ["dps", "infdps", "serv", "codigoservicomunicipio"]) ??
+    pick(inf, ["servico", "codigoservicomunicipio"]) ??
+    pick(inf, ["codigoservicomunicipio"]) ??
+
+    // Fallbacks
+    pick(inf, ["dps", "infdps", "serv", "cserv"]) ??
+    pick(inf, ["serv", "cserv"]) ??
     ""
   ).trim();
 }
 
 function getNbsCode(inf: any): string {
   return String(
-    pick(inf, ["DPS", "infDPS", "serv", "cNBS"]) ??
-    pick(inf, ["DPS", "infDPS", "serv", "cServ", "cNBS"]) ??
-    pick(inf, ["serv", "cNBS"]) ??
-    pick(inf, ["serv", "cServ", "cNBS"]) ??
-    pick(inf, ["DPS", "infDPS", "serv", "CodigoNbs"]) ??
-    pick(inf, ["servico", "CodigoNbs"]) ??
-    pick(inf, ["Servico", "CodigoNbs"]) ??
-    pick(inf, ["CodigoNbs"]) ??
+    // Padrão Nacional / Webservice atualizado
+    pick(inf, ["dps", "infdps", "serv", "cnbs"]) ??
+    pick(inf, ["dps", "infdps", "serv", "cserv", "cnbs"]) ??
+    pick(inf, ["serv", "cnbs"]) ??
+    pick(inf, ["serv", "cserv", "cnbs"]) ??
+
+    // ABRASF v2.04
+    pick(inf, ["dps", "infdps", "serv", "codigonbs"]) ??
+    pick(inf, ["servico", "codigonbs"]) ??
+    pick(inf, ["codigonbs"]) ??
     ""
   ).trim();
 }
@@ -225,25 +265,26 @@ serve(async (req: any) => {
     for (const xmlStr of xmlList) {
       try {
         const json = parser.parse(xmlStr);
-        const NFSe = findNFSe(json);
+        const normalizedJson = lowercaseKeys(json);
+        const NFSe = findNFSe(normalizedJson);
         if (!NFSe) {
           errors.push("XML format invalid: NFSe node not found");
           continue;
         }
-        const inf = NFSe.infNFSe;
+        const inf = NFSe.infnfse || NFSe.infdps;
         if (!inf) {
-          errors.push("XML format invalid: infNFSe node not found");
+          errors.push("XML format invalid: infNFSe/infDPS node not found");
           continue;
         }
 
-        const nNFSe = String(inf.nNFSe ?? "").trim();
-        const cnpjPrestador = String(pick(inf, ["emit", "CNPJ"]) ?? "").trim().replace(/\D/g, "");
-        const nomePrestador = String(pick(inf, ["emit", "xNome"]) ?? "").trim();
+        const nNFSe = String(inf.nnfse ?? "").trim();
+        const cnpjPrestador = String(pick(inf, ["emit", "cnpj"]) ?? "").trim().replace(/\D/g, "");
+        const nomePrestador = String(pick(inf, ["emit", "xnome"]) ?? "").trim();
 
-        const cnpjCliente = String(pick(inf, ["DPS", "infDPS", "toma", "CNPJ"]) ?? "").trim().replace(/\D/g, "");
-        const cpfCliente = String(pick(inf, ["DPS", "infDPS", "toma", "CPF"]) ?? "").trim().replace(/\D/g, "");
+        const cnpjCliente = String(pick(inf, ["dps", "infdps", "toma", "cnpj"]) ?? "").trim().replace(/\D/g, "");
+        const cpfCliente = String(pick(inf, ["dps", "infdps", "toma", "cpf"]) ?? "").trim().replace(/\D/g, "");
         const cnpjCpfCliente = cnpjCliente || cpfCliente;
-        const clienteNome = String(pick(inf, ["DPS", "infDPS", "toma", "xNome"]) ?? "").trim();
+        const clienteNome = String(pick(inf, ["dps", "infdps", "toma", "xnome"]) ?? "").trim();
 
         if (!nNFSe || !cnpjPrestador) {
           errors.push("XML format invalid: missing nNFSe or cnpjPrestador");
@@ -254,42 +295,46 @@ serve(async (req: any) => {
         const isEmitida = groupCnpjs.size === 0 || groupCnpjs.has(cnpjPrestador);
         const isTomada = !isEmitida && groupCnpjs.has(cnpjCpfCliente);
 
-        let dhEmi = String(pick(inf, ["DPS", "infDPS", "dhEmi"]) ?? "").trim();
+        let dhEmi = String(pick(inf, ["dps", "infdps", "dhemi"]) ?? "").trim();
         if (dhEmi && isNaN(Date.parse(dhEmi))) dhEmi = "";
 
         const valor = getNumberFallback(inf, [
-          ["vServPrest", "vServ"],
-          ["vServ"],
-          ["Valores", "ValorServicos"],
-          ["valores", "ValorServicos"],
-          ["valores", "vServ"],
-          ["valores", "vServPrest"],
-          ["Servico", "Valores", "ValorServicos"],
-          ["servico", "valores", "ValorServicos"]
+          ["vserv"],
+          ["vservprest"],
+          ["valorservicos"],
+          ["servico", "valores", "valorservicos"],
+          ["servico", "valores", "vserv"],
+          ["servico", "vserv"],
+          ["serv", "valores", "vserv"],
+          ["serv", "valores", "vservprest"],
+          ["serv", "vserv"],
+          ["valores", "vserv"],
+          ["valores", "vservprest"],
+          ["valores", "valorservicos"]
         ]);
-        const vlrLiquido = getNumberFallback(inf, [
-          ["vLiq"],
-          ["vLiquido"],
-          ["Valores", "ValorLiquidoNfse"],
-          ["Valores", "ValorLiquido"],
-          ["valores", "vLiq"],
-          ["valores", "vLiquido"]
-        ]) || valor;
+        const vlrLiquidoRaw = getNumberFallback(inf, [
+          ["vliq"],
+          ["vliquido"],
+          ["valores", "valorliquidonfse"],
+          ["valores", "valorliquido"],
+          ["valores", "vliq"],
+          ["valores", "vliquido"]
+        ]);
         const servico = String(
-          pick(inf, ["DPS", "infDPS", "serv", "xDescServ"]) ??
-          pick(inf, ["DPS", "infDPS", "serv", "cServ", "xDescServ"]) ??
-          pick(inf, ["DPS", "infDPS", "serv", "cServ"]) ??
+          pick(inf, ["dps", "infdps", "serv", "xdescserv"]) ??
+          pick(inf, ["dps", "infdps", "serv", "cserv", "xdescserv"]) ??
+          pick(inf, ["dps", "infdps", "serv", "cserv"]) ??
           ""
         ).trim();
 
-        const cStat = String(inf.cStat ?? "").trim();
-        const chave = String(inf["@_Id"] ?? "").replace(/\D/g, "").trim();
+        const cStat = String(inf.cstat ?? "").trim();
+        const chave = String(inf["@_id"] ?? "").replace(/\D/g, "").trim();
 
         const nbs = getNbsCode(inf);
         const cTribNac = String(
-          pick(inf, ["DPS", "infDPS", "serv", "cTribNac"]) ??
-          pick(inf, ["DPS", "infDPS", "serv", "cServ", "cTribNac"]) ??
-          pick(inf, ["serv", "cTribNac"]) ??
+          pick(inf, ["dps", "infdps", "serv", "ctribnac"]) ??
+          pick(inf, ["dps", "infdps", "serv", "cserv", "ctribnac"]) ??
+          pick(inf, ["serv", "ctribnac"]) ??
           ""
         ).trim();
         const municipal = getMunicipalCode(inf);
@@ -297,22 +342,27 @@ serve(async (req: any) => {
 
         const issRetidoFlag = getIssRetido(inf);
         const vlrIssRetRaw = getNumberFallback(inf, [
-          ["vISSRet"],
-          ["trib", "tribMun", "vISSRet"],
-          ["Valores", "ValorIssRetido"],
-          ["valores", "vISSRet"]
+          ["vissret"],
+          ["trib", "tribmun", "vissret"],
+          ["valores", "valorissretido"],
+          ["valores", "vissret"]
         ]);
         const vlrIssQN = getNumberFallback(inf, [
-          ["vISSQN"],
-          ["vISS"],
-          ["trib", "tribMun", "vISSQN"],
-          ["trib", "tribMun", "vISS"],
-          ["Valores", "ValorIss"],
-          ["valores", "vISSQN"],
-          ["valores", "vISS"]
+          ["vissqn"],
+          ["viss"],
+          ["trib", "tribmun", "vissqn"],
+          ["trib", "tribmun", "viss"],
+          ["valores", "valoriss"],
+          ["valores", "vissqn"],
+          ["valores", "viss"]
         ]);
 
-        let dCompet = String(pick(inf, ["DPS", "infDPS", "dCompet"]) ?? pick(inf, ["dCompet"]) ?? "").trim();
+        // Define ISS Retido for Net Value calculation
+        const vlrIssRet = isTomada
+          ? (issRetidoFlag === "Sim" ? (vlrIssRetRaw > 0 ? vlrIssRetRaw : vlrIssQN) : 0)
+          : (vlrIssRetRaw > 0 ? vlrIssRetRaw : (issRetidoFlag === "Sim" ? vlrIssQN : 0));
+
+        let dCompet = String(pick(inf, ["dps", "infdps", "dcompet"]) ?? pick(inf, ["dcompet"]) ?? "").trim();
         if (dCompet.length === 7 && dCompet.includes("-")) {
           dCompet = `${dCompet}-01`;
         } else if (dCompet.length === 6 && !dCompet.includes("-")) {
@@ -324,52 +374,59 @@ serve(async (req: any) => {
 
         // Retenções Federais
         const vlrCsll = getNumberFallback(inf, [
-          ["trib", "tribFed", "vRetCSLL"],
-          ["trib", "tribFed", "vCSLL"],
-          ["vRetCSLL"],
-          ["vCSLL"],
-          ["Valores", "ValorCsll"],
-          ["valores", "vCSLL"]
+          ["trib", "tribfed", "vretcsll"],
+          ["trib", "tribfed", "vcsll"],
+          ["vretcsll"],
+          ["vcsll"],
+          ["valores", "valorcsll"],
+          ["valores", "vcsll"]
         ]);
         const vlrIrrf = getNumberFallback(inf, [
-          ["trib", "tribFed", "vRetIRRF"],
-          ["trib", "tribFed", "vIRRF"],
-          ["vRetIRRF"],
-          ["vIRRF"],
-          ["Valores", "ValorIr"],
-          ["valores", "vIRRF"]
+          ["trib", "tribfed", "vretirrf"],
+          ["trib", "tribfed", "virrf"],
+          ["vretirrf"],
+          ["virrf"],
+          ["valores", "valorir"],
+          ["valores", "virrf"]
         ]);
         const vlrPis = getNumberFallback(inf, [
-          ["trib", "tribFed", "piscofins", "vPis"],
-          ["trib", "tribFed", "vRetPIS"],
-          ["trib", "tribFed", "vPIS"],
-          ["vRetPIS"],
-          ["vPis"],
-          ["Valores", "ValorPis"],
-          ["valores", "vPIS"]
+          ["trib", "tribfed", "piscofins", "vpis"],
+          ["trib", "tribfed", "vretpis"],
+          ["trib", "tribfed", "vpis"],
+          ["vretpis"],
+          ["vpis"],
+          ["valores", "valorpis"],
+          ["valores", "vpis"]
         ]);
         const vlrCofins = getNumberFallback(inf, [
-          ["trib", "tribFed", "piscofins", "vCofins"],
-          ["trib", "tribFed", "vRetCOFINS"],
-          ["trib", "tribFed", "vCOFINS"],
-          ["vRetCOFINS"],
-          ["vCofins"],
-          ["Valores", "ValorCofins"],
-          ["valores", "vCOFINS"]
+          ["trib", "tribfed", "piscofins", "vcofins"],
+          ["trib", "tribfed", "vretcofins"],
+          ["trib", "tribfed", "vcofins"],
+          ["vretcofins"],
+          ["vcofins"],
+          ["valores", "valorcofins"],
+          ["valores", "vcofins"]
         ]);
         const vlrInss = getNumberFallback(inf, [
-          ["trib", "tribFed", "vRetCP"],
-          ["trib", "tribFed", "vRetINSS"],
-          ["vRetCP"],
-          ["vRetINSS"],
-          ["Valores", "ValorInss"],
-          ["valores", "vINSS"]
+          ["trib", "tribfed", "vretcp"],
+          ["trib", "tribfed", "vretinss"],
+          ["vretcp"],
+          ["vretinss"],
+          ["valores", "valorinss"],
+          ["valores", "vinss"]
         ]);
+
+        // Recalibrate Net Value (vlrLiquido)
+        const withholdings = vlrCsll + vlrIrrf + vlrPis + vlrCofins + vlrInss + vlrIssRet;
+        let vlrLiquido = vlrLiquidoRaw;
+        if (vlrLiquido <= 0 || (vlrLiquido === valor && withholdings > 0)) {
+          vlrLiquido = valor - withholdings;
+        }
 
         if (isTomada) {
           // Process as Tomada
-          const vlrIssRet = issRetidoFlag === "Sim" ? (vlrIssRetRaw > 0 ? vlrIssRetRaw : vlrIssQN) : 0;
-          const vlrIss = vlrIssRet > 0 ? vlrIssRet : vlrIssQN;
+          const vlrIssRetTomada = issRetidoFlag === "Sim" ? (vlrIssRetRaw > 0 ? vlrIssRetRaw : vlrIssQN) : 0;
+          const vlrIss = vlrIssRetTomada > 0 ? vlrIssRetTomada : vlrIssQN;
 
           const record = {
             id: `tomada_${nNFSe}_${cnpjPrestador}`,
@@ -390,7 +447,7 @@ serve(async (req: any) => {
             status: "válida",
             chave: chave,
             iss_retido: issRetidoFlag,
-            vlr_iss_ret: vlrIssRet,
+            vlr_iss_ret: vlrIssRetTomada,
             vlr_iss: vlrIss,
             vlr_irrf: vlrIrrf,
             vlr_csll: vlrCsll,
@@ -411,9 +468,9 @@ serve(async (req: any) => {
           }
         } else {
           // Process as Emitida
-          const vlrIssRet = vlrIssRetRaw > 0 ? vlrIssRetRaw : issRetidoFlag === "Sim" ? vlrIssQN : 0;
+          const vlrIssRetEmitida = vlrIssRetRaw > 0 ? vlrIssRetRaw : issRetidoFlag === "Sim" ? vlrIssQN : 0;
           const vlrIssRecolher = issRetidoFlag === "Não" ? vlrIssQN : 0;
-          const vlrIss = vlrIssRet > 0 ? vlrIssRet : vlrIssRecolher;
+          const vlrIss = vlrIssRetEmitida > 0 ? vlrIssRetEmitida : vlrIssRecolher;
 
           const record = {
             id: `${nNFSe}_${cnpjPrestador}`,
@@ -432,7 +489,7 @@ serve(async (req: any) => {
             cnpj_cpf_cliente: cnpjCpfCliente,
             vlr_liquido: vlrLiquido,
             vlr_iss: vlrIss,
-            vlr_iss_ret: vlrIssRet,
+            vlr_iss_ret: vlrIssRetEmitida,
             vlr_iss_recolher: vlrIssRecolher,
             iss_retido: issRetidoFlag,
             vlr_csll: vlrCsll,
