@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { useGlobalFilters } from "@/store/useGlobalFilters";
-import JSZip from "jszip";
+import type JSZip from "jszip";
 import { z } from "zod";
 import {
   BarChart,
@@ -407,6 +407,7 @@ function Dashboard() {
       const allNotas: NotaFiscal[] = [];
       let skipped = 0;
       let totalXmls = 0;
+      const { default: JSZip } = await import("jszip");
       const zipEntries: { zip: JSZip; entries: JSZip.JSZipObject[] }[] = [];
 
       for (const file of arr) {
