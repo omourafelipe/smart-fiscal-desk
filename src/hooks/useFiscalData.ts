@@ -1,7 +1,10 @@
-import { useMemo, useCallback } from "react";
+import { useMemo, useCallback, useState, useEffect } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, type NotaFiscal, type NotaFiscalTomada } from "@/lib/db";
 import { parseExcelStatus } from "@/lib/xlsx-parser";
+import { useAuthStore } from "@/store/useAuthStore";
+import { useTenantStore } from "@/store/useTenantStore";
+import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 
 export interface FiscalFilters {
   empresaFiltro: string;
@@ -34,8 +37,133 @@ export function useFiscalData({
   const cServFiltro = filters?.cServFiltro ?? globalFilters.cServFiltro;
   const searchCliente = filters?.searchCliente ?? globalFilters.searchCliente;
 
-  const todasNotas = useLiveQuery(() => db.notas.toArray(), [], [] as NotaFiscal[]);
-  const todasNotasTomadas = useLiveQuery(() => db.notasTomadas.toArray(), [], [] as NotaFiscalTomada[]);
+  const { session } = useAuthStore();
+  const activeGroupId = useTenantStore((s) => s.activeGroup?.id);
+
+  const [supabaseNotas, setSupabaseNotas] = useState<NotaFiscal[]>([]);
+  const [supabaseNotasTomadas, setSupabaseNotasTomadas] = useState<NotaFiscalTomada[]>([]);
+  const [isOffline, setIsOffline] = useState(false);
+  const [loadingSupabase, setLoadingSupabase] = useState(false);
+
+  // Trigger reload on global CustomEvent
+  const [updateTrigger, setUpdateTrigger] = useState(0);
+  useEffect(() => {
+    const handleUpdate = () => setUpdateTrigger((prev) => prev + 1);
+    window.addEventListener("fiscal-data-updated", handleUpdate);
+    return () => window.removeEventListener("fiscal-data-updated", handleUpdate);
+  }, []);
+
+  const dexieNotas = useLiveQuery(() => db.notas.toArray(), [], [] as NotaFiscal[]);
+  const dexieNotasTomadas = useLiveQuery(() => db.notasTomadas.toArray(), [], [] as NotaFiscalTomada[]);
+
+  const isOnline = typeof navigator !== "undefined" ? navigator.onLine : true;
+
+  useEffect(() => {
+    const fetchFromSupabase = async () => {
+      if (!isSupabaseConfigured || !supabase || !session?.user?.id) {
+        setIsOffline(true);
+        return;
+      }
+
+      setLoadingSupabase(true);
+      try {
+        let queryEmitidas = supabase.from("nfse_documents").select("*");
+        let queryTomadas = supabase.from("nfse_documents_tomadas").select("*");
+
+        if (activeGroupId) {
+          queryEmitidas = queryEmitidas.eq("group_id", activeGroupId);
+          queryTomadas = queryTomadas.eq("group_id", activeGroupId);
+        } else {
+          queryEmitidas = queryEmitidas.eq("user_id", session.user.id);
+          queryTomadas = queryTomadas.eq("user_id", session.user.id);
+        }
+
+        const [resEmitidas, resTomadas] = await Promise.all([
+          queryEmitidas.order("dh_emi", { ascending: false }),
+          queryTomadas.order("dh_emi", { ascending: false })
+        ]);
+
+        if (resEmitidas.error) throw resEmitidas.error;
+        if (resTomadas.error) throw resTomadas.error;
+
+        const mappedEmitidas: NotaFiscal[] = (resEmitidas.data || []).map((n) => ({
+          id: n.id,
+          nNFSe: n.n_nfse,
+          cnpjPrestador: n.cnpj_prestador,
+          nomePrestador: n.nome_prestador || "",
+          dhEmi: n.dh_emi || "",
+          valor: Number(n.valor),
+          cliente: n.cliente || "",
+          servico: n.servico || "",
+          cStat: n.c_stat || "",
+          status: n.status as "válida" | "cancelada",
+          chave: n.chave || "",
+          cnpjCpfCliente: n.cnpj_cpf_cliente || "",
+          vlrLiquido: Number(n.vlr_liquido || 0),
+          vlrIss: Number(n.vlr_iss || 0),
+          vlrIssRet: Number(n.vlr_iss_ret || 0),
+          vlrIssRecolher: Number(n.vlr_iss_recolher || 0),
+          issRetido: n.iss_retido || "Não",
+          vlrCsll: Number(n.vlr_csll || 0),
+          vlrIrrf: Number(n.vlr_irrf || 0),
+          vlrPis: Number(n.vlr_pis || 0),
+          vlrCofins: Number(n.vlr_cofins || 0),
+          vlrInss: Number(n.vlr_inss || 0),
+          codTribNacional: n.cod_trib_nacional || "",
+          dCompet: n.d_compet || "",
+          raw: n.raw || undefined,
+        }));
+
+        const mappedTomadas: NotaFiscalTomada[] = (resTomadas.data || []).map((n) => ({
+          id: n.id,
+          nNFSe: n.n_nfse,
+          cnpjTomador: n.cnpj_tomador,
+          nomeTomador: n.nome_tomador || "",
+          cnpjPrestador: n.cnpj_prestador,
+          nomePrestador: n.nome_prestador || "",
+          dhEmi: n.dh_emi || "",
+          dCompet: n.d_compet || "",
+          valor: Number(n.valor),
+          vlrLiquido: Number(n.vlr_liquido || 0),
+          servico: n.servico || "",
+          codTribNacional: n.cod_trib_nacional || "",
+          cStat: n.c_stat || "",
+          status: n.status as "válida" | "cancelada",
+          chave: n.chave || "",
+          issRetido: n.iss_retido || "Não",
+          vlrIssRet: Number(n.vlr_iss_ret || 0),
+          vlrIss: Number(n.vlr_iss || 0),
+          vlrIrrf: Number(n.vlr_irrf || 0),
+          vlrCsll: Number(n.vlr_csll || 0),
+          vlrPis: Number(n.vlr_pis || 0),
+          vlrCofins: Number(n.vlr_cofins || 0),
+          vlrInss: Number(n.vlr_inss || 0),
+          raw: n.raw || undefined,
+        }));
+
+        setSupabaseNotas(mappedEmitidas);
+        setSupabaseNotasTomadas(mappedTomadas);
+        setIsOffline(false);
+      } catch (err) {
+        console.error("Erro ao carregar dados do Supabase, utilizando cache local Dexie:", err);
+        setIsOffline(true);
+      } finally {
+        setLoadingSupabase(false);
+      }
+    };
+
+    fetchFromSupabase();
+  }, [session, activeGroupId, updateTrigger, isOnline]);
+
+  const todasNotas = useMemo(() => {
+    if (isOffline || !isOnline) return dexieNotas || [];
+    return supabaseNotas || [];
+  }, [isOffline, isOnline, dexieNotas, supabaseNotas]);
+
+  const todasNotasTomadas = useMemo(() => {
+    if (isOffline || !isOnline) return dexieNotasTomadas || [];
+    return supabaseNotasTomadas || [];
+  }, [isOffline, isOnline, dexieNotasTomadas, supabaseNotasTomadas]);
 
   const empresas = useMemo(() => {
     const map = new Map<string, string>();

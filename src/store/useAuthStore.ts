@@ -23,6 +23,69 @@ interface AuthState {
   updateProfile: (nome: string, empresa: string) => Promise<boolean>;
 }
 
+async function clearStoreAndLocalState(set: any) {
+  // 1. Resetar estado do Auth Store
+  set({ session: null, user: null, profile: null, loading: false, initialized: false });
+
+  // 2. Limpar caches de queries em memória (TanStack Query)
+  try {
+    const { queryClient } = await import("@/router");
+    queryClient.clear();
+  } catch (queryErr) {
+    console.error("Erro ao limpar TanStack Query cache:", queryErr);
+  }
+
+  // 3. Resetar estado do Global Filters
+  try {
+    const { useGlobalFilters } = await import("./useGlobalFilters");
+    useGlobalFilters.getState().resetFilters();
+  } catch (filterErr) {
+    console.error("Erro ao resetar global filters:", filterErr);
+  }
+
+  // 4. Limpar tabelas do IndexedDB (Dexie)
+  try {
+    const { db } = await import("@/lib/db");
+    await Promise.all([
+      db.notas.clear(),
+      db.notasTomadas.clear(),
+      db.customCategories.clear(),
+      db.categoryOverrides.clear(),
+      db.serviceClassifications.clear(),
+      db.categoryRules.clear(),
+      db.auditLogs.clear()
+    ]);
+  } catch (dbErr) {
+    console.error("Erro ao limpar IndexedDB no logout:", dbErr);
+  }
+
+  // 5. Limpar estado do Tenant Store
+  try {
+    const { useTenantStore } = await import("./useTenantStore");
+    useTenantStore.setState({
+      groups: [],
+      activeGroup: null,
+      activeRole: null,
+      companies: [],
+      members: [],
+      invitations: [],
+      loading: false
+    });
+  } catch (tenantErr) {
+    console.error("Erro ao limpar tenant store no logout:", tenantErr);
+  }
+
+  // 6. Limpar localStorage (active_group_id e chaves do Supabase sb-*)
+  if (typeof window !== "undefined") {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const key = localStorage.key(i);
+      if (key && (key === "active_group_id" || key.startsWith("sb-"))) {
+        localStorage.removeItem(key);
+      }
+    }
+  }
+}
+
 export const useAuthStore = create<AuthState>((set, get) => {
   // Configura o listener do Supabase se ele estiver configurado
   if (isSupabaseConfigured && supabase) {
@@ -59,8 +122,10 @@ export const useAuthStore = create<AuthState>((set, get) => {
         // Só rodamos a limpeza se tínhamos um usuário ativo antes para evitar loop na inicialização
         const currentUser = get().user;
         if (currentUser) {
-          set({ user: null, session: null, profile: null });
-          await get().signOut();
+          await clearStoreAndLocalState(set);
+          if (typeof window !== "undefined") {
+            window.location.replace("/login");
+          }
         } else {
           set({ session: null, user: null, profile: null, loading: false });
         }
@@ -204,8 +269,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
     },
 
     signOut: async () => {
-      // Limpar user, session e profile no store antes de chamar o signOut do Supabase para evitar o loop
-      set({ user: null, session: null, profile: null, loading: true });
+      set({ loading: true });
       try {
         if (isSupabaseConfigured && supabase) {
           await supabase.auth.signOut();
@@ -213,70 +277,8 @@ export const useAuthStore = create<AuthState>((set, get) => {
       } catch (err: any) {
         console.error("Erro ao deslogar do Supabase:", err);
       } finally {
-        // 1. Limpar caches de queries em memória (TanStack Query)
-        try {
-          const { queryClient } = await import("@/router");
-          queryClient.clear();
-        } catch (queryErr) {
-          console.error("Erro ao limpar TanStack Query cache:", queryErr);
-        }
-
-        // 2. Resetar estado do Global Filters
-        try {
-          const { useGlobalFilters } = await import("./useGlobalFilters");
-          useGlobalFilters.getState().resetFilters();
-        } catch (filterErr) {
-          console.error("Erro ao resetar global filters:", filterErr);
-        }
-
-        // 3. Limpar tabelas do IndexedDB (Dexie)
-        try {
-          const { db } = await import("@/lib/db");
-          await Promise.all([
-            db.notas.clear(),
-            db.notasTomadas.clear(),
-            db.customCategories.clear(),
-            db.categoryOverrides.clear(),
-            db.serviceClassifications.clear(),
-            db.categoryRules.clear(),
-            db.auditLogs.clear()
-          ]);
-        } catch (dbErr) {
-          console.error("Erro ao limpar IndexedDB no logout:", dbErr);
-        }
-
-        // 4. Limpar estado do Tenant Store
-        try {
-          const { useTenantStore } = await import("./useTenantStore");
-          useTenantStore.setState({
-            groups: [],
-            activeGroup: null,
-            activeRole: null,
-            companies: [],
-            members: [],
-            invitations: [],
-            loading: false
-          });
-        } catch (tenantErr) {
-          console.error("Erro ao limpar tenant store no logout:", tenantErr);
-        }
-
-        // 5. Limpar localStorage (active_group_id e chaves do Supabase sb-*)
-        if (typeof window !== "undefined") {
-          for (let i = localStorage.length - 1; i >= 0; i--) {
-            const key = localStorage.key(i);
-            if (key && (key === "active_group_id" || key.startsWith("sb-"))) {
-              localStorage.removeItem(key);
-            }
-          }
-        }
-
-        // 6. Resetar estado local do Auth Store
-        set({ session: null, user: null, profile: null, loading: false, initialized: false });
-        
+        await clearStoreAndLocalState(set);
         toast.success("Você saiu da sua conta.");
-
-        // 7. Redirecionar forçado substituindo o histórico
         if (typeof window !== "undefined") {
           window.location.replace("/login");
         }

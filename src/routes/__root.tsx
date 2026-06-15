@@ -16,6 +16,7 @@ import { useAuthStore } from "@/store/useAuthStore";
 import { useTenantStore } from "@/store/useTenantStore";
 import { SyncManager } from "@/lib/data-access/SyncManager";
 import { ShieldAlert, RefreshCw } from "lucide-react";
+import { toast } from "sonner";
 
 function NotFoundComponent() {
   return (
@@ -154,6 +155,17 @@ function RootComponent() {
         SyncManager.syncAll(session.user.id);
       });
     }
+  }, [session]);
+
+  useEffect(() => {
+    const handleOnline = () => {
+      if (session?.user?.id) {
+        toast.info("Internet restabelecida! Sincronizando dados...");
+        SyncManager.syncAll(session.user.id, true);
+      }
+    };
+    window.addEventListener("online", handleOnline);
+    return () => window.removeEventListener("online", handleOnline);
   }, [session]);
 
   return (

@@ -35,6 +35,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { classificarServicoLocal, lc116CategoriasMap, lc116SubItemCategoriasMap, obterGrupoSintetico } from "@/lib/category-utils";
+import { useFiscalData } from "@/hooks/useFiscalData";
 
 const searchSchema = z.object({
   mes: z.string().optional().catch("__all__"),
@@ -150,7 +151,12 @@ function TomadosRouteComponent() {
   };
 
   // ── Database query ──────────────────────────────────────────────
-  const todasNotasTomadas = useLiveQuery(() => db.notasTomadas.toArray(), [], [] as NotaFiscalTomada[]);
+  const { todasNotasTomadas } = useFiscalData({
+    periodType,
+    xlsxRows: [],
+    keyCol: "",
+    statusCol: "",
+  });
   const classifications = useLiveQuery(() => db.serviceClassifications.toArray(), [], [] as ServiceClassification[]);
   const rules = useLiveQuery(() => db.categoryRules.toArray(), [], [] as CategoryRule[]);
 
@@ -268,6 +274,7 @@ function TomadosRouteComponent() {
           addActivity("upload", `${batch.length} Tomadas Importadas`, `Importação de serviços tomados finalizada localmente.`);
           toast.success(`${batch.length} nota(s) de serviço tomado importada(s).`);
         }
+        window.dispatchEvent(new CustomEvent("fiscal-data-updated"));
       } else {
         if (cnpjsGrupo.size > 0) {
           toast.warning("Nenhuma nota com CNPJ do grupo como tomador foi encontrada.");

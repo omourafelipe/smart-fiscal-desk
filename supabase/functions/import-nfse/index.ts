@@ -134,10 +134,18 @@ serve(async (req: any) => {
     }
 
     if (!isValidAuth) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({
+          success: false,
+          message: "Unauthorized access",
+          data: null,
+          errors: ["Unauthorized"]
+        }),
+        {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
     }
 
     // Parse request body
@@ -145,17 +153,33 @@ serve(async (req: any) => {
     const { xml, group_id } = body;
 
     if (!group_id) {
-      return new Response(JSON.stringify({ error: "Missing group_id" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({
+          success: false,
+          message: "Missing group_id parameter",
+          data: null,
+          errors: ["Missing group_id"]
+        }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
     }
 
     if (!xml) {
-      return new Response(JSON.stringify({ error: "Missing xml content" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({
+          success: false,
+          message: "Missing xml content parameter",
+          data: null,
+          errors: ["Missing xml content"]
+        }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
     }
 
     // Instantiate Supabase Admin client
@@ -169,10 +193,18 @@ serve(async (req: any) => {
       .single();
 
     if (groupError || !groupData) {
-      return new Response(JSON.stringify({ error: "Group not found in database" }), {
-        status: 404,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({
+          success: false,
+          message: "Group not found in database",
+          data: null,
+          errors: [groupError?.message || "Group not found"]
+        }),
+        {
+          status: 404,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
     }
     const userId = groupData.owner_user_id;
 
@@ -429,7 +461,12 @@ serve(async (req: any) => {
     }
 
     return new Response(
-      JSON.stringify({ inserted, errors }),
+      JSON.stringify({
+        success: true,
+        message: `${inserted} document(s) imported successfully`,
+        data: { inserted },
+        errors
+      }),
       {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -437,7 +474,12 @@ serve(async (req: any) => {
     );
   } catch (err: any) {
     return new Response(
-      JSON.stringify({ error: err.message }),
+      JSON.stringify({
+        success: false,
+        message: err.message || "Internal server error during import",
+        data: null,
+        errors: [err.message || "Internal server error"]
+      }),
       {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },

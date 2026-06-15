@@ -499,6 +499,7 @@ function Dashboard() {
             await db.notas.bulkPut(allNotas);
             addActivity("upload", `${allNotas.length} Notas Emitidas`, "Importação de XMLs finalizada com sucesso localmente.");
           }
+          window.dispatchEvent(new CustomEvent("fiscal-data-updated"));
           toast.success(
             `${allNotas.length} nota(s) importada(s). ${skipped ? skipped + " ignorada(s)." : ""}`,
           );
@@ -623,6 +624,7 @@ function Dashboard() {
             await db.notasTomadas.bulkPut(allNotasTomadas);
             addActivity("upload", `${allNotasTomadas.length} Tomadas Importadas`, "Importação de serviços tomados finalizada localmente.");
           }
+          window.dispatchEvent(new CustomEvent("fiscal-data-updated"));
           toast.success(
             `${allNotasTomadas.length} nota(s) de serviço tomado importada(s). ${skipped ? skipped + " ignorada(s)." : ""}`,
           );
