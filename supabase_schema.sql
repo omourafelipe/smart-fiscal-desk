@@ -311,7 +311,10 @@ $$ LANGUAGE sql SECURITY DEFINER;
 -- Políticas para groups
 DROP POLICY IF EXISTS "Leitura de grupos permitida aos membros ativos" ON public.groups;
 CREATE POLICY "Leitura de grupos permitida aos membros ativos" ON public.groups
-    FOR SELECT USING (exists (select 1 from group_members where group_members.group_id = groups.id and group_members.user_id = auth.uid() and group_members.status = 'active'));
+    FOR SELECT USING (
+        auth.uid() = owner_user_id
+        OR exists (select 1 from group_members where group_members.group_id = groups.id and group_members.user_id = auth.uid() and group_members.status = 'active')
+    );
 
 DROP POLICY IF EXISTS "Criar grupos permitida aos usuários autenticados" ON public.groups;
 CREATE POLICY "Criar grupos permitida aos usuários autenticados" ON public.groups
@@ -332,7 +335,10 @@ CREATE POLICY "Leitura de membros permitida aos membros ativos do grupo" ON publ
 
 DROP POLICY IF EXISTS "Inserção de membros permitida a Proprietários/Administradores" ON public.group_members;
 CREATE POLICY "Inserção de membros permitida a Proprietários/Administradores" ON public.group_members
-    FOR INSERT WITH CHECK (exists (select 1 from group_members gm where gm.group_id = group_id and gm.user_id = auth.uid() and gm.role in ('Owner', 'Administrador') and gm.status = 'active'));
+    FOR INSERT WITH CHECK (
+        exists (select 1 from group_members gm where gm.group_id = group_id and gm.user_id = auth.uid() and gm.role in ('Owner', 'Administrador') and gm.status = 'active')
+        OR auth.uid() = (select owner_user_id from public.groups where id = group_id)
+    );
 
 DROP POLICY IF EXISTS "Atualização de membros permitida apenas a Proprietários" ON public.group_members;
 CREATE POLICY "Atualização de membros permitida apenas a Proprietários" ON public.group_members
