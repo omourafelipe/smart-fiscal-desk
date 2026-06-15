@@ -100,7 +100,7 @@ function TomadosRouteComponent() {
   const { periodType, addActivity } = useLayoutShell();
   const { activeRole } = useTenantStore();
   const { session } = useAuthStore();
-  const canEdit = PermissionService.canEdit(activeRole);
+  const canEdit = !session || PermissionService.canEdit(activeRole);
   const [activePieIndex, setActivePieIndex] = useState<number | null>(null);
 
   const [selectedNotaForPrint, setSelectedNotaForPrint] = useState<NotaFiscalTomada | null>(null);

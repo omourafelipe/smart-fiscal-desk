@@ -35,7 +35,7 @@ export function Sidebar() {
 
   const { user, profile, signOut } = useAuthStore();
   const { groups, activeGroup, setActiveGroup, activeRole } = useTenantStore();
-  const canClearDatabase = PermissionService.canClearDatabase(activeRole);
+  const canClearDatabase = !user || PermissionService.canClearDatabase(activeRole);
 
   // Retrieve global counts from IndexedDB for sidebar badges
   const totalNotasEmitidas = useLiveQuery(() => db.notas.count()) ?? 0;

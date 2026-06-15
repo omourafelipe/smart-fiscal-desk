@@ -21,6 +21,8 @@ import {
 } from "@/lib/xlsx-parser";
 import { useLayoutShell } from "@/components/layout/LayoutShell";
 import { useTenantStore } from "@/store/useTenantStore";
+import { useAuthStore } from "@/store/useAuthStore";
+import { SyncManager } from "@/lib/data-access/SyncManager";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -58,6 +60,7 @@ export const Route = createFileRoute("/conciliation")({
 function ConciliationRouteComponent() {
   const { addActivity } = useLayoutShell();
   const { activeRole } = useTenantStore();
+  const { session } = useAuthStore();
 
   // Excel Fechamento States
   const xlsxRef = useRef<HTMLInputElement>(null);
@@ -319,6 +322,10 @@ function ConciliationRouteComponent() {
       }
       addActivity("update", "Divergências Aplicadas", `${changes.length} nota(s) retificada(s) no banco local.`);
       toast.success("Divergências retificadas no banco de dados local!");
+
+      if (session?.user?.id) {
+        await SyncManager.syncAll(session.user.id, true);
+      }
     } catch (e) {
       console.error(e);
       toast.error("Erro ao salvar as updates.");

@@ -225,8 +225,24 @@ serve(async (req: any) => {
         let dhEmi = String(pick(inf, ["DPS", "infDPS", "dhEmi"]) ?? "").trim();
         if (dhEmi && isNaN(Date.parse(dhEmi))) dhEmi = "";
 
-        const valor = getNumberFallback(inf, [["vServPrest", "vServ"], ["vServ"]]);
-        const vlrLiquido = getNumberFallback(inf, [["vLiq"], ["vLiquido"]]) || valor;
+        const valor = getNumberFallback(inf, [
+          ["vServPrest", "vServ"],
+          ["vServ"],
+          ["Valores", "ValorServicos"],
+          ["valores", "ValorServicos"],
+          ["valores", "vServ"],
+          ["valores", "vServPrest"],
+          ["Servico", "Valores", "ValorServicos"],
+          ["servico", "valores", "ValorServicos"]
+        ]);
+        const vlrLiquido = getNumberFallback(inf, [
+          ["vLiq"],
+          ["vLiquido"],
+          ["Valores", "ValorLiquidoNfse"],
+          ["Valores", "ValorLiquido"],
+          ["valores", "vLiq"],
+          ["valores", "vLiquido"]
+        ]) || valor;
         const servico = String(
           pick(inf, ["DPS", "infDPS", "serv", "xDescServ"]) ??
           pick(inf, ["DPS", "infDPS", "serv", "cServ", "xDescServ"]) ??
@@ -248,8 +264,21 @@ serve(async (req: any) => {
         const codTribNacional = cTribNac || nbs || municipal;
 
         const issRetidoFlag = getIssRetido(inf);
-        const vlrIssRetRaw = getNumberFallback(inf, [["vISSRet"], ["trib", "tribMun", "vISSRet"]]);
-        const vlrIssQN = getNumberFallback(inf, [["vISSQN"], ["vISS"], ["trib", "tribMun", "vISSQN"], ["trib", "tribMun", "vISS"]]);
+        const vlrIssRetRaw = getNumberFallback(inf, [
+          ["vISSRet"],
+          ["trib", "tribMun", "vISSRet"],
+          ["Valores", "ValorIssRetido"],
+          ["valores", "vISSRet"]
+        ]);
+        const vlrIssQN = getNumberFallback(inf, [
+          ["vISSQN"],
+          ["vISS"],
+          ["trib", "tribMun", "vISSQN"],
+          ["trib", "tribMun", "vISS"],
+          ["Valores", "ValorIss"],
+          ["valores", "vISSQN"],
+          ["valores", "vISS"]
+        ]);
 
         let dCompet = String(pick(inf, ["DPS", "infDPS", "dCompet"]) ?? pick(inf, ["dCompet"]) ?? "").trim();
         if (dCompet.length === 7 && dCompet.includes("-")) {
@@ -262,11 +291,48 @@ serve(async (req: any) => {
         if (!dCompet) dCompet = dhEmi ? dhEmi.slice(0, 10) : "";
 
         // Retenções Federais
-        const vlrCsll = getNumberFallback(inf, [["trib", "tribFed", "vRetCSLL"], ["trib", "tribFed", "vCSLL"], ["vCSLL"]]);
-        const vlrIrrf = getNumberFallback(inf, [["trib", "tribFed", "vRetIRRF"], ["trib", "tribFed", "vIRRF"], ["vIRRF"]]);
-        const vlrPis = getNumberFallback(inf, [["trib", "tribFed", "piscofins", "vPis"], ["trib", "tribFed", "vRetPIS"], ["vPis"]]);
-        const vlrCofins = getNumberFallback(inf, [["trib", "tribFed", "piscofins", "vCofins"], ["trib", "tribFed", "vRetCOFINS"], ["vCofins"]]);
-        const vlrInss = getNumberFallback(inf, [["trib", "tribFed", "vRetCP"], ["trib", "tribFed", "vRetINSS"], ["vRetINSS"]]);
+        const vlrCsll = getNumberFallback(inf, [
+          ["trib", "tribFed", "vRetCSLL"],
+          ["trib", "tribFed", "vCSLL"],
+          ["vRetCSLL"],
+          ["vCSLL"],
+          ["Valores", "ValorCsll"],
+          ["valores", "vCSLL"]
+        ]);
+        const vlrIrrf = getNumberFallback(inf, [
+          ["trib", "tribFed", "vRetIRRF"],
+          ["trib", "tribFed", "vIRRF"],
+          ["vRetIRRF"],
+          ["vIRRF"],
+          ["Valores", "ValorIr"],
+          ["valores", "vIRRF"]
+        ]);
+        const vlrPis = getNumberFallback(inf, [
+          ["trib", "tribFed", "piscofins", "vPis"],
+          ["trib", "tribFed", "vRetPIS"],
+          ["trib", "tribFed", "vPIS"],
+          ["vRetPIS"],
+          ["vPis"],
+          ["Valores", "ValorPis"],
+          ["valores", "vPIS"]
+        ]);
+        const vlrCofins = getNumberFallback(inf, [
+          ["trib", "tribFed", "piscofins", "vCofins"],
+          ["trib", "tribFed", "vRetCOFINS"],
+          ["trib", "tribFed", "vCOFINS"],
+          ["vRetCOFINS"],
+          ["vCofins"],
+          ["Valores", "ValorCofins"],
+          ["valores", "vCOFINS"]
+        ]);
+        const vlrInss = getNumberFallback(inf, [
+          ["trib", "tribFed", "vRetCP"],
+          ["trib", "tribFed", "vRetINSS"],
+          ["vRetCP"],
+          ["vRetINSS"],
+          ["Valores", "ValorInss"],
+          ["valores", "vINSS"]
+        ]);
 
         if (isTomada) {
           // Process as Tomada

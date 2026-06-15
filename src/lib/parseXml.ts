@@ -136,7 +136,13 @@ export function parseNfseXml(xml: string): NotaFiscal | null {
     }
     const valor = getNumberFallback(inf, [
       ["vServPrest", "vServ"],
-      ["vServ"]
+      ["vServ"],
+      ["Valores", "ValorServicos"],
+      ["valores", "ValorServicos"],
+      ["valores", "vServ"],
+      ["valores", "vServPrest"],
+      ["Servico", "Valores", "ValorServicos"],
+      ["servico", "valores", "ValorServicos"]
     ]);
     const cliente = String(pick(inf, ["DPS", "infDPS", "toma", "xNome"]) ?? "").trim();
     const servico = String(
@@ -158,14 +164,20 @@ export function parseNfseXml(xml: string): NotaFiscal | null {
 
     const vlrLiquido = getNumberFallback(inf, [
       ["vLiq"],
-      ["vLiquido"]
+      ["vLiquido"],
+      ["Valores", "ValorLiquidoNfse"],
+      ["Valores", "ValorLiquido"],
+      ["valores", "vLiq"],
+      ["valores", "vLiquido"]
     ]) || valor;
 
     // ISS retido na fonte (retido pelo tomador)
     // vISSRet é preenchido somente quando há retenção na fonte
     const vlrIssRetRaw = getNumberFallback(inf, [
       ["vISSRet"],
-      ["trib", "tribMun", "vISSRet"]
+      ["trib", "tribMun", "vISSRet"],
+      ["Valores", "ValorIssRetido"],
+      ["valores", "vISSRet"]
     ]);
 
     // Valor genérico do ISS da nota (vISSQN / vISS — presente em todos os casos)
@@ -173,7 +185,10 @@ export function parseNfseXml(xml: string): NotaFiscal | null {
       ["vISSQN"],
       ["vISS"],
       ["trib", "tribMun", "vISSQN"],
-      ["trib", "tribMun", "vISS"]
+      ["trib", "tribMun", "vISS"],
+      ["Valores", "ValorIss"],
+      ["valores", "vISSQN"],
+      ["valores", "vISS"]
     ]);
 
     // issRetido é calculado abaixo, mas precisamos saber antes para separar os valores
@@ -198,14 +213,18 @@ export function parseNfseXml(xml: string): NotaFiscal | null {
       ["trib", "tribFed", "vRetCSLL"],
       ["trib", "tribFed", "vCSLL"],
       ["vRetCSLL"],
-      ["vCSLL"]
+      ["vCSLL"],
+      ["Valores", "ValorCsll"],
+      ["valores", "vCSLL"]
     ]);
 
     const vlrIrrf = getNumberFallback(inf, [
       ["trib", "tribFed", "vRetIRRF"],
       ["trib", "tribFed", "vIRRF"],
       ["vRetIRRF"],
-      ["vIRRF"]
+      ["vIRRF"],
+      ["Valores", "ValorIr"],
+      ["valores", "vIRRF"]
     ]);
 
     const vlrPis = getNumberFallback(inf, [
@@ -215,7 +234,9 @@ export function parseNfseXml(xml: string): NotaFiscal | null {
       ["trib", "tribFed", "vPIS"],
       ["vRetPIS"],
       ["vPIS"],
-      ["vPis"]
+      ["vPis"],
+      ["Valores", "ValorPis"],
+      ["valores", "vPIS"]
     ]);
 
     const vlrCofins = getNumberFallback(inf, [
@@ -225,7 +246,9 @@ export function parseNfseXml(xml: string): NotaFiscal | null {
       ["trib", "tribFed", "vCOFINS"],
       ["vRetCOFINS"],
       ["vCOFINS"],
-      ["vCofins"]
+      ["vCofins"],
+      ["Valores", "ValorCofins"],
+      ["valores", "vCOFINS"]
     ]);
 
     const vlrInss = getNumberFallback(inf, [
@@ -234,7 +257,9 @@ export function parseNfseXml(xml: string): NotaFiscal | null {
       ["trib", "tribFed", "vINSS"],
       ["vRetCP"],
       ["vRetINSS"],
-      ["vINSS"]
+      ["vINSS"],
+      ["Valores", "ValorInss"],
+      ["valores", "vINSS"]
     ]);
 
     const nbs = getNbsCode(inf);
@@ -354,11 +379,21 @@ export function parseNfseXmlTomada(
     const valor = getNumberFallback(inf, [
       ["vServPrest", "vServ"],
       ["vServ"],
+      ["Valores", "ValorServicos"],
+      ["valores", "ValorServicos"],
+      ["valores", "vServ"],
+      ["valores", "vServPrest"],
+      ["Servico", "Valores", "ValorServicos"],
+      ["servico", "valores", "ValorServicos"]
     ]);
 
     const vlrLiquido = getNumberFallback(inf, [
       ["vLiq"],
       ["vLiquido"],
+      ["Valores", "ValorLiquidoNfse"],
+      ["Valores", "ValorLiquido"],
+      ["valores", "vLiq"],
+      ["valores", "vLiquido"]
     ]) || valor;
 
     const servico = String(
@@ -389,12 +424,17 @@ export function parseNfseXmlTomada(
     const vlrIssRetRaw = getNumberFallback(inf, [
       ["vISSRet"],
       ["trib", "tribMun", "vISSRet"],
+      ["Valores", "ValorIssRetido"],
+      ["valores", "vISSRet"],
     ]);
     const vlrIssQN = getNumberFallback(inf, [
       ["vISSQN"],
       ["vISS"],
       ["trib", "tribMun", "vISSQN"],
       ["trib", "tribMun", "vISS"],
+      ["Valores", "ValorIss"],
+      ["valores", "vISSQN"],
+      ["valores", "vISS"],
     ]);
     // ISS RETIDO apenas o que estiver identificado como "Retenção do ISSQN" ou "Retenção Simples"
     const vlrIssRet = issRetidoFlag === "Sim"
@@ -407,11 +447,15 @@ export function parseNfseXmlTomada(
       ["trib", "tribFed", "vRetCSLL"],
       ["trib", "tribFed", "vCSLL"],
       ["vRetCSLL"],
+      ["Valores", "ValorCsll"],
+      ["valores", "vCSLL"]
     ]);
     const vlrIrrf = getNumberFallback(inf, [
       ["trib", "tribFed", "vRetIRRF"],
       ["trib", "tribFed", "vIRRF"],
       ["vRetIRRF"],
+      ["Valores", "ValorIr"],
+      ["valores", "vIRRF"]
     ]);
     const vlrPis = getNumberFallback(inf, [
       ["trib", "tribFed", "piscofins", "vPis"],
@@ -419,6 +463,8 @@ export function parseNfseXmlTomada(
       ["trib", "tribFed", "vPIS"],
       ["vRetPIS"],
       ["vPis"],
+      ["Valores", "ValorPis"],
+      ["valores", "vPIS"]
     ]);
     const vlrCofins = getNumberFallback(inf, [
       ["trib", "tribFed", "piscofins", "vCofins"],
@@ -426,12 +472,16 @@ export function parseNfseXmlTomada(
       ["trib", "tribFed", "vCOFINS"],
       ["vRetCOFINS"],
       ["vCofins"],
+      ["Valores", "ValorCofins"],
+      ["valores", "vCOFINS"]
     ]);
     const vlrInss = getNumberFallback(inf, [
       ["trib", "tribFed", "vRetCP"],
       ["trib", "tribFed", "vRetINSS"],
       ["vRetCP"],
       ["vRetINSS"],
+      ["Valores", "ValorInss"],
+      ["valores", "vINSS"]
     ]);
 
     // Competência

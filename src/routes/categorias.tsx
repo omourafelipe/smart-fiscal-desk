@@ -135,7 +135,7 @@ function formatarHora(isoString: string): string {
 function CategoriasRouteComponent() {
   const { session, profile } = useAuthStore();
   const { activeRole } = useTenantStore();
-  const canEdit = PermissionService.canEdit(activeRole);
+  const canEdit = !session || PermissionService.canEdit(activeRole);
   const [tabActive, setTabActive] = useState<"classifications" | "pending" | "rules" | "audit" | "categories_groups" | "ai_pending">("classifications");
   const [activePieIndex, setActivePieIndex] = useState<number | null>(null);
   const [searchCat, setSearchCat] = useState("");
