@@ -159,6 +159,11 @@ export function useFiscalData({
     if (isOffline || !isOnline) return dexieNotas || [];
     return supabaseNotas || [];
   }, [isOffline, isOnline, dexieNotas, supabaseNotas]);
+  // Log the source and count of notes for debugging
+  useEffect(() => {
+    console.log('[FiscalData] todasNotas count:', todasNotas?.length);
+    console.log('[FiscalData] isOffline:', isOffline, 'isOnline:', isOnline);
+  }, [todasNotas, isOffline, isOnline]);
 
   const todasNotasTomadas = useMemo(() => {
     if (isOffline || !isOnline) return dexieNotasTomadas || [];
@@ -220,7 +225,7 @@ export function useFiscalData({
 
   const notasAtivasGrupo = useMemo(() => {
     if (!todasNotas) return [];
-    return todasNotas.filter((n) => {
+    const filtered = todasNotas.filter((n) => {
       if (getNoteStatus(n) !== "válida") return false;
       const dateStr = getDateField(n);
       if (mesFiltro !== "__all__" && dateStr.slice(5, 7) !== mesFiltro) return false;
@@ -235,6 +240,8 @@ export function useFiscalData({
       }
       return true;
     });
+    console.log('[FiscalData] notasAtivasGrupo count:', filtered.length);
+    return filtered;
   }, [todasNotas, mesFiltro, anoFiltro, cServFiltro, getDateField, getNoteStatus]);
 
   const groupStats = useMemo(() => {
@@ -297,6 +304,13 @@ export function useFiscalData({
     }).sort((a, b) => b.total - a.total);
 
     const totalExternalBilling = totalGroupBilling - totalIntergrupoBilling;
+
+    console.log('[FiscalData] groupStats computed', {
+      totalGroupBilling,
+      totalIntergrupoBilling,
+      totalExternalBilling,
+      companies: companyList.length
+    });
 
     return {
       companyList,
@@ -411,7 +425,11 @@ export function useFiscalData({
   const notasAtivas = useMemo(() => notasFiltradas.filter((n) => getNoteStatus(n) === "válida"), [notasFiltradas, getNoteStatus]);
   const notasCanceladas = useMemo(() => notasFiltradas.filter((n) => getNoteStatus(n) === "cancelada"), [notasFiltradas, getNoteStatus]);
   
-  const faturamento = useMemo(() => notasAtivas.reduce((sum, n) => sum + n.valor, 0), [notasAtivas]);
+  const faturamento = useMemo(() => {
+    const total = notasAtivas.reduce((sum, n) => sum + (n.valor || 0), 0);
+    console.log('[FiscalData] faturamento computed:', total);
+    return total;
+  }, [notasAtivas]);
   const ticketMedio = useMemo(() => notasAtivas.length ? faturamento / notasAtivas.length : 0, [notasAtivas, faturamento]);
 
   const prevNotasFiltradas = useMemo(() => {

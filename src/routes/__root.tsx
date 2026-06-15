@@ -17,6 +17,7 @@ import { useTenantStore } from "@/store/useTenantStore";
 import { SyncManager } from "@/lib/data-access/SyncManager";
 import { ShieldAlert, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
+import { clearAllData } from "@/lib/db";
 
 function NotFoundComponent() {
   return (
@@ -214,13 +215,25 @@ function RootComponent() {
                   Conectado à nuvem. Se faltarem notas, clique em <strong>Sincronizar agora</strong> para baixar tudo novamente.
                 </span>
               </div>
-              <button
-                onClick={() => SyncManager.syncAll(session.user.id, true)}
-                className="bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-700 dark:text-emerald-300 font-bold px-3 py-1 rounded-xl transition-colors flex items-center gap-1.5"
-              >
-                <RefreshCw className="h-3.5 w-3.5" />
-                Sincronizar agora
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => SyncManager.syncAll(session.user.id, true)}
+                  className="bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-700 dark:text-emerald-300 font-bold px-3 py-1 rounded-xl transition-colors flex items-center gap-1.5"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  Sincronizar agora
+                </button>
+                <button
+                  onClick={async () => {
+                    await clearAllData();
+                    window.dispatchEvent(new CustomEvent('fiscal-data-updated'));
+                    toast.success('Todos os dados importados foram apagados.');
+                  }}
+                  className="bg-red-500/20 hover:bg-red-500/30 text-red-700 dark:text-red-300 font-bold px-3 py-1 rounded-xl transition-colors flex items-center gap-1.5"
+                >
+                  Apagar Dados Importados
+                </button>
+              </div>
             </div>
           )}
           <Outlet />

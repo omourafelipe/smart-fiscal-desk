@@ -182,3 +182,14 @@ class NfseDB extends Dexie {
 
 export const db = new NfseDB();
 
+// Utility to clear all imported fiscal data from Dexie
+export async function clearAllData() {
+  try {
+    await db.notas.clear();
+    await db.notasTomadas.clear();
+    console.log('[DB] All fiscal data cleared');
+  } catch (e) {
+    console.error('[DB] Error clearing data:', e);
+  }
+}
+
