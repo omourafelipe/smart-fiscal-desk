@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
+  LineChart, Line, PieChart, Pie, Cell
 } from "recharts";
 import { Upload, Loader2, FileText, TrendingUp, Coins, Building2 } from "lucide-react";
 import { toast } from "sonner";
@@ -10,6 +11,18 @@ import { toast } from "sonner";
 import { db } from "@/lib/db";
 import { importFiles, type ImportSummary } from "@/lib/fiscal/pipeline";
 import { useFiscalStore } from "@/store/useFiscalStore";
+import {
+  mesFiltro,
+  anoFiltro,
+  setMesFiltro,
+  setAnoFiltro,
+  empresaFiltro,
+  statusFiltro,
+  operacaoFiltro,
+  setEmpresaFiltro,
+  setStatusFiltro,
+  setOperacaoFiltro
+} from "@/store/useFiscalStore";
 import { Button } from "@/components/ui/button";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -82,17 +95,32 @@ function Dashboard() {
 
   const filtrados = useMemo(() => {
     return (docs ?? []).filter((d) => {
-      if (!d.data_competencia) return mesFiltro === "" && anoFiltro === "";
-      const [a, m] = d.data_competencia.split("-");
-      if (anoFiltro && a !== anoFiltro) return false;
-      if (mesFiltro && m !== mesFiltro) return false;
+      // Competência filter
+      if (d.data_competencia) {
+        const [a, m] = d.data_competencia.split("-");
+        if (anoFiltro && a !== anoFiltro) return false;
+        if (mesFiltro && m !== mesFiltro) return false;
+      } else if (mesFiltro || anoFiltro) {
+        return false;
+      }
+      // Empresa filter
+      if (empresaFiltro && d.cnpj_prestador !== empresaFiltro) return false;
+      // Status filter
+      if (statusFiltro !== "todos" && d.status_manual !== statusFiltro) return false;
+      // Operação filter
+      const isIntercompany = cnpjGrupoSet.has(d.cnpj_prestador) && cnpjGrupoSet.has(d.cnpj_tomador);
+      if (operacaoFiltro === "Intercompany" && !isIntercompany) return false;
+      if (operacaoFiltro === "Externas" && isIntercompany) return false;
+      // "Todas" passes all
       return true;
     });
-  }, [docs, mesFiltro, anoFiltro]);
+  }, [docs, mesFiltro, anoFiltro, empresaFiltro, statusFiltro, operacaoFiltro, cnpjGrupoSet]);
 
+  // After applying status filter, "filtrados" already reflect the selected status.
+  // For calculations that need only ATIVO when statusFiltro is "todos", we keep a separate list.
   const ativos = useMemo(
-    () => filtrados.filter((d) => d.status_manual === "Ativo"),
-    [filtrados]
+    () => (statusFiltro === "todos" ? filtrados.filter((d) => d.status_manual === "Ativo") : filtrados),
+    [filtrados, statusFiltro]
   );
 
   const intercompanyDocs = useMemo(
@@ -112,6 +140,50 @@ function Dashboard() {
   const totalLiquido = ativos.reduce((s, d) => s + d.valor_liquido, 0);
   const intercompanyBruto = intercompanyDocs.reduce((s, d) => s + d.valor_bruto, 0);
   const externoBruto = totalBruto - intercompanyBruto;
+
+  // Aggregations for line charts (by competência)
+  const chartsByCompetencia = useMemo(() => {
+    const map: Record<string, { bruto: number; liquido: number; retido: number }> = {};
+    filtrados.forEach((d) => {
+      if (!d.data_competencia) return;
+      const [a, m] = d.data_competencia.split("-");
+      const key = `${m}/${a}`; // MM/YYYY
+      if (!map[key]) map[key] = { bruto: 0, liquido: 0, retido: 0 };
+      map[key].bruto += d.valor_bruto;
+      map[key].liquido += d.valor_liquido;
+      map[key].retido += d.valor_retido;
+    });
+    const result = Object.entries(map).map(([name, vals]) => ({ name, ...vals }));
+    // Sort chronologically by year/month
+    return result.sort((a, b) => {
+      const [am, ay] = a.name.split("/");
+      const [bm, by] = b.name.split("/");
+      return ay !== by ? Number(by) - Number(ay) : Number(bm) - Number(am);
+    });
+  }, [filtrados]);
+
+  // Ranking of companies (by fornecedor)
+  const rankingData = useMemo(() => {
+    const map: Record<string, number> = {};
+    filtrados.forEach((d) => {
+      const key = d.cnpj_prestador || "";
+      if (!key) return;
+      map[key] = (map[key] || 0) + d.valor_bruto;
+    });
+    return Object.entries(map)
+      .map(([cnpj, bruto]) => ({ cnpj, bruto }))
+      .sort((a, b) => b.bruto - a.bruto);
+  }, [filtrados]);
+
+  // Participation donut data
+  const participationData = useMemo(() => {
+    const total = totalBruto;
+    return [
+      { name: "Intercompany", value: intercompanyBruto },
+      { name: "Externo", value: externoBruto },
+    ].map((item) => ({ ...item, percent: total ? (item.value / total) * 100 : 0 }));
+  }, [intercompanyBruto, externoBruto, totalBruto]);
+
 
   const barData = [
     { name: "Externo", value: externoBruto },
@@ -170,6 +242,48 @@ function Dashboard() {
               {anos.map((a) => <SelectItem key={a} value={a}>{a}</SelectItem>)}
             </SelectContent>
           </Select>
+          {/* Empresa Filter */}
+          <Select value={empresaFiltro || "__grupo__"} onValueChange={(v) => setEmpresaFiltro(v === "__grupo__" ? "" : v)}>
+            <SelectTrigger className="w-48"><SelectValue placeholder="Empresa" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__grupo__">Consolidado do Grupo</SelectItem>
+              {grupoCnpjs?.map((g) => (
+                <SelectItem key={g.cnpj} value={g.cnpj}>{fmtCnpj(g.cnpj)}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {/* Status Filter */}
+          <div className="flex gap-1 text-xs">
+            {(["todos", "Ativo", "Cancelado"] as const).map((s) => (
+              <button
+                key={s}
+                onClick={() => setStatusFiltro(s)}
+                className={`px-3 py-1.5 rounded-md font-medium border transition-colors ${
+                  statusFiltro === s
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-card border-border text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {s === "todos" ? "Todos" : s}
+              </button>
+            ))}
+          </div>
+          {/* Operação Filter */}
+          <div className="flex gap-1 text-xs">
+            {(["Todas", "Externas", "Intercompany"] as const).map((op) => (
+              <button
+                key={op}
+                onClick={() => setOperacaoFiltro(op)}
+                className={`px-3 py-1.5 rounded-md font-medium border transition-colors ${
+                  operacaoFiltro === op
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-card border-border text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {op}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -240,24 +354,98 @@ function Dashboard() {
         <KpiCard icon={Building2} label="Intercompany" value={fmtBRL(intercompanyBruto)} tone="accent" />
       </div>
 
-      {/* Chart */}
-      <div className="rounded-xl border border-border bg-card p-4">
-        <h2 className="text-sm font-semibold mb-3">Faturamento Externo vs Intercompany</h2>
-        {mounted && (
-          <div className="h-72 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={barData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => fmtBRL(Number(v))} width={110} />
-                <Tooltip formatter={(v: number) => fmtBRL(Number(v))} />
-                <Legend />
-                <Bar dataKey="value" name="Faturamento Bruto" fill="hsl(var(--primary))" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        )}
-        <div className="text-[11px] text-muted-foreground mt-2">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Evolução do Faturamento */}
+        <div className="rounded-xl border border-border bg-card p-4">
+          <h2 className="text-sm font-semibold mb-3">Evolução do Faturamento (Bruto & Líquido)</h2>
+          <ResponsiveContainer width="100%" height={250}>
+            <LineChart data={chartsByCompetencia}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+              <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+              <YAxis tickFormatter={(v) => fmtBRL(Number(v))} tick={{ fontSize: 11 }} />
+              <Tooltip formatter={(v: number) => fmtBRL(Number(v))} />
+              <Legend />
+              <Line type="monotone" dataKey="bruto" name="Bruto" stroke="hsl(var(--primary))" dot={false} />
+              <Line type="monotone" dataKey="liquido" name="Líquido" stroke="hsl(var(--emerald-600))" dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+        {/* Evolução das Retenções */}
+        <div className="rounded-xl border border-border bg-card p-4">
+          <h2 className="text-sm font-semibold mb-3">Evolução das Retenções</h2>
+          <ResponsiveContainer width="100%" height={250}>
+            <LineChart data={chartsByCompetencia}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+              <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+              <YAxis tickFormatter={(v) => fmtBRL(Number(v))} tick={{ fontSize: 11 }} />
+              <Tooltip formatter={(v: number) => fmtBRL(Number(v))} />
+              <Legend />
+              <Line type="monotone" dataKey="retido" name="Retenções" stroke="hsl(var(--rose))" dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* Ranking de Empresas */}
+      <div className="rounded-xl border border-border bg-card p-4 mt-4">
+        <h2 className="text-sm font-semibold mb-3">Ranking de Empresas (Faturamento Bruto)</h2>
+        <ResponsiveContainer width="100%" height={Math.max(200, rankingData.length * 40 + 60)}>
+          <BarChart data={rankingData} layout="vertical" margin={{ left: 80 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+            <XAxis type="number" tickFormatter={(v) => fmtBRL(Number(v))} tick={{ fontSize: 11 }} />
+            <YAxis dataKey="cnpj" type="category" tickFormatter={(c) => fmtCnpj(c)} tick={{ fontSize: 12 }} />
+            <Tooltip formatter={(v: number) => fmtBRL(Number(v))} />
+            <Bar dataKey="bruto" fill="hsl(var(--primary))" />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+
+      {/* Participação no Consolidado */}
+      <div className="rounded-xl border border-border bg-card p-4 mt-4">
+        <h2 className="text-sm font-semibold mb-3">Participação no Consolidado</h2>
+        <ResponsiveContainer width="100%" height={250}>
+          <PieChart>
+            <Pie data={participationData} dataKey="value" nameKey="name" innerRadius={60} outerRadius={80} label={({ percent }) => `${(percent * 100).toFixed(1)}%`}>
+              {participationData.map((entry, index) => (
+                <Cell key={`cell-${index}`} fill={index === 0 ? "hsl(var(--primary))" : "hsl(var(--secondary))" />
+              ))}
+            </Pie>
+            <Tooltip formatter={(v: number) => fmtBRL(Number(v))} />
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+
+      {/* Comparativo Intercompany x Externo */}
+      <div className="rounded-xl border border-border bg-card p-4 mt-4">
+        <h2 className="text-sm font-semibold mb-3">Comparativo Intercompany x Externo</h2>
+        <ResponsiveContainer width="100%" height={250}>
+          <BarChart data={barData}>
+            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+            <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+            <YAxis tickFormatter={(v) => fmtBRL(Number(v))} tick={{ fontSize: 11 }} />
+            <Tooltip formatter={(v: number) => fmtBRL(Number(v))} />
+            <Legend />
+            <Bar dataKey="value" fill="hsl(var(--primary))" radius={[6, 6, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+
+      {/* Participação Intercompany */}
+      <div className="rounded-xl border border-border bg-card p-4 mt-4">
+        <h2 className="text-sm font-semibold mb-3">Participação Intercompany</h2>
+        <ResponsiveContainer width="100%" height={250}>
+          <PieChart>
+            <Pie data={participationData} dataKey="value" nameKey="name" innerRadius={60} outerRadius={80} label={({ percent }) => `${(percent * 100).toFixed(1)}%`}>
+              {participationData.map((entry, index) => (
+                <Cell key={`cell-${index}`} fill={index === 0 ? "hsl(var(--primary))" : "hsl(var(--secondary))" />
+              ))}
+            </Pie>
+            <Tooltip formatter={(v: number) => fmtBRL(Number(v))} />
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+
+      <div className="text-[11px] text-muted-foreground mt-2">
           Intercompany = notas onde prestador e tomador estão no Grupo (
           {cnpjGrupoSet.size} CNPJ{cnpjGrupoSet.size === 1 ? "" : "s"} cadastrado{cnpjGrupoSet.size === 1 ? "" : "s"}).
         </div>
