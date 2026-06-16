@@ -152,3 +152,84 @@
     pointer-events: auto !important;
   }
 }
+
+/* ─── Drill-Down Modal ─────────────────────────────────────────── */
+
+@keyframes drilldown-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes drilldown-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(24px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.drilldown-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: oklch(0 0 0 / 50%);
+  backdrop-filter: blur(6px);
+  animation: drilldown-backdrop-in 0.25s ease-out;
+  padding: 24px;
+}
+
+.drilldown-panel {
+  position: relative;
+  width: 100%;
+  max-width: 1280px;
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--color-border);
+  background-color: var(--color-background);
+  box-shadow:
+    0 25px 50px -12px oklch(0 0 0 / 25%),
+    0 0 0 1px oklch(0 0 0 / 5%);
+  animation: drilldown-panel-in 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+}
+
+/* ─── Clickable KPI Cards ──────────────────────────────────────── */
+
+.kpi-clickable {
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.kpi-clickable:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px oklch(0 0 0 / 8%);
+}
+
+.kpi-clickable:active {
+  transform: translateY(0);
+}
+
+/* ─── Chart Click Areas ────────────────────────────────────────── */
+
+.recharts-bar-rectangle,
+.recharts-pie-sector,
+.recharts-dot {
+  cursor: pointer;
+}
+
+.recharts-bar-rectangle:hover {
+  filter: brightness(1.15);
+}
+
+.recharts-pie-sector:hover {
+  filter: brightness(1.1);
+}
+

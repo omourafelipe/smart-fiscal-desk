@@ -10,23 +10,12 @@ import { toast } from "sonner";
 
 import { db } from "@/lib/db";
 import { importFiles, type ImportSummary } from "@/lib/fiscal/pipeline";
-import { useFiscalStore } from "@/store/useFiscalStore";
-import {
-  mesFiltro,
-  anoFiltro,
-  setMesFiltro,
-  setAnoFiltro,
-  empresaFiltro,
-  statusFiltro,
-  operacaoFiltro,
-  setEmpresaFiltro,
-  setStatusFiltro,
-  setOperacaoFiltro
-} from "@/store/useFiscalStore";
+import { useFiscalStore, type DrillDownFilter } from "@/store/useFiscalStore";
 import { Button } from "@/components/ui/button";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { DrillDownModal } from "@/components/DrillDownModal";
 
 export const Route = createFileRoute("/")({
   component: Dashboard,
@@ -34,6 +23,13 @@ export const Route = createFileRoute("/")({
 
 const fmtBRL = (n: number) =>
   n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+const fmtCnpj = (v: string) => {
+  const c = (v || "").replace(/\D/g, "");
+  if (c.length === 14) return c.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
+  if (c.length === 11) return c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+  return v || "—";
+};
 
 const MESES = [
   { v: "01", l: "Jan" }, { v: "02", l: "Fev" }, { v: "03", l: "Mar" },
@@ -43,12 +39,13 @@ const MESES = [
 ];
 
 function KpiCard({
-  icon: Icon, label, value, tone = "default",
+  icon: Icon, label, value, tone = "default", onClick,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
   value: string;
   tone?: "default" | "positive" | "negative" | "accent";
+  onClick?: () => void;
 }) {
   const toneClasses = {
     default: "text-foreground",
@@ -57,7 +54,13 @@ function KpiCard({
     accent: "text-indigo-600 dark:text-indigo-400",
   }[tone];
   return (
-    <div className="rounded-xl border border-border bg-card p-4 flex flex-col gap-2">
+    <div
+      className={`rounded-xl border border-border bg-card p-4 flex flex-col gap-2 ${onClick ? "kpi-clickable" : ""}`}
+      onClick={onClick}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (e) => { if (e.key === "Enter" || e.key === " ") onClick(); } : undefined}
+    >
       <div className="flex items-center justify-between">
         <span className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
           {label}
@@ -70,7 +73,12 @@ function KpiCard({
 }
 
 function Dashboard() {
-  const { mesFiltro, anoFiltro, setMesFiltro, setAnoFiltro } = useFiscalStore();
+  const {
+    mesFiltro, anoFiltro, setMesFiltro, setAnoFiltro,
+    empresaFiltro, statusFiltro, operacaoFiltro,
+    setEmpresaFiltro, setStatusFiltro, setOperacaoFiltro,
+    drillDown, openDrillDown, closeDrillDown,
+  } = useFiscalStore();
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [lastSummary, setLastSummary] = useState<ImportSummary | null>(null);
@@ -348,10 +356,14 @@ function Dashboard() {
 
       {/* KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        <KpiCard icon={TrendingUp} label="Faturamento Bruto" value={fmtBRL(totalBruto)} tone="default" />
-        <KpiCard icon={Coins} label="Retenções" value={fmtBRL(totalRetido)} tone="negative" />
-        <KpiCard icon={TrendingUp} label="Faturamento Líquido" value={fmtBRL(totalLiquido)} tone="positive" />
-        <KpiCard icon={Building2} label="Intercompany" value={fmtBRL(intercompanyBruto)} tone="accent" />
+        <KpiCard icon={TrendingUp} label="Faturamento Bruto" value={fmtBRL(totalBruto)} tone="default"
+          onClick={() => openDrillDown({ title: "Faturamento Bruto", filter: { type: "all" } })} />
+        <KpiCard icon={Coins} label="Retenções" value={fmtBRL(totalRetido)} tone="negative"
+          onClick={() => openDrillDown({ title: "Retenções", filter: { type: "all" } })} />
+        <KpiCard icon={TrendingUp} label="Faturamento Líquido" value={fmtBRL(totalLiquido)} tone="positive"
+          onClick={() => openDrillDown({ title: "Faturamento Líquido", filter: { type: "all" } })} />
+        <KpiCard icon={Building2} label="Intercompany" value={fmtBRL(intercompanyBruto)} tone="accent"
+          onClick={() => openDrillDown({ title: "Intercompany", filter: { type: "intercompany" } })} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -359,14 +371,16 @@ function Dashboard() {
         <div className="rounded-xl border border-border bg-card p-4">
           <h2 className="text-sm font-semibold mb-3">Evolução do Faturamento (Bruto & Líquido)</h2>
           <ResponsiveContainer width="100%" height={250}>
-            <LineChart data={chartsByCompetencia}>
+            <LineChart data={chartsByCompetencia} onClick={(e) => {
+              if (e?.activeLabel) openDrillDown({ title: `Faturamento — ${e.activeLabel}`, filter: { type: "competencia", value: e.activeLabel } });
+            }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis dataKey="name" tick={{ fontSize: 12 }} />
               <YAxis tickFormatter={(v) => fmtBRL(Number(v))} tick={{ fontSize: 11 }} />
               <Tooltip formatter={(v: number) => fmtBRL(Number(v))} />
               <Legend />
-              <Line type="monotone" dataKey="bruto" name="Bruto" stroke="hsl(var(--primary))" dot={false} />
-              <Line type="monotone" dataKey="liquido" name="Líquido" stroke="hsl(var(--emerald-600))" dot={false} />
+              <Line type="monotone" dataKey="bruto" name="Bruto" stroke="hsl(var(--primary))" activeDot={{ r: 6, className: "cursor-pointer" }} />
+              <Line type="monotone" dataKey="liquido" name="Líquido" stroke="hsl(var(--emerald-600))" activeDot={{ r: 6, className: "cursor-pointer" }} />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -374,13 +388,15 @@ function Dashboard() {
         <div className="rounded-xl border border-border bg-card p-4">
           <h2 className="text-sm font-semibold mb-3">Evolução das Retenções</h2>
           <ResponsiveContainer width="100%" height={250}>
-            <LineChart data={chartsByCompetencia}>
+            <LineChart data={chartsByCompetencia} onClick={(e) => {
+              if (e?.activeLabel) openDrillDown({ title: `Retenções — ${e.activeLabel}`, filter: { type: "competencia", value: e.activeLabel } });
+            }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis dataKey="name" tick={{ fontSize: 12 }} />
               <YAxis tickFormatter={(v) => fmtBRL(Number(v))} tick={{ fontSize: 11 }} />
               <Tooltip formatter={(v: number) => fmtBRL(Number(v))} />
               <Legend />
-              <Line type="monotone" dataKey="retido" name="Retenções" stroke="hsl(var(--rose))" dot={false} />
+              <Line type="monotone" dataKey="retido" name="Retenções" stroke="hsl(var(--rose))" activeDot={{ r: 6, className: "cursor-pointer" }} />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -390,12 +406,17 @@ function Dashboard() {
       <div className="rounded-xl border border-border bg-card p-4 mt-4">
         <h2 className="text-sm font-semibold mb-3">Ranking de Empresas (Faturamento Bruto)</h2>
         <ResponsiveContainer width="100%" height={Math.max(200, rankingData.length * 40 + 60)}>
-          <BarChart data={rankingData} layout="vertical" margin={{ left: 80 }}>
+          <BarChart data={rankingData} layout="vertical" margin={{ left: 80 }} onClick={(e) => {
+            if (e?.activePayload?.[0]?.payload?.cnpj) {
+              const cnpj = e.activePayload[0].payload.cnpj;
+              openDrillDown({ title: `Prestador — ${fmtCnpj(cnpj)}`, filter: { type: "prestador", cnpj } });
+            }
+          }}>
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
             <XAxis type="number" tickFormatter={(v) => fmtBRL(Number(v))} tick={{ fontSize: 11 }} />
             <YAxis dataKey="cnpj" type="category" tickFormatter={(c) => fmtCnpj(c)} tick={{ fontSize: 12 }} />
             <Tooltip formatter={(v: number) => fmtBRL(Number(v))} />
-            <Bar dataKey="bruto" fill="hsl(var(--primary))" />
+            <Bar dataKey="bruto" fill="hsl(var(--primary))" className="cursor-pointer" />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -405,9 +426,15 @@ function Dashboard() {
         <h2 className="text-sm font-semibold mb-3">Participação no Consolidado</h2>
         <ResponsiveContainer width="100%" height={250}>
           <PieChart>
-            <Pie data={participationData} dataKey="value" nameKey="name" innerRadius={60} outerRadius={80} label={({ percent }) => `${(percent * 100).toFixed(1)}%`}>
+            <Pie data={participationData} dataKey="value" nameKey="name" innerRadius={60} outerRadius={80} label={({ percent }) => `${(percent * 100).toFixed(1)}%`}
+              onClick={(_: unknown, idx: number) => {
+                const filterType = idx === 0 ? "intercompany" : "externo";
+                const label = idx === 0 ? "Intercompany" : "Externo";
+                openDrillDown({ title: `Participação — ${label}`, filter: { type: filterType } as DrillDownFilter });
+              }}
+            >
               {participationData.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={index === 0 ? "hsl(var(--primary))" : "hsl(var(--secondary))" />
+                <Cell key={`cell-${index}`} fill={index === 0 ? "hsl(var(--primary))" : "hsl(var(--secondary))"} className="cursor-pointer" />
               ))}
             </Pie>
             <Tooltip formatter={(v: number) => fmtBRL(Number(v))} />
@@ -419,13 +446,19 @@ function Dashboard() {
       <div className="rounded-xl border border-border bg-card p-4 mt-4">
         <h2 className="text-sm font-semibold mb-3">Comparativo Intercompany x Externo</h2>
         <ResponsiveContainer width="100%" height={250}>
-          <BarChart data={barData}>
+          <BarChart data={barData} onClick={(e) => {
+            if (e?.activePayload?.[0]?.payload?.name) {
+              const name = e.activePayload[0].payload.name as string;
+              const filterType = name === "Intercompany" ? "intercompany" : "externo";
+              openDrillDown({ title: `Comparativo — ${name}`, filter: { type: filterType } as DrillDownFilter });
+            }
+          }}>
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
             <XAxis dataKey="name" tick={{ fontSize: 12 }} />
             <YAxis tickFormatter={(v) => fmtBRL(Number(v))} tick={{ fontSize: 11 }} />
             <Tooltip formatter={(v: number) => fmtBRL(Number(v))} />
             <Legend />
-            <Bar dataKey="value" fill="hsl(var(--primary))" radius={[6, 6, 0, 0]} />
+            <Bar dataKey="value" fill="hsl(var(--primary))" radius={[6, 6, 0, 0]} className="cursor-pointer" />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -435,9 +468,15 @@ function Dashboard() {
         <h2 className="text-sm font-semibold mb-3">Participação Intercompany</h2>
         <ResponsiveContainer width="100%" height={250}>
           <PieChart>
-            <Pie data={participationData} dataKey="value" nameKey="name" innerRadius={60} outerRadius={80} label={({ percent }) => `${(percent * 100).toFixed(1)}%`}>
+            <Pie data={participationData} dataKey="value" nameKey="name" innerRadius={60} outerRadius={80} label={({ percent }) => `${(percent * 100).toFixed(1)}%`}
+              onClick={(_: unknown, idx: number) => {
+                const filterType = idx === 0 ? "intercompany" : "externo";
+                const label = idx === 0 ? "Intercompany" : "Externo";
+                openDrillDown({ title: `Intercompany — ${label}`, filter: { type: filterType } as DrillDownFilter });
+              }}
+            >
               {participationData.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={index === 0 ? "hsl(var(--primary))" : "hsl(var(--secondary))" />
+                <Cell key={`cell-${index}`} fill={index === 0 ? "hsl(var(--primary))" : "hsl(var(--secondary))"} className="cursor-pointer" />
               ))}
             </Pie>
             <Tooltip formatter={(v: number) => fmtBRL(Number(v))} />
@@ -448,13 +487,23 @@ function Dashboard() {
       <div className="text-[11px] text-muted-foreground mt-2">
           Intercompany = notas onde prestador e tomador estão no Grupo (
           {cnpjGrupoSet.size} CNPJ{cnpjGrupoSet.size === 1 ? "" : "s"} cadastrado{cnpjGrupoSet.size === 1 ? "" : "s"}).
-        </div>
       </div>
 
       <div className="text-xs text-muted-foreground flex items-center gap-2">
         <FileText className="h-3.5 w-3.5" />
         {ativos.length} nota(s) ativa(s) no recorte atual · {filtrados.length} total no período.
       </div>
+
+      {/* Drill-Down Modal */}
+      {drillDown && (
+        <DrillDownModal
+          title={drillDown.title}
+          filter={drillDown.filter}
+          filteredDocs={filtrados}
+          cnpjGrupoSet={cnpjGrupoSet}
+          onClose={closeDrillDown}
+        />
+      )}
     </div>
   );
 }
