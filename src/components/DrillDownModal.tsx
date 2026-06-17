@@ -1,4 +1,5 @@
-import { useMemo, useState, useCallback, useEffect } from "react";
+import { useMemo, useState, useCallback, useEffect, useRef } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -30,13 +31,38 @@ const fmtCompet = (v: string) => {
   return a && m ? `${m}/${a}` : v;
 };
 
+/** Extract a readable service label from a document */
+function docServiceLabel(doc: FiscalDocument): string {
+  const code = doc.item_lista_servico?.trim() || doc.codigo_servico?.trim() || "";
+  const desc = doc.descricao_servico?.trim() || "";
+  if (code && desc) return `${code} — ${desc.slice(0, 45)}`;
+  if (code) return code;
+  if (desc) return desc.slice(0, 50);
+  return "—";
+}
+
+/** Returns the grouping key used in ServiceAnalysis */
+function docServiceKey(doc: FiscalDocument): string {
+  return (
+    doc.item_lista_servico?.trim() ||
+    doc.codigo_servico?.trim() ||
+    (doc.descricao_servico?.trim()
+      ? doc.descricao_servico.trim().slice(0, 40)
+      : "") ||
+    "Sem classificação"
+  );
+}
+
 const PAGE_SIZE = 50;
+/* Above this threshold, we switch to virtual scrolling instead of pagination */
+const VIRTUAL_THRESHOLD = 500;
 
 type SortKey =
   | "data_competencia"
   | "id_nota"
   | "prestador"
   | "tomador"
+  | "servico"
   | "valor_bruto"
   | "valor_retido"
   | "valor_liquido"
@@ -70,6 +96,7 @@ export function DrillDownModal({
   const [page, setPage] = useState(1);
   const [sortKey, setSortKey] = useState<SortKey>("data_competencia");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const parentRef = useRef<HTMLDivElement>(null);
 
   // Close on Escape key
   useEffect(() => {
@@ -107,6 +134,8 @@ export function DrillDownModal({
           return isIntercompany(d);
         case "externo":
           return !isIntercompany(d);
+        case "servico":
+          return docServiceKey(d) === filter.serviceKey;
         default:
           return true;
       }
@@ -124,7 +153,8 @@ export function DrillDownModal({
         d.cnpj_tomador.includes(q) ||
         (d.nome_prestador || "").toLowerCase().includes(q) ||
         (d.nome_tomador || "").toLowerCase().includes(q) ||
-        fmtCompet(d.data_competencia).includes(q)
+        fmtCompet(d.data_competencia).includes(q) ||
+        docServiceLabel(d).toLowerCase().includes(q)
     );
   }, [drillFiltered, busca]);
 
@@ -151,6 +181,9 @@ export function DrillDownModal({
             b.nome_tomador || b.cnpj_tomador || ""
           );
           break;
+        case "servico":
+          cmp = docServiceLabel(a).localeCompare(docServiceLabel(b));
+          break;
         case "valor_bruto":
           cmp = a.valor_bruto - b.valor_bruto;
           break;
@@ -172,10 +205,21 @@ export function DrillDownModal({
     return arr;
   }, [searched, sortKey, sortDir, isIntercompany]);
 
-  // Pagination
+  /* ── Virtual vs Paginated rendering ── */
+  const useVirtual = sorted.length > VIRTUAL_THRESHOLD;
+
+  // Pagination (only used when not virtual)
   const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
   const pageSafe = Math.min(page, totalPages);
-  const slice = sorted.slice((pageSafe - 1) * PAGE_SIZE, pageSafe * PAGE_SIZE);
+  const slice = useVirtual ? sorted : sorted.slice((pageSafe - 1) * PAGE_SIZE, pageSafe * PAGE_SIZE);
+
+  // TanStack Virtual
+  const rowVirtualizer = useVirtualizer({
+    count: useVirtual ? sorted.length : 0,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 52,
+    overscan: 10,
+  });
 
   // Summary KPIs
   const summaryQty = searched.length;
@@ -262,7 +306,7 @@ export function DrillDownModal({
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Buscar por ID, CNPJ ou nome..."
+              placeholder="Buscar por ID, CNPJ, nome ou serviço..."
               value={busca}
               onChange={(e) => {
                 setBusca(e.target.value);
@@ -277,8 +321,9 @@ export function DrillDownModal({
         </div>
 
         {/* Table */}
-        <div className="flex-1 overflow-auto px-6 pb-2">
+        <div ref={parentRef} className="flex-1 overflow-auto px-6 pb-2">
           <div className="rounded-xl border border-border bg-card overflow-hidden">
+            {/* Column headers always visible */}
             <Table>
               <TableHeader>
                 <TableRow>
@@ -287,6 +332,7 @@ export function DrillDownModal({
                     ["id_nota", "ID da Nota"],
                     ["prestador", "Prestador"],
                     ["tomador", "Tomador"],
+                    ["servico", "Serviço"],
                     ["valor_bruto", "Valor Bruto"],
                     ["valor_retido", "Retenções"],
                     ["valor_liquido", "Valor Líquido"],
@@ -308,68 +354,113 @@ export function DrillDownModal({
                   ))}
                 </TableRow>
               </TableHeader>
-              <TableBody>
-                {slice.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={9} className="text-center text-sm text-muted-foreground py-12">
-                      Nenhuma nota encontrada para este indicador.
-                    </TableCell>
-                  </TableRow>
-                )}
-                {slice.map((d) => {
-                  const ic = isIntercompany(d);
-                  return (
-                    <TableRow key={d.id_nota} className="group">
-                      <TableCell className="text-xs font-mono">{fmtCompet(d.data_competencia)}</TableCell>
-                      <TableCell className="text-xs font-mono max-w-[160px] truncate" title={d.id_nota}>
-                        {d.id_nota}
-                      </TableCell>
-                      <TableCell className="text-xs">
-                        <div className="font-medium truncate max-w-[160px]" title={d.nome_prestador}>
-                          {d.nome_prestador || "—"}
-                        </div>
-                        <div className="text-muted-foreground font-mono text-[10px]">
-                          {fmtCnpj(d.cnpj_prestador)}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-xs">
-                        <div className="font-medium truncate max-w-[160px]" title={d.nome_tomador}>
-                          {d.nome_tomador || "—"}
-                        </div>
-                        <div className="text-muted-foreground font-mono text-[10px]">
-                          {fmtCnpj(d.cnpj_tomador)}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right text-xs font-mono">{fmtBRL(d.valor_bruto)}</TableCell>
-                      <TableCell className="text-right text-xs font-mono">{fmtBRL(d.valor_retido)}</TableCell>
-                      <TableCell className="text-right text-xs font-mono">{fmtBRL(d.valor_liquido)}</TableCell>
-                      <TableCell className="text-center">
-                        {d.status_manual === "Ativo" ? (
-                          <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-0 text-[10px]">
-                            Ativo
-                          </Badge>
-                        ) : (
-                          <Badge className="bg-rose-500/15 text-rose-700 dark:text-rose-300 border-0 text-[10px]">
-                            Cancelado
-                          </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {ic ? (
-                          <Badge className="bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border-0 text-[10px]">
-                            <ShieldAlert className="h-3 w-3 mr-0.5" />
-                            Sim
-                          </Badge>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        )}
+
+              {useVirtual ? (
+                /* ── VIRTUAL MODE: only render visible rows ── */
+                <TableBody>
+                  <tr style={{ height: rowVirtualizer.getTotalSize(), position: "relative", display: "block" }}>
+                    {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                      const d = sorted[virtualRow.index];
+                      const ic = isIntercompany(d);
+                      const svcLabel = docServiceLabel(d);
+                      return (
+                        <TableRow
+                          key={d.id_nota}
+                          className="group absolute w-full"
+                          style={{ top: virtualRow.start, height: virtualRow.size }}
+                        >
+                          <TableCell className="text-xs font-mono">{fmtCompet(d.data_competencia)}</TableCell>
+                          <TableCell className="text-xs font-mono max-w-[140px] truncate" title={d.id_nota}>{d.id_nota}</TableCell>
+                          <TableCell className="text-xs">
+                            <div className="font-medium truncate max-w-[140px]" title={d.nome_prestador}>{d.nome_prestador || "—"}</div>
+                            <div className="text-muted-foreground font-mono text-[10px]">{fmtCnpj(d.cnpj_prestador)}</div>
+                          </TableCell>
+                          <TableCell className="text-xs">
+                            <div className="font-medium truncate max-w-[140px]" title={d.nome_tomador}>{d.nome_tomador || "—"}</div>
+                            <div className="text-muted-foreground font-mono text-[10px]">{fmtCnpj(d.cnpj_tomador)}</div>
+                          </TableCell>
+                          <TableCell className="text-xs max-w-[160px]"><div className="truncate text-muted-foreground" title={svcLabel}>{svcLabel}</div></TableCell>
+                          <TableCell className="text-right text-xs font-mono">{fmtBRL(d.valor_bruto)}</TableCell>
+                          <TableCell className="text-right text-xs font-mono">{fmtBRL(d.valor_retido)}</TableCell>
+                          <TableCell className="text-right text-xs font-mono">{fmtBRL(d.valor_liquido)}</TableCell>
+                          <TableCell className="text-center">
+                            {d.status_manual === "Ativo" ? (
+                              <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-0 text-[10px]">Ativo</Badge>
+                            ) : (
+                              <Badge className="bg-rose-500/15 text-rose-700 dark:text-rose-300 border-0 text-[10px]">Cancelado</Badge>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            {ic ? (
+                              <Badge className="bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border-0 text-[10px]">
+                                <ShieldAlert className="h-3 w-3 mr-0.5" />Sim
+                              </Badge>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </tr>
+                </TableBody>
+              ) : (
+                /* ── PAGINATED MODE: classic page-by-page ── */
+                <TableBody>
+                  {slice.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={10} className="text-center text-sm text-muted-foreground py-12">
+                        Nenhuma nota encontrada para este indicador.
                       </TableCell>
                     </TableRow>
-                  );
-                })}
-              </TableBody>
+                  )}
+                  {slice.map((d) => {
+                    const ic = isIntercompany(d);
+                    const svcLabel = docServiceLabel(d);
+                    return (
+                      <TableRow key={d.id_nota} className="group">
+                        <TableCell className="text-xs font-mono">{fmtCompet(d.data_competencia)}</TableCell>
+                        <TableCell className="text-xs font-mono max-w-[140px] truncate" title={d.id_nota}>{d.id_nota}</TableCell>
+                        <TableCell className="text-xs">
+                          <div className="font-medium truncate max-w-[140px]" title={d.nome_prestador}>{d.nome_prestador || "—"}</div>
+                          <div className="text-muted-foreground font-mono text-[10px]">{fmtCnpj(d.cnpj_prestador)}</div>
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          <div className="font-medium truncate max-w-[140px]" title={d.nome_tomador}>{d.nome_tomador || "—"}</div>
+                          <div className="text-muted-foreground font-mono text-[10px]">{fmtCnpj(d.cnpj_tomador)}</div>
+                        </TableCell>
+                        <TableCell className="text-xs max-w-[160px]"><div className="truncate text-muted-foreground" title={svcLabel}>{svcLabel}</div></TableCell>
+                        <TableCell className="text-right text-xs font-mono">{fmtBRL(d.valor_bruto)}</TableCell>
+                        <TableCell className="text-right text-xs font-mono">{fmtBRL(d.valor_retido)}</TableCell>
+                        <TableCell className="text-right text-xs font-mono">{fmtBRL(d.valor_liquido)}</TableCell>
+                        <TableCell className="text-center">
+                          {d.status_manual === "Ativo" ? (
+                            <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-0 text-[10px]">Ativo</Badge>
+                          ) : (
+                            <Badge className="bg-rose-500/15 text-rose-700 dark:text-rose-300 border-0 text-[10px]">Cancelado</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {ic ? (
+                            <Badge className="bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border-0 text-[10px]">
+                              <ShieldAlert className="h-3 w-3 mr-0.5" />Sim
+                            </Badge>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              )}
             </Table>
           </div>
+          {useVirtual && (
+            <div className="mt-2 text-center text-[11px] text-muted-foreground">
+              {sorted.length.toLocaleString("pt-BR")} notas — rolagem virtual ativa
+            </div>
+          )}
         </div>
 
         {/* Pagination */}

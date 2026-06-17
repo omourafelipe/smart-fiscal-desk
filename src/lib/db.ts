@@ -15,7 +15,11 @@ export interface FiscalDocument {
   status_manual: StatusManual;
   origem_arquivo: string;
   data_importacao: string; // ISO
-  hash_documento: string; // SHA-256
+  hash_documento: string;  // SHA-256
+  // Serviço (preenchido a partir da versão 2 do schema)
+  item_lista_servico?: string;
+  codigo_servico?: string;
+  descricao_servico?: string;
 }
 
 export interface GroupCnpj {
@@ -47,6 +51,9 @@ class FiscalDB extends Dexie {
       groupCnpjs: "cnpj",
       audits: "++id, data_hora",
     });
+    // v2: adiciona campos opcionais de serviço (item_lista_servico, codigo_servico, descricao_servico)
+    // Não requer novos índices — upgrade vazio é suficiente.
+    this.version(2).stores({});
   }
 }
 

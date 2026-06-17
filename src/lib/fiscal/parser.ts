@@ -18,6 +18,10 @@ export interface CanonicalNota {
   valor_bruto: number;
   valor_retido: number;
   valor_liquido: number;
+  // Serviço
+  item_lista_servico?: string;  // ex: "01.01" (LC 116)
+  codigo_servico?: string;      // código municipal
+  descricao_servico?: string;   // discriminação do serviço
 }
 
 export type ParseResult =
@@ -195,6 +199,42 @@ export function parseFiscalXml(xml: string): ParseResult {
     valor_liquido = Math.max(0, valor_bruto - valor_retido);
   }
 
+  // ── Serviço ───────────────────────────────────────────────────────
+  // ItemListaServico (código LC 116, ex: "01.01")
+  const item_lista_servico = String(
+    pickFirst(inf, [
+      ["dps", "infdps", "serv", "cserv", "lc116"],
+      ["dps", "infdps", "serv", "itemlistaservico"],
+      ["serv", "itemlistaservico"],
+      ["servico", "itemlistaservico"],
+      ["inftributacao", "itemlistaservico"],
+    ]) ?? ""
+  ).trim() || undefined;
+
+  // Código do Serviço (código municipal)
+  const codigo_servico = String(
+    pickFirst(inf, [
+      ["dps", "infdps", "serv", "cserv", "cmunic"],
+      ["dps", "infdps", "serv", "codigoservico"],
+      ["serv", "codigoservico"],
+      ["servico", "codigoservico"],
+      ["servico", "codigotributacaomunicipio"],
+    ]) ?? ""
+  ).trim() || undefined;
+
+  // Descrição / Discriminação do serviço
+  const rawDesc = String(
+    pickFirst(inf, [
+      ["dps", "infdps", "serv", "descserv"],
+      ["dps", "infdps", "serv", "xdiscriminacao"],
+      ["serv", "discriminacao"],
+      ["servico", "discriminacao"],
+      ["servico", "descricao"],
+    ]) ?? ""
+  ).trim();
+  // Truncar a 120 chars para não poluir storage/display
+  const descricao_servico = rawDesc ? rawDesc.slice(0, 120) : undefined;
+
   return {
     ok: true,
     nota: {
@@ -207,6 +247,9 @@ export function parseFiscalXml(xml: string): ParseResult {
       valor_bruto,
       valor_retido,
       valor_liquido,
+      item_lista_servico,
+      codigo_servico,
+      descricao_servico,
     },
   };
 }
