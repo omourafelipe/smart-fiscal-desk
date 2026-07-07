@@ -1,8 +1,12 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { LayoutDashboard, FileText, Settings, BarChart3, Tag } from "lucide-react";
+import { LayoutDashboard, FileText, Settings, BarChart3, Tag, Calculator, Briefcase, Users, MapPin } from "lucide-react";
 
 const items = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/tributario", label: "Análise Tributária", icon: Calculator },
+  { to: "/servicos", label: "Serviços", icon: Briefcase },
+  { to: "/clientes", label: "Clientes", icon: Users },
+  { to: "/municipios", label: "Municípios", icon: MapPin },
   { to: "/notas", label: "Notas Fiscais", icon: FileText },
   { to: "/classificacao", label: "Regras & Classificação", icon: Tag },
   { to: "/configuracoes", label: "Configurações", icon: Settings },

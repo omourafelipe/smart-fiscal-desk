@@ -38,11 +38,22 @@ interface FiscalState {
   empresaFiltro: string;
   statusFiltro: "todos" | "Ativo" | "Cancelado";
   operacaoFiltro: "Todas" | "Externas" | "Intercompany";
+  clienteFiltro: string;
+  municipioFiltro: string;
+  codigoTributarioFiltro: string;
+  tipoServicoFiltro: string;
+  retencaoFiltro: "Todos" | "Com Retenção" | "Sem Retenção";
+
   setMesFiltro: (m: string) => void;
   setAnoFiltro: (a: string) => void;
   setEmpresaFiltro: (e: string) => void;
   setStatusFiltro: (s: "todos" | "Ativo" | "Cancelado") => void;
   setOperacaoFiltro: (o: "Todas" | "Externas" | "Intercompany") => void;
+  setClienteFiltro: (c: string) => void;
+  setMunicipioFiltro: (m: string) => void;
+  setCodigoTributarioFiltro: (c: string) => void;
+  setTipoServicoFiltro: (t: string) => void;
+  setRetencaoFiltro: (r: "Todos" | "Com Retenção" | "Sem Retenção") => void;
   resetFilters: () => void;
 
   /* ── Saved Filters ── */
@@ -68,6 +79,11 @@ const DEFAULT_FILTERS = {
   empresaFiltro: "",
   statusFiltro: "Ativo" as const,
   operacaoFiltro: "Todas" as const,
+  clienteFiltro: "",
+  municipioFiltro: "",
+  codigoTributarioFiltro: "",
+  tipoServicoFiltro: "",
+  retencaoFiltro: "Todos" as const,
 };
 
 export const useFiscalStore = create<FiscalState>()(
@@ -84,6 +100,11 @@ export const useFiscalStore = create<FiscalState>()(
         setEmpresaFiltro: (e) => set({ empresaFiltro: e }),
         setStatusFiltro: (s) => set({ statusFiltro: s }),
         setOperacaoFiltro: (o) => set({ operacaoFiltro: o }),
+        setClienteFiltro: (c) => set({ clienteFiltro: c }),
+        setMunicipioFiltro: (m) => set({ municipioFiltro: m }),
+        setCodigoTributarioFiltro: (c) => set({ codigoTributarioFiltro: c }),
+        setTipoServicoFiltro: (t) => set({ tipoServicoFiltro: t }),
+        setRetencaoFiltro: (r) => set({ retencaoFiltro: r }),
         resetFilters: () => set(DEFAULT_FILTERS),
 
         /* ── Saved Filters ── */
@@ -140,6 +161,11 @@ export const useFiscalStore = create<FiscalState>()(
           empresaFiltro: state.empresaFiltro,
           statusFiltro: state.statusFiltro,
           operacaoFiltro: state.operacaoFiltro,
+          clienteFiltro: state.clienteFiltro,
+          municipioFiltro: state.municipioFiltro,
+          codigoTributarioFiltro: state.codigoTributarioFiltro,
+          tipoServicoFiltro: state.tipoServicoFiltro,
+          retencaoFiltro: state.retencaoFiltro,
           savedFilters: state.savedFilters,
         }),
       }
