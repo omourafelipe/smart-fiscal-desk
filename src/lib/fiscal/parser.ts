@@ -22,6 +22,7 @@ export interface CanonicalNota {
   item_lista_servico?: string;  // ex: "01.01" (LC 116)
   codigo_servico?: string;      // código municipal
   descricao_servico?: string;   // discriminação do serviço
+  municipio?: string;
 }
 
 export type ParseResult =
@@ -235,6 +236,19 @@ export function parseFiscalXml(xml: string): ParseResult {
   // Truncar a 120 chars para não poluir storage/display
   const descricao_servico = rawDesc ? rawDesc.slice(0, 120) : undefined;
 
+  // Extração de Município
+  const municipio = String(
+    pickFirst(inf, [
+      ["dps", "infdps", "toma", "end", "xmun"],
+      ["toma", "endereco", "xmunicipio"],
+      ["dps", "infdps", "prest", "end", "xmun"],
+      ["prest", "endereco", "xmunicipio"],
+      ["servico", "municipioservico"],
+      ["dps", "infdps", "prest", "end", "cmun"],
+      ["dps", "infdps", "toma", "end", "cmun"],
+    ]) ?? ""
+  ).trim() || undefined;
+
   return {
     ok: true,
     nota: {
@@ -250,6 +264,7 @@ export function parseFiscalXml(xml: string): ParseResult {
       item_lista_servico,
       codigo_servico,
       descricao_servico,
+      municipio,
     },
   };
 }

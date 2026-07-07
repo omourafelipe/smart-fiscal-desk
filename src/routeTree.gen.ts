@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as NotasRouteImport } from './routes/notas'
 import { Route as ConfiguracoesRouteImport } from './routes/configuracoes'
+import { Route as ClassificacaoRouteImport } from './routes/classificacao'
 import { Route as IndexRouteImport } from './routes/index'
 
 const NotasRoute = NotasRouteImport.update({
@@ -23,6 +24,11 @@ const ConfiguracoesRoute = ConfiguracoesRouteImport.update({
   path: '/configuracoes',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ClassificacaoRoute = ClassificacaoRouteImport.update({
+  id: '/classificacao',
+  path: '/classificacao',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -31,30 +37,34 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/classificacao': typeof ClassificacaoRoute
   '/configuracoes': typeof ConfiguracoesRoute
   '/notas': typeof NotasRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/classificacao': typeof ClassificacaoRoute
   '/configuracoes': typeof ConfiguracoesRoute
   '/notas': typeof NotasRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/classificacao': typeof ClassificacaoRoute
   '/configuracoes': typeof ConfiguracoesRoute
   '/notas': typeof NotasRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/configuracoes' | '/notas'
+  fullPaths: '/' | '/classificacao' | '/configuracoes' | '/notas'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/configuracoes' | '/notas'
-  id: '__root__' | '/' | '/configuracoes' | '/notas'
+  to: '/' | '/classificacao' | '/configuracoes' | '/notas'
+  id: '__root__' | '/' | '/classificacao' | '/configuracoes' | '/notas'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ClassificacaoRoute: typeof ClassificacaoRoute
   ConfiguracoesRoute: typeof ConfiguracoesRoute
   NotasRoute: typeof NotasRoute
 }
@@ -75,6 +85,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ConfiguracoesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/classificacao': {
+      id: '/classificacao'
+      path: '/classificacao'
+      fullPath: '/classificacao'
+      preLoaderRoute: typeof ClassificacaoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -87,6 +104,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ClassificacaoRoute: ClassificacaoRoute,
   ConfiguracoesRoute: ConfiguracoesRoute,
   NotasRoute: NotasRoute,
 }

@@ -59,7 +59,7 @@ export function exportToCsv(ctx: ExportContext): void {
       cnpjGrupoSet.has(d.cnpj_prestador) && cnpjGrupoSet.has(d.cnpj_tomador);
     return [
       fmtDate(d.data_competencia),
-      d.numero_nota || d.chave_nfse || d.id,
+      d.id_nota,
       d.nome_prestador || "",
       fmtCnpj(d.cnpj_prestador),
       d.nome_tomador || "",

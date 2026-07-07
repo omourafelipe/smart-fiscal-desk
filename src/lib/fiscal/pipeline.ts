@@ -1,5 +1,6 @@
 import { db, type FiscalDocument, type ImportAudit } from "@/lib/db";
 import { parseFiscalXml, buildHash } from "./parser";
+import { classifyDocument } from "./rulesEngine";
 
 export interface ImportSummary {
   encontrados: number;
@@ -79,6 +80,7 @@ export async function importFiles(
   );
   const seenInBatch = new Set<string>();
   const toInsert: FiscalDocument[] = [];
+  const rules = await db.taxRules.toArray();
 
   onProgress?.({ done: 0, total: all.length });
   const nowIso = new Date().toISOString();
@@ -100,13 +102,15 @@ export async function importFiles(
             summary.duplicadas++;
           } else {
             seenInBatch.add(hash);
-            toInsert.push({
+            const rawDoc: FiscalDocument = {
               ...parsed.nota,
               status_manual: "Ativo",
               origem_arquivo: arquivo,
               data_importacao: nowIso,
               hash_documento: hash,
-            });
+            };
+            const classifiedDoc = classifyDocument(rawDoc, rules);
+            toInsert.push(classifiedDoc);
             summary.importadas++;
           }
         } catch (e: any) {

@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, type StatusManual } from "@/lib/db";
@@ -8,7 +8,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Search } from "lucide-react";
+import { Search, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/notas")({
@@ -35,6 +35,10 @@ const PAGE = 50;
 
 function NotasPage() {
   const docs = useLiveQuery(() => db.documents.toArray(), []);
+
+  const semClassificacaoCount = useMemo(() => {
+    return (docs ?? []).filter((d) => d.status_manual === "Ativo" && !d.categoria).length;
+  }, [docs]);
   const [busca, setBusca] = useState("");
   const [statusFiltro, setStatusFiltro] = useState<"todos" | StatusManual>("todos");
   const [page, setPage] = useState(1);
@@ -74,6 +78,26 @@ function NotasPage() {
           Alterne o status manual entre <strong>Ativo</strong> e <strong>Cancelado</strong>. Notas canceladas saem dos KPIs.
         </p>
       </div>
+
+      {semClassificacaoCount > 0 && (
+        <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 flex items-center justify-between flex-wrap gap-3 animate-in fade-in duration-200">
+          <div className="flex items-center gap-2.5">
+            <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0" />
+            <div>
+              <div className="text-xs font-semibold text-foreground">Notas sem Classificação Gerencial</div>
+              <div className="text-[11px] text-muted-foreground mt-0.5">
+                Existem <strong>{semClassificacaoCount}</strong> notas fiscais ativas sem classificação gerencial.
+              </div>
+            </div>
+          </div>
+          <Link
+            to="/classificacao"
+            className="inline-flex items-center justify-center rounded-md bg-amber-500/15 hover:bg-amber-500/25 px-3 py-1.5 text-xs font-medium text-amber-700 dark:text-amber-300 transition-colors"
+          >
+            Classificar Agora
+          </Link>
+        </div>
+      )}
 
       <div className="flex gap-2 flex-wrap items-center">
         <div className="relative flex-1 min-w-[220px] max-w-md">

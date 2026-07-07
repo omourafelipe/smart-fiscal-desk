@@ -1,9 +1,10 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { LayoutDashboard, FileText, Settings, BarChart3 } from "lucide-react";
+import { LayoutDashboard, FileText, Settings, BarChart3, Tag } from "lucide-react";
 
 const items = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/notas", label: "Notas Fiscais", icon: FileText },
+  { to: "/classificacao", label: "Regras & Classificação", icon: Tag },
   { to: "/configuracoes", label: "Configurações", icon: Settings },
 ] as const;
 

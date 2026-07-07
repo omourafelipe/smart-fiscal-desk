@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import {
@@ -274,6 +274,10 @@ function Dashboard() {
 
   const docs = useLiveQuery(() => db.documents.toArray(), []);
   const grupoCnpjs = useLiveQuery(() => db.groupCnpjs.toArray(), []);
+
+  const semClassificacaoCount = useMemo(() => {
+    return (docs ?? []).filter((d) => d.status_manual === "Ativo" && !d.categoria).length;
+  }, [docs]);
 
   const cnpjGrupoSet = useMemo(
     () => new Set((grupoCnpjs ?? []).map((g) => g.cnpj)),
@@ -604,6 +608,26 @@ function Dashboard() {
             </Button>
           </div>
         </div>
+
+        {semClassificacaoCount > 0 && (
+          <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 flex items-center justify-between flex-wrap gap-3 animate-in fade-in duration-200">
+            <div className="flex items-center gap-2.5">
+              <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0" />
+              <div>
+                <div className="text-xs font-semibold text-foreground">Notas sem Classificação Gerencial</div>
+                <div className="text-[11px] text-muted-foreground mt-0.5">
+                  Existem <strong>{semClassificacaoCount}</strong> notas fiscais ativas sem classificação gerencial baseada em regras.
+                </div>
+              </div>
+            </div>
+            <Link
+              to="/classificacao"
+              className="inline-flex items-center justify-center rounded-md bg-amber-500/15 hover:bg-amber-500/25 px-3 py-1.5 text-xs font-medium text-amber-700 dark:text-amber-300 transition-colors"
+            >
+              Classificar Agora
+            </Link>
+          </div>
+        )}
 
         {/* ── Filters Bar ── */}
         <div

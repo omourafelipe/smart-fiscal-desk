@@ -20,6 +20,13 @@ export interface FiscalDocument {
   item_lista_servico?: string;
   codigo_servico?: string;
   descricao_servico?: string;
+  // Classificações (preenchidas a partir da versão 3 do schema)
+  categoria?: string;
+  grupo?: string;
+  centro_receita?: string;
+  subcategoria?: string;
+  regra_aplicada_id?: number;
+  municipio?: string;
 }
 
 export interface GroupCnpj {
@@ -39,10 +46,31 @@ export interface ImportAudit {
   detalhes_erros: { arquivo: string; motivo: string }[];
 }
 
+export type RuleType = "cliente" | "palavra_chave" | "codigo_exato" | "faixa_codigo" | "municipio" | "padrao";
+
+export interface TaxRule {
+  id?: number;
+  nome: string;
+  tipo: RuleType;
+  // Condições
+  valor_cliente?: string;       // CNPJ ou nome do cliente
+  valor_palavra_chave?: string; // palavra-chave na descrição do serviço
+  valor_codigo_exato?: string;  // código municipal ou LC 116 exato
+  valor_faixa_inicio?: string;  // código inicial da faixa
+  valor_faixa_fim?: string;     // código final da faixa
+  valor_municipio?: string;     // município (nome ou código IBGE)
+  // Saídas gerenciais
+  categoria: string;
+  grupo: string;
+  centro_receita: string;
+  subcategoria: string;
+}
+
 class FiscalDB extends Dexie {
   documents!: Table<FiscalDocument, string>;
   groupCnpjs!: Table<GroupCnpj, string>;
   audits!: Table<ImportAudit, number>;
+  taxRules!: Table<TaxRule, number>;
 
   constructor() {
     super("smart-fiscal-desk");
@@ -54,6 +82,10 @@ class FiscalDB extends Dexie {
     // v2: adiciona campos opcionais de serviço (item_lista_servico, codigo_servico, descricao_servico)
     // Não requer novos índices — upgrade vazio é suficiente.
     this.version(2).stores({});
+    // v3: adiciona regras tributárias para classificação gerencial
+    this.version(3).stores({
+      taxRules: "++id, tipo, categoria, grupo",
+    });
   }
 }
 

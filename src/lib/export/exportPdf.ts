@@ -222,7 +222,7 @@ export async function exportToPdf(
       cnpjGrupoSet.has(d.cnpj_prestador) && cnpjGrupoSet.has(d.cnpj_tomador);
     return [
       fmtDate(d.data_competencia),
-      d.numero_nota || d.chave_nfse?.slice(-8) || d.id.slice(-8),
+      d.id_nota,
       (d.nome_prestador || fmtCnpj(d.cnpj_prestador)).slice(0, 28),
       (d.nome_tomador || fmtCnpj(d.cnpj_tomador)).slice(0, 28),
       fmtBRL(d.valor_bruto),
