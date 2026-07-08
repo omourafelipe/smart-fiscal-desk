@@ -8,7 +8,11 @@ export type DrillDownFilter =
   | { type: "prestador"; cnpj: string }
   | { type: "intercompany" }
   | { type: "externo" }
-  | { type: "servico"; serviceKey: string; serviceLabel: string };
+  | { type: "servico"; serviceKey: string; serviceLabel: string }
+  | { type: "cliente"; value: string; cnpj?: string }
+  | { type: "municipio"; value: string }
+  | { type: "categoria_sintetica"; value: string }
+  | { type: "tributo"; value: string };
 
 export interface DrillDownConfig {
   title: string;
@@ -35,6 +39,8 @@ interface FiscalState {
   /* ── Filters ── */
   mesFiltro: string;
   anoFiltro: string;
+  emissaoMesFiltro: string;
+  emissaoAnoFiltro: string;
   empresaFiltro: string;
   statusFiltro: "todos" | "Ativo" | "Cancelado";
   operacaoFiltro: "Todas" | "Externas" | "Intercompany";
@@ -43,9 +49,13 @@ interface FiscalState {
   codigoTributarioFiltro: string;
   tipoServicoFiltro: string;
   retencaoFiltro: "Todos" | "Com Retenção" | "Sem Retenção";
+  categoriaFiltro: string;
+  grupoFiltro: string;
 
   setMesFiltro: (m: string) => void;
   setAnoFiltro: (a: string) => void;
+  setEmissaoMesFiltro: (m: string) => void;
+  setEmissaoAnoFiltro: (a: string) => void;
   setEmpresaFiltro: (e: string) => void;
   setStatusFiltro: (s: "todos" | "Ativo" | "Cancelado") => void;
   setOperacaoFiltro: (o: "Todas" | "Externas" | "Intercompany") => void;
@@ -54,6 +64,8 @@ interface FiscalState {
   setCodigoTributarioFiltro: (c: string) => void;
   setTipoServicoFiltro: (t: string) => void;
   setRetencaoFiltro: (r: "Todos" | "Com Retenção" | "Sem Retenção") => void;
+  setCategoriaFiltro: (c: string) => void;
+  setGrupoFiltro: (g: string) => void;
   resetFilters: () => void;
 
   /* ── Saved Filters ── */
@@ -76,6 +88,8 @@ interface FiscalState {
 const DEFAULT_FILTERS = {
   mesFiltro: "",
   anoFiltro: "",
+  emissaoMesFiltro: "",
+  emissaoAnoFiltro: "",
   empresaFiltro: "",
   statusFiltro: "Ativo" as const,
   operacaoFiltro: "Todas" as const,
@@ -84,6 +98,8 @@ const DEFAULT_FILTERS = {
   codigoTributarioFiltro: "",
   tipoServicoFiltro: "",
   retencaoFiltro: "Todos" as const,
+  categoriaFiltro: "",
+  grupoFiltro: "",
 };
 
 export const useFiscalStore = create<FiscalState>()(
@@ -97,6 +113,8 @@ export const useFiscalStore = create<FiscalState>()(
         ...DEFAULT_FILTERS,
         setMesFiltro: (m) => set({ mesFiltro: m }),
         setAnoFiltro: (a) => set({ anoFiltro: a }),
+        setEmissaoMesFiltro: (m) => set({ emissaoMesFiltro: m }),
+        setEmissaoAnoFiltro: (a) => set({ emissaoAnoFiltro: a }),
         setEmpresaFiltro: (e) => set({ empresaFiltro: e }),
         setStatusFiltro: (s) => set({ statusFiltro: s }),
         setOperacaoFiltro: (o) => set({ operacaoFiltro: o }),
@@ -105,6 +123,8 @@ export const useFiscalStore = create<FiscalState>()(
         setCodigoTributarioFiltro: (c) => set({ codigoTributarioFiltro: c }),
         setTipoServicoFiltro: (t) => set({ tipoServicoFiltro: t }),
         setRetencaoFiltro: (r) => set({ retencaoFiltro: r }),
+        setCategoriaFiltro: (c) => set({ categoriaFiltro: c }),
+        setGrupoFiltro: (g) => set({ grupoFiltro: g }),
         resetFilters: () => set(DEFAULT_FILTERS),
 
         /* ── Saved Filters ── */
@@ -154,10 +174,11 @@ export const useFiscalStore = create<FiscalState>()(
       }),
       {
         name: "fiscal-cockpit-filters",
-        // Only persist filter state + saved filters (not UI state)
         partialize: (state) => ({
           mesFiltro: state.mesFiltro,
           anoFiltro: state.anoFiltro,
+          emissaoMesFiltro: state.emissaoMesFiltro,
+          emissaoAnoFiltro: state.emissaoAnoFiltro,
           empresaFiltro: state.empresaFiltro,
           statusFiltro: state.statusFiltro,
           operacaoFiltro: state.operacaoFiltro,
@@ -166,6 +187,8 @@ export const useFiscalStore = create<FiscalState>()(
           codigoTributarioFiltro: state.codigoTributarioFiltro,
           tipoServicoFiltro: state.tipoServicoFiltro,
           retencaoFiltro: state.retencaoFiltro,
+          categoriaFiltro: state.categoriaFiltro,
+          grupoFiltro: state.grupoFiltro,
           savedFilters: state.savedFilters,
         }),
       }

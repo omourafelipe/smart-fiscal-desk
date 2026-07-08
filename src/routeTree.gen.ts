@@ -9,16 +9,31 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TributarioRouteImport } from './routes/tributario'
 import { Route as ServicosRouteImport } from './routes/servicos'
+import { Route as RelatorioClienteRouteImport } from './routes/relatorio-cliente'
 import { Route as NotasRouteImport } from './routes/notas'
+import { Route as FiscalRouteImport } from './routes/fiscal'
+import { Route as EmpresasRouteImport } from './routes/empresas'
 import { Route as ConfiguracoesRouteImport } from './routes/configuracoes'
+import { Route as ComercialRouteImport } from './routes/comercial'
 import { Route as ClientesRouteImport } from './routes/clientes'
 import { Route as ClassificacaoRouteImport } from './routes/classificacao'
 import { Route as IndexRouteImport } from './routes/index'
 
+const TributarioRoute = TributarioRouteImport.update({
+  id: '/tributario',
+  path: '/tributario',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ServicosRoute = ServicosRouteImport.update({
   id: '/servicos',
   path: '/servicos',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RelatorioClienteRoute = RelatorioClienteRouteImport.update({
+  id: '/relatorio-cliente',
+  path: '/relatorio-cliente',
   getParentRoute: () => rootRouteImport,
 } as any)
 const NotasRoute = NotasRouteImport.update({
@@ -26,9 +41,24 @@ const NotasRoute = NotasRouteImport.update({
   path: '/notas',
   getParentRoute: () => rootRouteImport,
 } as any)
+const FiscalRoute = FiscalRouteImport.update({
+  id: '/fiscal',
+  path: '/fiscal',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EmpresasRoute = EmpresasRouteImport.update({
+  id: '/empresas',
+  path: '/empresas',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ConfiguracoesRoute = ConfiguracoesRouteImport.update({
   id: '/configuracoes',
   path: '/configuracoes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ComercialRoute = ComercialRouteImport.update({
+  id: '/comercial',
+  path: '/comercial',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ClientesRoute = ClientesRouteImport.update({
@@ -51,26 +81,41 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/classificacao': typeof ClassificacaoRoute
   '/clientes': typeof ClientesRoute
+  '/comercial': typeof ComercialRoute
   '/configuracoes': typeof ConfiguracoesRoute
+  '/empresas': typeof EmpresasRoute
+  '/fiscal': typeof FiscalRoute
   '/notas': typeof NotasRoute
+  '/relatorio-cliente': typeof RelatorioClienteRoute
   '/servicos': typeof ServicosRoute
+  '/tributario': typeof TributarioRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/classificacao': typeof ClassificacaoRoute
   '/clientes': typeof ClientesRoute
+  '/comercial': typeof ComercialRoute
   '/configuracoes': typeof ConfiguracoesRoute
+  '/empresas': typeof EmpresasRoute
+  '/fiscal': typeof FiscalRoute
   '/notas': typeof NotasRoute
+  '/relatorio-cliente': typeof RelatorioClienteRoute
   '/servicos': typeof ServicosRoute
+  '/tributario': typeof TributarioRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/classificacao': typeof ClassificacaoRoute
   '/clientes': typeof ClientesRoute
+  '/comercial': typeof ComercialRoute
   '/configuracoes': typeof ConfiguracoesRoute
+  '/empresas': typeof EmpresasRoute
+  '/fiscal': typeof FiscalRoute
   '/notas': typeof NotasRoute
+  '/relatorio-cliente': typeof RelatorioClienteRoute
   '/servicos': typeof ServicosRoute
+  '/tributario': typeof TributarioRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -78,43 +123,77 @@ export interface FileRouteTypes {
     | '/'
     | '/classificacao'
     | '/clientes'
+    | '/comercial'
     | '/configuracoes'
+    | '/empresas'
+    | '/fiscal'
     | '/notas'
+    | '/relatorio-cliente'
     | '/servicos'
+    | '/tributario'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/classificacao'
     | '/clientes'
+    | '/comercial'
     | '/configuracoes'
+    | '/empresas'
+    | '/fiscal'
     | '/notas'
+    | '/relatorio-cliente'
     | '/servicos'
+    | '/tributario'
   id:
     | '__root__'
     | '/'
     | '/classificacao'
     | '/clientes'
+    | '/comercial'
     | '/configuracoes'
+    | '/empresas'
+    | '/fiscal'
     | '/notas'
+    | '/relatorio-cliente'
     | '/servicos'
+    | '/tributario'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ClassificacaoRoute: typeof ClassificacaoRoute
   ClientesRoute: typeof ClientesRoute
+  ComercialRoute: typeof ComercialRoute
   ConfiguracoesRoute: typeof ConfiguracoesRoute
+  EmpresasRoute: typeof EmpresasRoute
+  FiscalRoute: typeof FiscalRoute
   NotasRoute: typeof NotasRoute
+  RelatorioClienteRoute: typeof RelatorioClienteRoute
   ServicosRoute: typeof ServicosRoute
+  TributarioRoute: typeof TributarioRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/tributario': {
+      id: '/tributario'
+      path: '/tributario'
+      fullPath: '/tributario'
+      preLoaderRoute: typeof TributarioRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/servicos': {
       id: '/servicos'
       path: '/servicos'
       fullPath: '/servicos'
       preLoaderRoute: typeof ServicosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/relatorio-cliente': {
+      id: '/relatorio-cliente'
+      path: '/relatorio-cliente'
+      fullPath: '/relatorio-cliente'
+      preLoaderRoute: typeof RelatorioClienteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/notas': {
@@ -124,11 +203,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof NotasRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/fiscal': {
+      id: '/fiscal'
+      path: '/fiscal'
+      fullPath: '/fiscal'
+      preLoaderRoute: typeof FiscalRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/empresas': {
+      id: '/empresas'
+      path: '/empresas'
+      fullPath: '/empresas'
+      preLoaderRoute: typeof EmpresasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/configuracoes': {
       id: '/configuracoes'
       path: '/configuracoes'
       fullPath: '/configuracoes'
       preLoaderRoute: typeof ConfiguracoesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/comercial': {
+      id: '/comercial'
+      path: '/comercial'
+      fullPath: '/comercial'
+      preLoaderRoute: typeof ComercialRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/clientes': {
@@ -159,9 +259,14 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ClassificacaoRoute: ClassificacaoRoute,
   ClientesRoute: ClientesRoute,
+  ComercialRoute: ComercialRoute,
   ConfiguracoesRoute: ConfiguracoesRoute,
+  EmpresasRoute: EmpresasRoute,
+  FiscalRoute: FiscalRoute,
   NotasRoute: NotasRoute,
+  RelatorioClienteRoute: RelatorioClienteRoute,
   ServicosRoute: ServicosRoute,
+  TributarioRoute: TributarioRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

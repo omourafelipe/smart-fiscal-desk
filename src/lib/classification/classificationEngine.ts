@@ -1,104 +1,127 @@
 import {
   ServiceDataInput,
   ClassificationResult,
-  MappingEntry,
-  ClassificationSource,
-  ConfidenceLevel,
+  CategoriaOrigem,
 } from './types';
-import { serviceTypeMapping } from './serviceTypeMapping';
-import { municipalServiceMapping } from './municipalServiceMapping';
-import { lc116Mapping } from './lc116Mapping';
-import { nbsMapping } from './nbsMapping';
-import { keywordMapping } from './keywordMapping';
+import { ClassificationRule } from '../db';
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function normalizeCode(code: string): string {
+  return code.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+}
+
+function normalizeText(text: string): string {
+  return text
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+// ─── Motor Principal Dinâmico ──────────────────────────────────────────────────
 
 export class ClassificationEngine {
   /**
-   * Classifica um serviço baseado nos dados recebidos do XML da NFS-e.
-   * Aplica a ordem de prioridade definida:
-   * 1. Tipo de Serviço
-   * 2. Código Municipal
-   * 3. LC 116/2003
-   * 4. NBS
-   * 5. Palavras-chave na descrição
-   * 6. Fallback Manual
+   * Classifica um serviço NFS-e usando as regras cadastradas no banco de dados.
+   *
+   * As regras são ordenadas por prioridade (1 a 5) e ID decrescente.
    */
-  public static classify(data: ServiceDataInput): ClassificationResult {
-    // 1. Tipo de Serviço (Prioridade 1, Confiança: Muito Alta)
-    if (data.serviceType) {
-      const normalizedServiceType = data.serviceType.trim().toLowerCase();
-      const match = serviceTypeMapping[normalizedServiceType];
-      if (match) {
-        return this.buildResult(data, match, 'Tipo de Serviço', 'Muito Alta');
-      }
-    }
+  public static classify(data: ServiceDataInput, rules: ClassificationRule[]): ClassificationResult {
+    const sortedRules = [...rules].sort((a, b) => {
+      if (a.prioridade !== b.prioridade) return a.prioridade - b.prioridade;
+      return (b.id || 0) - (a.id || 0);
+    });
 
-    // 2. Código Municipal (Prioridade 2, Confiança: Alta)
-    if (data.municipalCode) {
-      const normalizedMunicipalCode = data.municipalCode.trim();
-      const match = municipalServiceMapping[normalizedMunicipalCode];
-      if (match) {
-        return this.buildResult(data, match, 'Código Municipal', 'Alta');
-      }
-    }
+    const codigoTributario = normalizeCode(data.codigoTributario || data.municipalCode || '');
+    const lc116 = normalizeCode(data.lc116Code || '');
+    
+    // Campos detalhados passados a partir do parser atualizado
+    const xmlDescCodigo = normalizeText((data as any).descricao_codigo_tributario || '');
+    const xmlDescNbs = normalizeText((data as any).descricao_nbs || '');
+    const description = normalizeText(data.description || '');
 
-    // 3. LC 116/2003 (Prioridade 3, Confiança: Alta)
-    if (data.lc116Code) {
-      const normalizedLc116Code = data.lc116Code.trim();
-      const match = lc116Mapping[normalizedLc116Code];
-      if (match) {
-        return this.buildResult(data, match, 'LC 116', 'Alta');
-      }
-    }
+    for (const rule of sortedRules) {
+      const patternNorm = normalizeText(rule.padrao_busca);
 
-    // 4. Código NBS (Prioridade 4, Confiança: Alta)
-    if (data.nbsCode) {
-      const normalizedNbsCode = data.nbsCode.trim();
-      const match = nbsMapping[normalizedNbsCode];
-      if (match) {
-        return this.buildResult(data, match, 'NBS', 'Alta');
-      }
-    }
-
-    // 5. Descrição Similar / Palavras-chave (Prioridade 5, Confiança: Média)
-    if (data.description) {
-      const descriptionLowerCase = data.description.toLowerCase();
-      // Procura a primeira palavra-chave que dê match na descrição
-      for (const [keyword, mapping] of Object.entries(keywordMapping)) {
-        if (descriptionLowerCase.includes(keyword)) {
-          return this.buildResult(data, mapping, 'Descrição Similar', 'Média');
+      if (rule.tipo_regra === 'codigo_tributario') {
+        const cleanPattern = normalizeCode(rule.padrao_busca);
+        if (cleanPattern && (codigoTributario === cleanPattern || lc116 === cleanPattern)) {
+          return this.buildResult(data, rule, 'CODIGO_TRIBUTARIO', 100);
         }
       }
+
+      if (rule.tipo_regra === 'descricao_codigo') {
+        if (patternNorm && (xmlDescCodigo.includes(patternNorm) || description.includes(patternNorm))) {
+          return this.buildResult(data, rule, 'CODIGO_TRIBUTARIO', 95);
+        }
+      }
+
+      if (rule.tipo_regra === 'descricao_nbs') {
+        if (patternNorm && (xmlDescNbs.includes(patternNorm) || description.includes(patternNorm))) {
+          return this.buildResult(data, rule, 'NBS', 90);
+        }
+      }
+
+      if (rule.tipo_regra === 'palavra_chave') {
+        if (patternNorm && description.includes(patternNorm)) {
+          return this.buildResult(data, rule, 'HEURISTICA', 70);
+        }
+      }
+
+      if (rule.tipo_regra === 'fallback') {
+        return this.buildResult(data, rule, 'NAO_CLASSIFICADO', 0);
+      }
     }
 
-    // 6. Nenhuma regra atendeu (Fallback Manual, Confiança: Baixa)
-    const fallbackMapping: MappingEntry = {
-      categoria: 'Não Classificado',
-      grupo: 'Pendente',
-      subgrupo: 'Pendente',
-    };
-    return this.buildResult(data, fallbackMapping, 'Manual', 'Baixa');
+    // Fallback de segurança se nenhuma regra cadastrada coincidir
+    return this.buildResult(
+      data,
+      {
+        prioridade: 5,
+        tipo_regra: 'fallback',
+        padrao_busca: '*',
+        tipo_servico: 'Outros Serviços',
+        categoria_sintetica: 'Outros Serviços'
+      },
+      'NAO_CLASSIFICADO',
+      0
+    );
   }
 
-  /**
-   * Constrói o objeto de resultado de classificação.
-   */
+  // ─── Builder ────────────────────────────────────────────────────────────────
+
   private static buildResult(
     input: ServiceDataInput,
-    mapping: MappingEntry,
-    source: ClassificationSource,
-    confidence: ConfidenceLevel
+    rule: ClassificationRule,
+    origem: CategoriaOrigem,
+    confianca: number
   ): ClassificationResult {
+    const nivelConfianca =
+      confianca >= 95 ? 'Muito Alta' :
+      confianca >= 90 ? 'Alta'       :
+      confianca >= 70 ? 'Média'      :
+                        'Baixa';
+
+    const fonteClassificacao =
+      rule.tipo_regra === 'codigo_tributario' ? 'Código Municipal' :
+      rule.tipo_regra === 'descricao_codigo' ? 'LC 116'           :
+      rule.tipo_regra === 'descricao_nbs'     ? 'NBS'              :
+      rule.tipo_regra === 'palavra_chave'     ? 'Descrição Similar':
+                                                'Manual';
+
     return {
-      categoria: mapping.categoria,
-      grupo: mapping.grupo,
-      subgrupo: mapping.subgrupo,
-      tipoOriginal: input.serviceType || null,
-      codigoMunicipal: input.municipalCode || null,
-      codigoLc116: input.lc116Code || null,
-      codigoNbs: input.nbsCode || null,
-      descricaoOriginal: input.description || null,
-      fonteClassificacao: source,
-      nivelConfianca: confidence,
+      categoria:               rule.categoria_sintetica, // Categoria Sintética
+      grupo:                   rule.tipo_servico,        // Tipo de Serviço
+      subgrupo:                rule.tipo_servico,
+      tipoOriginal:            input.serviceType || null,
+      codigoMunicipal:         input.municipalCode || input.codigoTributario || null,
+      codigoLc116:             input.lc116Code || null,
+      codigoNbs:               (input as any).nbsCode || null,
+      descricaoOriginal:       input.description || null,
+      fonteClassificacao,
+      nivelConfianca,
+      categoriaOrigem:         origem,
+      confiancaClassificacao:  confianca,
     };
   }
 }

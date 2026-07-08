@@ -3,28 +3,24 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
-  PieChart, Pie, Cell, Area, AreaChart, LineChart, Line,
+  PieChart, Pie, Cell, LineChart, Line, AreaChart, Area, ComposedChart, Brush,
 } from "recharts";
 import {
-  Upload, Loader2, FileText, Building2,
-  BarChart3, AlertCircle, CloudUpload, Filter, MonitorPlay,
+  Upload, Loader2, FileText, Building2, AlertCircle, CloudUpload,
+  TrendingUp, DollarSign, Percent, ShieldCheck, Users,
+  Calculator, Sparkles, Download, X, Eye, FileSpreadsheet, RefreshCw
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { db } from "@/lib/db";
-import { importFiles, type ImportSummary } from "@/lib/fiscal/pipeline";
-import { useFiscalStore, type DrillDownFilter } from "@/store/useFiscalStore";
+import { importFiles, type ImportProgress } from "@/lib/fiscal/pipeline";
+import { useFiscalStore } from "@/store/useFiscalStore";
 import { Button } from "@/components/ui/button";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DrillDownModal } from "@/components/DrillDownModal";
-import { ExecutiveKpis } from "@/components/ExecutiveKpis";
-import { ServiceAnalysis } from "@/components/ServiceAnalysis";
-import { AutoInsights } from "@/components/AutoInsights";
 import { ExportMenu } from "@/components/ExportMenu";
-import { FavoriteFiltersPanel } from "@/components/FavoriteFiltersPanel";
-import { PresentationMode, FullscreenButton } from "@/components/PresentationMode";
+import { PresentationMode } from "@/components/PresentationMode";
 
 export const Route = createFileRoute("/")({
   component: Dashboard,
@@ -48,7 +44,11 @@ const fmtCnpj = (v: string) => {
   return v || "—";
 };
 
-const fmtPct = (n: number) => `${n.toFixed(1)}%`;
+const NOME_MES: Record<string, string> = {
+  "01": "Jan", "02": "Fev", "03": "Mar", "04": "Abr",
+  "05": "Mai", "06": "Jun", "07": "Jul", "08": "Ago",
+  "09": "Set", "10": "Out", "11": "Nov", "12": "Dez",
+};
 
 const MESES = [
   { v: "01", l: "Janeiro" }, { v: "02", l: "Fevereiro" }, { v: "03", l: "Março" },
@@ -57,83 +57,35 @@ const MESES = [
   { v: "10", l: "Outubro" }, { v: "11", l: "Novembro" }, { v: "12", l: "Dezembro" },
 ];
 
-const NOME_MES: Record<string, string> = {
-  "01": "Jan", "02": "Fev", "03": "Mar", "04": "Abr",
-  "05": "Mai", "06": "Jun", "07": "Jul", "08": "Ago",
-  "09": "Set", "10": "Out", "11": "Nov", "12": "Dez",
-};
-
-/* ─── Chart palette ──────────────────────────────────────────── */
+/* ─── Color Palette ──────────────────────────────────────────── */
 const C = {
-  blue:    "#2563EB",
-  teal:    "#14B8A6",
-  amber:   "#F59E0B",
-  red:     "#EF4444",
-  purple:  "#7C3AED",
-  green:   "#10B981",
-  orange:  "#F97316",
-  pink:    "#EC4899",
+  blue:    "#2563EB", // Faturamento Bruto
+  green:   "#10B981", // Valor Líquido
+  orange:  "#F97316", // Tributos Retidos
+  purple:  "#7C3AED", // Categorias
+  secondary:"#64748B", // Secundárias
   muted:   "#94A3B8",
 };
 
-const COMPANY_PALETTE = [C.blue, C.teal, C.amber, C.purple, C.green, C.orange, C.pink];
-
-/* ─── Helpers ────────────────────────────────────────────────── */
-
-/** Builds last 12 calendar months (MM/YYYY display labels) anchored to the latest doc */
-function buildLast12MonthLabels(latestYm: string): Array<{ ym: string; label: string }> {
-  const anchor = latestYm || new Date().toISOString().slice(0, 7);
-  const [yStr, mStr] = anchor.split("-");
-  let y = parseInt(yStr, 10);
-  let m = parseInt(mStr, 10);
-  const result: Array<{ ym: string; label: string }> = [];
-  for (let i = 11; i >= 0; i--) {
-    let mm = m - i;
-    let yy = y;
-    while (mm <= 0) { mm += 12; yy--; }
-    const ymKey = `${yy}-${String(mm).padStart(2, "0")}`;
-    const mmStr = String(mm).padStart(2, "0");
-    result.push({ ym: ymKey, label: `${NOME_MES[mmStr]}/${String(yy).slice(2)}` });
-  }
-  return result;
-}
-
-/* ─── Skeleton loader ────────────────────────────────────────── */
-function SkeletonChart({ height = 240 }: { height?: number }) {
-  return (
-    <div className="chart-card" aria-hidden="true">
-      <div className="skeleton h-4 w-48 rounded mb-4" />
-      <div className="skeleton rounded-lg" style={{ height }} />
-    </div>
-  );
-}
+const PALETA = [C.blue, C.green, C.orange, C.purple, "#06B6D4", "#EC4899", "#8B5CF6"];
 
 /* ─── Empty State ────────────────────────────────────────────── */
 function EmptyState({ onUpload }: { onUpload: () => void }) {
   return (
-    <div className="flex flex-col items-center justify-center py-20 gap-5 text-center">
-      <div className="empty-state-icon">
-        <div
-          className="h-20 w-20 rounded-2xl flex items-center justify-center"
-          style={{
-            background: "linear-gradient(135deg, oklch(0.546 0.225 264 / 12%), oklch(0.7 0.14 192 / 12%))",
-            border: "1px solid oklch(0.546 0.225 264 / 20%)",
-          }}
-        >
-          <BarChart3 className="h-9 w-9" style={{ color: C.blue }} />
-        </div>
+    <div className="flex flex-col items-center justify-center py-20 gap-5 text-center bg-card border border-border rounded-2xl shadow-sm">
+      <div className="h-16 w-16 rounded-2xl flex items-center justify-center bg-primary/10 border border-primary/20">
+        <DollarSign className="h-7 w-7 text-primary" />
       </div>
       <div>
-        <h3 className="text-base font-semibold text-foreground">Nenhuma nota importada</h3>
-        <p className="text-sm text-muted-foreground mt-1 max-w-xs">
-          Importe arquivos XML ou ZIP de NFS-e para visualizar os indicadores executivos.
+        <h3 className="text-base font-semibold text-foreground">Nenhum documento fiscal importado</h3>
+        <p className="text-xs text-muted-foreground mt-1 max-w-xs mx-auto">
+          Faça a importação dos arquivos XML das NFS-e para alimentar os relatórios de faturamento e impostos retidos.
         </p>
       </div>
       <Button
         id="empty-state-upload-btn"
         onClick={onUpload}
-        className="gap-2 h-9"
-        style={{ background: C.blue }}
+        className="gap-2 h-9 bg-primary text-primary-foreground font-semibold text-xs rounded-xl"
       >
         <CloudUpload className="h-4 w-4" />
         Importar NFS-e
@@ -142,52 +94,19 @@ function EmptyState({ onUpload }: { onUpload: () => void }) {
   );
 }
 
-/* ─── Section Header ─────────────────────────────────────────── */
-function SectionHeader({
-  title,
-  subtitle,
-  accentColor,
-  hint,
-}: {
-  title: string;
-  subtitle?: string;
-  accentColor?: string;
-  hint?: string;
-}) {
-  return (
-    <div className="chart-section-header">
-      {accentColor && (
-        <div className="chart-accent-bar" style={{ background: accentColor }} />
-      )}
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <h2 className="text-[14px] font-semibold text-foreground">{title}</h2>
-          {subtitle && <p className="text-[11px] text-muted-foreground mt-0.5">{subtitle}</p>}
-        </div>
-        {hint && (
-          <span className="chart-filter-hint">
-            <Filter className="h-2.5 w-2.5" />
-            {hint}
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* ─── Custom Tooltip ─────────────────────────────────────────── */
+/* ─── Custom Tooltips ─────────────────────────────────────────── */
 function ChartTooltip({ active, payload, label, formatter }: any) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="chart-tooltip">
-      {label && <div className="chart-tooltip-label">{label}</div>}
+    <div className="bg-card border border-border rounded-xl p-3 shadow-md text-xs font-sans border-slate-200">
+      {label && <div className="font-semibold text-foreground mb-1">{label}</div>}
       {payload.map((p: any, i: number) => (
-        <div key={i} className="chart-tooltip-row">
-          <span className="chart-tooltip-name">
-            <span className="chart-tooltip-dot" style={{ background: p.color }} />
+        <div key={i} className="flex items-center justify-between gap-6 py-0.5">
+          <span className="flex items-center gap-1.5 text-muted-foreground">
+            <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: p.color || p.fill }} />
             {p.name}
           </span>
-          <span className="chart-tooltip-value">
+          <span className="font-semibold text-foreground">
             {formatter ? formatter(p.value, p.name) : fmtBRL(Number(p.value))}
           </span>
         </div>
@@ -196,311 +115,608 @@ function ChartTooltip({ active, payload, label, formatter }: any) {
   );
 }
 
-function PieTooltip({ active, payload }: any) {
-  if (!active || !payload?.length) return null;
-  const p = payload[0];
+/* ─── Reusable Redesigned Chart Card Wrapper ──────────────────── */
+function DashboardChartCard({
+  title,
+  subtitle,
+  onExportPng,
+  onExportCsv,
+  onToggleFullScreen,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  onExportPng?: () => void;
+  onExportCsv?: () => void;
+  onToggleFullScreen?: () => void;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="chart-tooltip">
-      <div className="chart-tooltip-label">{p.name}</div>
-      <div className="chart-tooltip-row">
-        <span className="chart-tooltip-name">
-          <span className="chart-tooltip-dot" style={{ background: p.payload.fill || p.payload.color }} />
-          Faturamento
-        </span>
-        <span className="chart-tooltip-value">{fmtBRL(Number(p.value))}</span>
-      </div>
-      {p.payload.pct !== undefined && (
-        <div className="chart-tooltip-row">
-          <span className="chart-tooltip-name" style={{ color: "var(--color-muted-foreground)" }}>Participação</span>
-          <span className="chart-tooltip-value" style={{ color: "var(--color-muted-foreground)" }}>
-            {fmtPct(p.payload.pct)}
-          </span>
+    <div className="exec-card group bg-card border border-border/80 rounded-2xl p-6 shadow-sm flex flex-col justify-between transition-transform duration-200 hover:scale-[1.01]">
+      <div className="flex items-center justify-between border-b border-border/40 pb-3 mb-4">
+        <div>
+          <h3 className="text-[15px] font-bold text-slate-800 tracking-tight">{title}</h3>
+          {subtitle && <p className="text-xs text-slate-400 mt-0.5">{subtitle}</p>}
         </div>
-      )}
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          {onExportCsv && (
+            <button
+              onClick={onExportCsv}
+              className="p-1 rounded hover:bg-muted text-slate-400 hover:text-slate-600 transition-colors"
+              title="Exportar CSV"
+            >
+              <FileSpreadsheet className="h-3.5 w-3.5" />
+            </button>
+          )}
+          {onExportPng && (
+            <button
+              onClick={onExportPng}
+              className="p-1 rounded hover:bg-muted text-slate-400 hover:text-slate-600 transition-colors"
+              title="Exportar PNG"
+            >
+              <Download className="h-3.5 w-3.5" />
+            </button>
+          )}
+          {onToggleFullScreen && (
+            <button
+              onClick={onToggleFullScreen}
+              className="p-1 rounded hover:bg-muted text-slate-400 hover:text-slate-600 transition-colors"
+              title="Tela Cheia"
+            >
+              <Eye className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
+      <div className="flex-1 w-full flex items-center justify-center">
+        {children}
+      </div>
     </div>
-  );
-}
-
-/* ─── Donut Center SVG Label (rendered as Recharts customized label) ── */
-function DonutLabel({ viewBox, total, label }: { viewBox?: { cx: number; cy: number }; total: string; label: string }) {
-  const cx = viewBox?.cx ?? 0;
-  const cy = viewBox?.cy ?? 0;
-  return (
-    <>
-      <text x={cx} y={cy - 6} textAnchor="middle" fill="var(--color-foreground)" fontSize={14} fontWeight={700}>
-        {total}
-      </text>
-      <text x={cx} y={cy + 10} textAnchor="middle" fill="var(--color-muted-foreground)" fontSize={9}>
-        {label}
-      </text>
-    </>
   );
 }
 
 /* ─── Dashboard ──────────────────────────────────────────────── */
 function Dashboard() {
   const {
-    mesFiltro, anoFiltro, setMesFiltro, setAnoFiltro,
-    empresaFiltro, statusFiltro, operacaoFiltro,
-    setEmpresaFiltro, setStatusFiltro, setOperacaoFiltro,
+    mesFiltro, setMesFiltro,
+    anoFiltro, setAnoFiltro,
+    emissaoMesFiltro,
+    emissaoAnoFiltro,
+    empresaFiltro, setEmpresaFiltro,
+    statusFiltro, setStatusFiltro,
+    operacaoFiltro,
+    clienteFiltro, setClienteFiltro,
+    municipioFiltro, setMunicipioFiltro,
+    codigoTributarioFiltro,
+    tipoServicoFiltro, setTipoServicoFiltro,
+    categoriaFiltro, setCategoriaFiltro,
     resetFilters,
-    drillDown, openDrillDown, closeDrillDown,
+    drillDown,
+    openDrillDown,
+    closeDrillDown,
     presentationMode, setPresentationMode,
   } = useFiscalStore();
+
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
-  const [lastSummary, setLastSummary] = useState<ImportSummary | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
   const [mounted, setMounted] = useState(false);
+
+  // Full Screen Chart state
+  const [expandedChart, setExpandedChart] = useState<string | null>(null);
+
   useEffect(() => setMounted(true), []);
 
-  /* ── Keyboard: F = fullscreen ── */
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "f" && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        const target = e.target as HTMLElement;
-        if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") return;
-        if (!document.fullscreenElement) {
-          document.documentElement.requestFullscreen().catch(() => {});
-        } else {
-          document.exitFullscreen().catch(() => {});
-        }
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
-
   const docs = useLiveQuery(() => db.documents.toArray(), []);
-  const grupoCnpjs = useLiveQuery(() => db.groupCnpjs.toArray(), []);
+  const empresas = useLiveQuery(() => db.empresas.toArray(), []);
 
   const semClassificacaoCount = useMemo(() => {
-    return (docs ?? []).filter((d) => d.status_manual === "Ativo" && !d.categoria).length;
+    return (docs ?? []).filter((d) => d.status_manual === "Ativo" && (!d.tipo_servico || d.tipo_servico === "Outros Serviços")).length;
   }, [docs]);
 
   const cnpjGrupoSet = useMemo(
-    () => new Set((grupoCnpjs ?? []).map((g) => g.cnpj)),
-    [grupoCnpjs]
+    () => new Set((empresas ?? []).map((e) => e.cnpj)),
+    [empresas]
   );
 
-  /** Map cnpj → name from groupCnpjs registry */
   const cnpjNameMap = useMemo(() => {
     const m: Record<string, string> = {};
-    (grupoCnpjs ?? []).forEach((g) => {
-      if (g.cnpj && g.nome) m[g.cnpj] = g.nome;
+    (empresas ?? []).forEach((e) => {
+      if (e.cnpj && e.razao_social) m[e.cnpj] = e.razao_social;
     });
     return m;
-  }, [grupoCnpjs]);
+  }, [empresas]);
 
-  const anos = useMemo(() => {
-    const set = new Set<string>();
-    (docs ?? []).forEach((d) => {
-      if (d.data_competencia) set.add(d.data_competencia.slice(0, 4));
+  /* ─── Extract Unique Options for Filter Bar ─────────────────────── */
+  const filterOptions = useMemo(() => {
+    const list = docs ?? [];
+    const anos = new Set<string>();
+    const clientes = new Set<string>();
+    const categorias = new Set<string>();
+    const tipos = new Set<string>();
+    const municipios = new Set<string>();
+
+    list.forEach((d) => {
+      if (d.data_competencia) anos.add(d.data_competencia.slice(0, 4));
+      const cName = d.nome_tomador || d.cnpj_tomador;
+      if (cName) clientes.add(cName);
+      const cat = d.categoria_sintetica || d.categoria;
+      if (cat) categorias.add(cat);
+      const t = d.tipo_servico || d.grupo;
+      if (t) tipos.add(t);
+      if (d.municipio) municipios.add(d.municipio);
     });
-    return Array.from(set).sort().reverse();
+
+    return {
+      anos: Array.from(anos).sort().reverse(),
+      clientes: Array.from(clientes).sort(),
+      categorias: Array.from(categorias).sort(),
+      tipos: Array.from(tipos).sort(),
+      municipios: Array.from(municipios).sort(),
+    };
   }, [docs]);
 
+  // Reactive filters application
   const filtrados = useMemo(() => {
     return (docs ?? []).filter((d) => {
-      if (d.data_competencia) {
-        const [a, m] = d.data_competencia.split("-");
-        if (anoFiltro && a !== anoFiltro) return false;
-        if (mesFiltro && m !== mesFiltro) return false;
-      } else if (mesFiltro || anoFiltro) {
-        return false;
-      }
+      if (anoFiltro && d.data_competencia?.slice(0, 4) !== anoFiltro) return false;
+      if (mesFiltro && d.data_competencia?.split("-")[1] !== mesFiltro) return false;
+      if (emissaoAnoFiltro && d.data_emissao?.slice(0, 4) !== emissaoAnoFiltro) return false;
+      if (emissaoMesFiltro && d.data_emissao?.split("-")[1] !== emissaoMesFiltro) return false;
       if (empresaFiltro && d.cnpj_prestador !== empresaFiltro) return false;
       if (statusFiltro !== "todos" && d.status_manual !== statusFiltro) return false;
-      const isIntercompany = cnpjGrupoSet.has(d.cnpj_prestador) && cnpjGrupoSet.has(d.cnpj_tomador);
-      if (operacaoFiltro === "Intercompany" && !isIntercompany) return false;
-      if (operacaoFiltro === "Externas" && isIntercompany) return false;
+      
+      const isIC = cnpjGrupoSet.has(d.cnpj_prestador) && cnpjGrupoSet.has(d.cnpj_tomador);
+      if (operacaoFiltro === "Intercompany" && !isIC) return false;
+      if (operacaoFiltro === "Externas" && isIC) return false;
+
+      if (clienteFiltro && (d.nome_tomador || d.cnpj_tomador) !== clienteFiltro) return false;
+      if (municipioFiltro && d.municipio !== municipioFiltro) return false;
+      
+      if (categoriaFiltro && (d.categoria_sintetica || d.categoria) !== categoriaFiltro) return false;
+      if (tipoServicoFiltro && (d.tipo_servico || d.grupo) !== tipoServicoFiltro) return false;
+      if (codigoTributarioFiltro && (d.item_lista_servico || d.codigo_servico) !== codigoTributarioFiltro) return false;
+
       return true;
     });
-  }, [docs, mesFiltro, anoFiltro, empresaFiltro, statusFiltro, operacaoFiltro, cnpjGrupoSet]);
+  }, [docs, anoFiltro, mesFiltro, emissaoAnoFiltro, emissaoMesFiltro, empresaFiltro, statusFiltro, operacaoFiltro, clienteFiltro, municipioFiltro, categoriaFiltro, tipoServicoFiltro, codigoTributarioFiltro, cnpjGrupoSet]);
 
-  const ativos = useMemo(
-    () => (statusFiltro === "todos" ? filtrados.filter((d) => d.status_manual === "Ativo") : filtrados),
-    [filtrados, statusFiltro]
-  );
+  const hasActiveFilters = useMemo(() => {
+    return !!(
+      anoFiltro || mesFiltro || empresaFiltro || clienteFiltro ||
+      categoriaFiltro || tipoServicoFiltro || municipioFiltro
+    );
+  }, [anoFiltro, mesFiltro, empresaFiltro, clienteFiltro, categoriaFiltro, tipoServicoFiltro, municipioFiltro]);
 
-  const intercompanyDocs = useMemo(
-    () =>
-      ativos.filter(
-        (d) =>
-          d.cnpj_prestador &&
-          d.cnpj_tomador &&
-          cnpjGrupoSet.has(d.cnpj_prestador) &&
-          cnpjGrupoSet.has(d.cnpj_tomador)
-      ),
-    [ativos, cnpjGrupoSet]
-  );
+  // Overall totals for dashboard display
+  const totals = useMemo(() => {
+    const bruto = filtrados.reduce((s, d) => s + d.valor_bruto, 0);
+    const totalRetidos = filtrados.reduce((s, d) => s + (d.valor_retido || 0), 0);
+    const liquido = bruto - totalRetidos;
+    const qtd = filtrados.length;
+    const ticket = qtd > 0 ? bruto / qtd : 0;
 
-  const totalBruto = useMemo(() => ativos.reduce((s, d) => s + d.valor_bruto, 0), [ativos]);
-  const totalRetido = useMemo(() => ativos.reduce((s, d) => s + d.valor_retido, 0), [ativos]);
-  const totalLiquido = useMemo(() => ativos.reduce((s, d) => s + d.valor_liquido, 0), [ativos]);
-  const intercompanyBruto = useMemo(() => intercompanyDocs.reduce((s, d) => s + d.valor_bruto, 0), [intercompanyDocs]);
-  const externoBruto = useMemo(() => totalBruto - intercompanyBruto, [totalBruto, intercompanyBruto]);
-
-  /* ── Export KPIs ── */
-  const exportKpis = useMemo(() => ({
-    bruto: totalBruto,
-    liquido: totalLiquido,
-    retido: totalRetido,
-    intercompany: intercompanyBruto,
-    qtd: ativos.length,
-    ticketMedio: ativos.length > 0 ? totalBruto / ativos.length : 0,
-  }), [totalBruto, totalLiquido, totalRetido, intercompanyBruto, ativos.length]);
-
-  /* ── Last 12 months anchor ── */
-  const latestYm = useMemo(() => {
-    return (docs ?? [])
-      .map((d) => d.data_competencia?.slice(0, 7) ?? "")
-      .filter(Boolean)
-      .reduce((a, b) => (a > b ? a : b), "");
-  }, [docs]);
-
-  const last12Entries = useMemo(() => buildLast12MonthLabels(latestYm), [latestYm]);
-
-  /* ── Chart 1 & 2: Revenue + Retention evolution (12 months fixed) ── */
-  const evolutionData = useMemo(() => {
-    const map: Record<string, { bruto: number; liquido: number; retido: number }> = {};
-    last12Entries.forEach(({ ym }) => {
-      map[ym] = { bruto: 0, liquido: 0, retido: 0 };
-    });
+    const uniqueServices = new Set<string>();
     filtrados.forEach((d) => {
-      const ym = d.data_competencia?.slice(0, 7) ?? "";
-      if (!map[ym]) return;
-      map[ym].bruto += d.valor_bruto;
-      map[ym].liquido += d.valor_liquido;
-      map[ym].retido += d.valor_retido;
+      if (d.tipo_servico) uniqueServices.add(d.tipo_servico);
     });
-    return last12Entries.map(({ ym, label }) => ({
-      ym,
-      name: label,
-      bruto: map[ym].bruto,
-      liquido: map[ym].liquido,
-      retido: map[ym].retido,
-    }));
-  }, [filtrados, last12Entries]);
+    const avgPerService = uniqueServices.size > 0 ? bruto / uniqueServices.size : 0;
 
-  /* ── Chart 3: Company ranking (name-aware, top 10) ── */
-  const rankingData = useMemo(() => {
-    const map: Record<string, { nome: string; cnpj: string; bruto: number }> = {};
-    filtrados.forEach((d) => {
-      const key = d.cnpj_prestador || "";
-      if (!key) return;
-      if (!map[key]) {
-        map[key] = {
-          cnpj: key,
-          nome: d.nome_prestador || cnpjNameMap[key] || fmtCnpj(key),
-          bruto: 0,
-        };
-      }
-      map[key].bruto += d.valor_bruto;
-    });
-    return Object.values(map)
-      .sort((a, b) => b.bruto - a.bruto)
-      .slice(0, 10);
-  }, [filtrados, cnpjNameMap]);
+    // Retenções individuais
+    const issRetido = filtrados.reduce((s, d) => s + (d.vlr_iss_ret || 0), 0);
+    const irrf = filtrados.reduce((s, d) => s + (d.vlr_irrf || 0), 0);
+    const csll = filtrados.reduce((s, d) => s + (d.vlr_csll || 0), 0);
+    const pis = filtrados.reduce((s, d) => s + (d.vlr_pis || 0), 0);
+    const cofinanciar = filtrados.reduce((s, d) => s + (d.vlr_cofins || 0), 0);
+    const percentRetido = bruto > 0 ? (totalRetidos / bruto) * 100 : 0;
 
-  /* ── Chart 4: Consolidated participation by company (top 6 + Outros) ── */
-  const consolidadoData = useMemo(() => {
-    const map: Record<string, { nome: string; cnpj: string; bruto: number }> = {};
-    ativos.forEach((d) => {
-      const key = d.cnpj_prestador || "";
-      if (!key) return;
-      if (!map[key]) {
-        map[key] = {
-          cnpj: key,
-          nome: d.nome_prestador || cnpjNameMap[key] || fmtCnpj(key),
-          bruto: 0,
-        };
-      }
-      map[key].bruto += d.valor_bruto;
-    });
-    const sorted = Object.values(map).sort((a, b) => b.bruto - a.bruto);
-    const TOP = 6;
-    const top = sorted.slice(0, TOP);
-    const rest = sorted.slice(TOP);
-    const outrosBruto = rest.reduce((s, r) => s + r.bruto, 0);
-    const result = top.map((e, i) => ({
-      ...e,
-      color: COMPANY_PALETTE[i],
-      pct: totalBruto > 0 ? (e.bruto / totalBruto) * 100 : 0,
-    }));
-    if (outrosBruto > 0) {
-      result.push({
-        cnpj: "__outros__",
-        nome: "Outros",
-        bruto: outrosBruto,
-        color: C.muted,
-        pct: totalBruto > 0 ? (outrosBruto / totalBruto) * 100 : 0,
+    return {
+      bruto,
+      liquido,
+      qtd,
+      ticket,
+      avgPerService,
+      uniqueServicesCount: uniqueServices.size,
+      issRetido,
+      irrf,
+      csll,
+      pis,
+      cofins: cofinanciar,
+      totalRetidos,
+      percentRetido,
+    };
+  }, [filtrados]);
+
+  // Period comparison calculations (PoP Comparison)
+  const periodComparison = useMemo(() => {
+    if (!mounted || !docs || docs.length === 0) return null;
+
+    let curYear = anoFiltro || emissaoAnoFiltro;
+    let curMonth = mesFiltro || emissaoMesFiltro;
+
+    if (!curYear) {
+      let latest = "";
+      docs.forEach(d => {
+        if (d.data_competencia && d.data_competencia > latest) {
+          latest = d.data_competencia;
+        }
       });
-    }
-    return result;
-  }, [ativos, totalBruto, cnpjNameMap]);
-
-  /* ── Chart 5: Intercompany × Externo evolution (12 months grouped) ── */
-  const icEvolucaoData = useMemo(() => {
-    const map: Record<string, { intercompany: number; externo: number }> = {};
-    last12Entries.forEach(({ ym }) => {
-      map[ym] = { intercompany: 0, externo: 0 };
-    });
-    filtrados.forEach((d) => {
-      const ym = d.data_competencia?.slice(0, 7) ?? "";
-      if (!map[ym]) return;
-      const isIC = cnpjGrupoSet.has(d.cnpj_prestador) && cnpjGrupoSet.has(d.cnpj_tomador);
-      if (isIC) {
-        map[ym].intercompany += d.valor_bruto;
+      if (latest) {
+        curYear = latest.slice(0, 4);
+        curMonth = latest.split("-")[1];
       } else {
-        map[ym].externo += d.valor_bruto;
+        curYear = new Date().getFullYear().toString();
+        curMonth = String(new Date().getMonth() + 1).padStart(2, "0");
       }
-    });
-    return last12Entries.map(({ ym, label }) => ({
-      name: label,
-      Intercompany: map[ym].intercompany,
-      Externo: map[ym].externo,
-    }));
-  }, [filtrados, last12Entries, cnpjGrupoSet]);
+    }
 
-  /* ── Chart 6: Intercompany participation by company ── */
-  const icParticipacaoData = useMemo(() => {
-    const map: Record<string, { nome: string; cnpj: string; bruto: number }> = {};
-    intercompanyDocs.forEach((d) => {
-      const key = d.cnpj_prestador || "";
-      if (!key) return;
-      if (!map[key]) {
-        map[key] = {
-          cnpj: key,
-          nome: d.nome_prestador || cnpjNameMap[key] || fmtCnpj(key),
-          bruto: 0,
-        };
+    let prevYear = "";
+    let prevMonth = "";
+
+    if (curMonth) {
+      const m = parseInt(curMonth, 10);
+      const y = parseInt(curYear, 10);
+      if (m === 1) {
+        prevMonth = "12";
+        prevYear = String(y - 1);
+      } else {
+        prevMonth = String(m - 1).padStart(2, "0");
+        prevYear = String(y);
       }
-      map[key].bruto += d.valor_bruto;
+    } else {
+      prevYear = String(parseInt(curYear, 10) - 1);
+      prevMonth = "";
+    }
+
+    const filterPeriodDocs = (year: string, month: string) => {
+      return (docs ?? []).filter((d) => {
+        if (statusFiltro !== "todos" && d.status_manual !== statusFiltro) return false;
+        const dateStr = d.data_competencia;
+        if (!dateStr) return false;
+        const [y, m] = dateStr.split("-");
+        if (y !== year) return false;
+        if (month && m !== month) return false;
+        if (empresaFiltro && d.cnpj_prestador !== empresaFiltro) return false;
+        return true;
+      });
+    };
+
+    const curDocs = filterPeriodDocs(curYear, curMonth);
+    const prevDocs = filterPeriodDocs(prevYear, prevMonth);
+
+    const calcStats = (arr: typeof docs) => {
+      const bruto = arr.reduce((s, d) => s + d.valor_bruto, 0);
+      const retidos = arr.reduce((s, d) => s + (d.valor_retido || 0), 0);
+      const liquido = bruto - retidos;
+      const count = arr.length;
+      const ticket = count > 0 ? bruto / count : 0;
+      const pctRetencao = bruto > 0 ? (retidos / bruto) * 100 : 0;
+
+      const prestadores = new Set<string>();
+      const tomadores = new Set<string>();
+      arr.forEach(d => {
+        if (d.cnpj_prestador) prestadores.add(d.cnpj_prestador);
+        const c = d.nome_tomador || d.cnpj_tomador;
+        if (c) tomadores.add(c);
+      });
+
+      return { bruto, liquido, count, ticket, retidos, pctRetencao, empresas: prestadores.size, clientes: tomadores.size };
+    };
+
+    const curStats = calcStats(curDocs);
+    const prevStats = calcStats(prevDocs);
+
+    const calcPctDiff = (curr: number, prev: number) => {
+      if (prev === 0) return curr > 0 ? 100 : 0;
+      return ((curr - prev) / prev) * 100;
+    };
+
+    const comparisonLabel = curMonth
+      ? `${NOME_MES[curMonth]}/${curYear.slice(2)} vs ${NOME_MES[prevMonth]}/${prevYear.slice(2)}`
+      : `${curYear} vs ${prevYear}`;
+
+    return {
+      label: comparisonLabel,
+      cur: curStats,
+      prev: prevStats,
+      brutoPct: calcPctDiff(curStats.bruto, prevStats.bruto),
+      liquidoPct: calcPctDiff(curStats.liquido, prevStats.liquido),
+      countPct: calcPctDiff(curStats.count, prevStats.count),
+      ticketPct: calcPctDiff(curStats.ticket, prevStats.ticket),
+      retidosPct: calcPctDiff(curStats.retidos, prevStats.retidos),
+      pctRetencaoDiff: curStats.pctRetencao - prevStats.pctRetencao,
+      empresasPct: calcPctDiff(curStats.empresas, prevStats.empresas),
+      clientesPct: calcPctDiff(curStats.clientes, prevStats.clientes),
+    };
+  }, [mounted, docs, anoFiltro, mesFiltro, emissaoAnoFiltro, emissaoMesFiltro, statusFiltro, empresaFiltro]);
+
+  // 1. Evolução Mensal da Receita
+  const evolutionData = useMemo(() => {
+    let anchorYm = "";
+    (docs ?? []).forEach(d => {
+      if (d.data_competencia && d.data_competencia.slice(0, 7) > anchorYm) {
+        anchorYm = d.data_competencia.slice(0, 7);
+      }
     });
-    const sorted = Object.values(map).sort((a, b) => b.bruto - a.bruto);
-    const TOP = 5;
-    const top = sorted.slice(0, TOP);
-    const rest = sorted.slice(TOP);
-    const outrosBruto = rest.reduce((s, r) => s + r.bruto, 0);
-    const result = top.map((e, i) => ({
-      ...e,
-      color: COMPANY_PALETTE[i],
-      pct: intercompanyBruto > 0 ? (e.bruto / intercompanyBruto) * 100 : 0,
-    }));
-    if (outrosBruto > 0) {
-      result.push({
-        cnpj: "__outros__",
-        nome: "Outros",
-        bruto: outrosBruto,
-        color: C.muted,
-        pct: intercompanyBruto > 0 ? (outrosBruto / intercompanyBruto) * 100 : 0,
+    if (!anchorYm) anchorYm = new Date().toISOString().slice(0, 7);
+    const [anchorY, anchorM] = anchorYm.split("-").map(Number);
+
+    const labels: { ym: string; ymPrev: string; name: string }[] = [];
+    for (let i = 11; i >= 0; i--) {
+      let m = anchorM - i;
+      let y = anchorY;
+      while (m <= 0) {
+        m += 12;
+        y -= 1;
+      }
+      const ymKey = `${y}-${String(m).padStart(2, "0")}`;
+      const ymPrevKey = `${y - 1}-${String(m).padStart(2, "0")}`;
+      labels.push({
+        ym: ymKey,
+        ymPrev: ymPrevKey,
+        name: `${NOME_MES[String(m).padStart(2, "0")]}/${String(y).slice(2)}`
       });
     }
-    return result;
-  }, [intercompanyDocs, intercompanyBruto, cnpjNameMap]);
 
+    const mapCur: Record<string, { bruto: number; liquido: number; retido: number }> = {};
+    const mapPrev: Record<string, number> = {};
+    labels.forEach(l => {
+      mapCur[l.ym] = { bruto: 0, liquido: 0, retido: 0 };
+      mapPrev[l.ymPrev] = 0;
+    });
+
+    (docs ?? []).forEach(d => {
+      if (statusFiltro !== "todos" && d.status_manual !== statusFiltro) return;
+      if (empresaFiltro && d.cnpj_prestador !== empresaFiltro) return;
+      if (clienteFiltro && (d.nome_tomador || d.cnpj_tomador) !== clienteFiltro) return;
+      if (categoriaFiltro && (d.categoria_sintetica || d.categoria) !== categoriaFiltro) return;
+
+      const ym = d.data_competencia?.slice(0, 7);
+      if (ym) {
+        if (mapCur[ym]) {
+          mapCur[ym].bruto += d.valor_bruto;
+          mapCur[ym].liquido += d.valor_liquido;
+          mapCur[ym].retido += d.valor_retido;
+        }
+        if (mapPrev[ym] !== undefined) {
+          mapPrev[ym] += d.valor_bruto;
+        }
+      }
+    });
+
+    const baseList = labels.map(l => ({
+      name: l.name,
+      bruto: mapCur[l.ym].bruto,
+      liquido: mapCur[l.ym].liquido,
+      retido: mapCur[l.ym].retido,
+      brutoAnterior: mapPrev[l.ymPrev] || 0,
+      qtd: 0,
+    }));
+
+    (docs ?? []).forEach(d => {
+      if (statusFiltro !== "todos" && d.status_manual !== statusFiltro) return;
+      if (empresaFiltro && d.cnpj_prestador !== empresaFiltro) return;
+      if (clienteFiltro && (d.nome_tomador || d.cnpj_tomador) !== clienteFiltro) return;
+
+      const ym = d.data_competencia?.slice(0, 7);
+      if (ym) {
+        const labelIdx = labels.findIndex(lbl => lbl.ym === ym);
+        if (labelIdx !== -1) {
+          baseList[labelIdx].qtd += 1;
+        }
+      }
+    });
+
+    return baseList.map((d, i) => {
+      let mediaMovel = d.bruto;
+      if (i >= 2) {
+        mediaMovel = (baseList[i].bruto + baseList[i - 1].bruto + baseList[i - 2].bruto) / 3;
+      }
+      return {
+        ...d,
+        mediaMovel,
+      };
+    });
+  }, [docs, statusFiltro, empresaFiltro, clienteFiltro, categoriaFiltro]);
+
+  // 2. Faturamento por Categoria Sintética
+  const categoriesDistribution = useMemo(() => {
+    const map: Record<string, { value: number; count: number; retido: number }> = {};
+    filtrados.forEach((d) => {
+      const cat = d.categoria_sintetica || "Outros Serviços";
+      if (!map[cat]) map[cat] = { value: 0, count: 0, retido: 0 };
+      map[cat].value += d.valor_bruto;
+      map[cat].count += 1;
+      map[cat].retido += d.valor_retido;
+    });
+
+    const list = Object.entries(map).map(([name, data]) => ({
+      name,
+      value: data.value,
+      count: data.count,
+      retido: data.retido,
+    })).sort((a, b) => b.value - a.value);
+
+    return list.map((item, idx) => ({
+      ...item,
+      color: PALETA[idx % PALETA.length],
+      pct: totals.bruto > 0 ? (item.value / totals.bruto) * 100 : 0,
+    }));
+  }, [filtrados, totals.bruto]);
+
+  // 3. Faturamento por Empresa
+  const rankingEmpresas = useMemo(() => {
+    const map: Record<string, { name: string; faturamento: number; retido: number; qtd: number; cnpj: string }> = {};
+    filtrados.forEach((d) => {
+      const key = d.cnpj_prestador || "00000000000000";
+      if (!map[key]) {
+        map[key] = { name: d.empresa_nome || d.nome_prestador || key, faturamento: 0, retido: 0, qtd: 0, cnpj: key };
+      }
+      map[key].faturamento += d.valor_bruto;
+      map[key].retido += d.valor_retido;
+      map[key].qtd += 1;
+    });
+    return Object.values(map).sort((a, b) => b.faturamento - a.faturamento).slice(0, 10);
+  }, [filtrados]);
+
+  // 4. Ranking de Clientes (Tomadores)
+  const rankingClientes = useMemo(() => {
+    const map: Record<string, { name: string; value: number; cnpj: string }> = {};
+    filtrados.forEach((d) => {
+      const key = d.cnpj_tomador || "Desconhecido";
+      if (!map[key]) {
+        map[key] = { name: d.nome_tomador || fmtCnpj(key), value: 0, cnpj: key };
+      }
+      map[key].value += d.valor_bruto;
+    });
+    return Object.values(map).sort((a, b) => b.value - a.value).slice(0, 10);
+  }, [filtrados]);
+
+  // 5. Waterfall data
+  const waterfallData = useMemo(() => {
+    const bruto = totals.bruto;
+    const iss = totals.issRetido;
+    const irrf = totals.irrf;
+    const csll = totals.csll;
+    const pis = totals.pis;
+    const cofins = totals.cofins;
+    const liquido = totals.liquido;
+
+    return [
+      { name: "Faturamento Bruto", range: [0, bruto], display: bruto, fill: C.blue },
+      { name: "ISS Retido", range: [bruto - iss, bruto], display: -iss, fill: C.orange },
+      { name: "IRRF", range: [bruto - iss - irrf, bruto - iss], display: -irrf, fill: C.orange },
+      { name: "CSLL", range: [bruto - iss - irrf - csll, bruto - iss - irrf], display: -csll, fill: C.orange },
+      { name: "PIS", range: [bruto - iss - irrf - csll - pis, bruto - iss - irrf - csll], display: -pis, fill: C.orange },
+      { name: "COFINS", range: [bruto - iss - irrf - csll - pis - cofins, bruto - iss - irrf - csll - pis], display: -cofins, fill: C.orange },
+      { name: "Valor Líquido", range: [0, liquido], display: liquido, fill: C.green },
+    ];
+  }, [totals]);
+
+  const WaterfallTooltip = ({ active, payload }: any) => {
+    if (!active || !payload?.length) return null;
+    const data = payload[0].payload;
+    return (
+      <div className="bg-card border border-border rounded-xl p-3 shadow-md text-xs font-sans">
+        <div className="font-semibold text-slate-800">{data.name}</div>
+        <div className="font-bold text-slate-900 mt-1">{fmtBRL(Math.abs(data.display))}</div>
+      </div>
+    );
+  };
+
+  /* ─── Export Series PNG/CSV Functions ───────────────────────────── */
+  const exportPng = (chartId: string, title: string) => {
+    const container = document.getElementById(chartId);
+    const svg = container?.querySelector("svg");
+    if (!svg) {
+      toast.error("Componente gráfico não localizado para exportação.");
+      return;
+    }
+    try {
+      const svgString = new XMLSerializer().serializeToString(svg);
+      const svgBlob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
+      const URL = window.URL || window.webkitURL || window;
+      const blobURL = URL.createObjectURL(svgBlob);
+      const image = new Image();
+      image.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = svg.clientWidth || 800;
+        canvas.height = svg.clientHeight || 450;
+        const context = canvas.getContext("2d");
+        if (context) {
+          context.fillStyle = "#ffffff";
+          context.fillRect(0, 0, canvas.width, canvas.height);
+          context.drawImage(image, 0, 0);
+          const png = canvas.toDataURL("image/png");
+          const downloadLink = document.createElement("a");
+          downloadLink.href = png;
+          downloadLink.download = `${title.toLowerCase().replace(/\s+/g, "_")}.png`;
+          document.body.appendChild(downloadLink);
+          downloadLink.click();
+          document.body.removeChild(downloadLink);
+          toast.success(`Gráfico ${title} exportado em PNG!`);
+        }
+        URL.revokeObjectURL(blobURL);
+      };
+      image.src = blobURL;
+    } catch (e: any) {
+      toast.error(`Falha ao exportar PNG: ${e?.message || "desconhecido"}`);
+    }
+  };
+
+  const exportEvolutionCsv = () => {
+    const headers = ["Mes/Ano", "Ano Atual", "Ano Anterior", "Media Movel (3m)"];
+    const rows = evolutionData.map((d) => [
+      d.name,
+      d.bruto.toFixed(2),
+      d.brutoAnterior.toFixed(2),
+      d.mediaMovel.toFixed(2)
+    ]);
+    const csvContent = "data:text/csv;charset=utf-8,\uFEFF" + [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+    const link = document.createElement("a");
+    link.href = encodeURI(csvContent);
+    link.download = "evolucao_faturamento.csv";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success("Evolução baixada em CSV!");
+  };
+
+  const exportDonutCsv = () => {
+    const headers = ["Categoria", "Valor Faturado (R$)", "Notas", "Participacao (%)"];
+    const rows = categoriesDistribution.map((d) => [
+      `"${d.name}"`,
+      d.value.toFixed(2),
+      d.count,
+      d.pct.toFixed(2)
+    ]);
+    const csvContent = "data:text/csv;charset=utf-8,\uFEFF" + [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+    const link = document.createElement("a");
+    link.href = encodeURI(csvContent);
+    link.download = "participacao_categorias.csv";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success("Categorias baixadas em CSV!");
+  };
+
+  const exportCompaniesCsv = () => {
+    const headers = ["Empresa", "CNPJ", "Faturamento Bruto (R$)", "Tributos Retidos (R$)", "Notas"];
+    const rows = rankingEmpresas.map((d) => [
+      `"${d.name}"`,
+      d.cnpj,
+      d.faturamento.toFixed(2),
+      d.retido.toFixed(2),
+      d.qtd
+    ]);
+    const csvContent = "data:text/csv;charset=utf-8,\uFEFF" + [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+    const link = document.createElement("a");
+    link.href = encodeURI(csvContent);
+    link.download = "faturamento_empresas.csv";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success("Dados de empresas baixados em CSV!");
+  };
+
+  const exportWaterfallCsv = () => {
+    const headers = ["Etapa", "Valor (R$)"];
+    const rows = waterfallData.map((d) => [
+      d.name,
+      Math.abs(d.display).toFixed(2)
+    ]);
+    const csvContent = "data:text/csv;charset=utf-8,\uFEFF" + [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+    const link = document.createElement("a");
+    link.href = encodeURI(csvContent);
+    link.download = "decomposicao_faturamento.csv";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success("Waterfall exportado em CSV!");
+  };
+
+  // Seeding/Import function
   const processFiles = useCallback(async (files: FileList | File[]) => {
     const arr = Array.from(files).filter((f) => {
       const n = f.name.toLowerCase();
@@ -514,9 +730,8 @@ function Dashboard() {
     setProgress({ done: 0, total: 0 });
     try {
       const summary = await importFiles(arr, setProgress);
-      setLastSummary(summary);
       toast.success(
-        `Lote concluído: ${summary.importadas} importadas, ${summary.duplicadas} duplicadas, ${summary.erros} erros.`
+        `Importação concluída: ${summary.importadas} importadas, ${summary.duplicadas} duplicadas, ${summary.erros} erros.`
       );
     } catch (e: any) {
       toast.error(`Erro inesperado: ${e?.message ?? "desconhecido"}`);
@@ -527,843 +742,747 @@ function Dashboard() {
 
   const hasData = (docs ?? []).length > 0;
   const isLoading = !mounted || docs === undefined;
-
   const mesSelecionado = MESES.find((m) => m.v === mesFiltro);
-  const periodoLabel = [mesSelecionado?.l, anoFiltro].filter(Boolean).join(" ") || "Todos os períodos";
+  const periodoLabel = [mesSelecionado?.l, anoFiltro].filter(Boolean).join(" ") || "Consolidado";
 
-  /* ─── Axis tick styles ── */
-  const axTick = { fontSize: 10, fill: "oklch(0.51 0.046 257)" };
-  const axGrid = "oklch(0.918 0.015 253)";
+  // Recharts styling tokens
+  const axTick = { fontSize: 10, fill: "#94a3b8" };
+  const axGrid = "rgba(0,0,0,0.05)";
 
   return (
-    <div
-      className={`min-h-screen${presentationMode ? " presentation-active" : ""}`}
-      style={{ background: "var(--color-background)" }}
-    >
-      {/* ── Presentation Mode Overlay ── */}
+    <div className={`min-h-screen ${presentationMode ? "p-4 bg-slate-950 text-white" : "p-6 bg-background space-y-8 max-w-[1500px] mx-auto pb-16"}`}>
       {presentationMode && (
         <PresentationMode onExit={() => setPresentationMode(false)} />
       )}
-      <div className="max-w-[1440px] mx-auto px-6 py-6 space-y-5">
 
-        {/* ── Page Header ── */}
-        <div className="flex items-start justify-between flex-wrap gap-4">
-          <div>
-            <h1 className="text-[1.6rem] font-bold tracking-tight text-foreground">
-              {presentationMode ? "🎯 Cockpit Fiscal — Apresentação" : "Dashboard Fiscal"}
-            </h1>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              {periodoLabel} · {ativos.length} nota{ativos.length !== 1 ? "s" : ""} ativa{ativos.length !== 1 ? "s" : ""}
-              {cnpjGrupoSet.size > 0 && ` · ${cnpjGrupoSet.size} CNPJ${cnpjGrupoSet.size !== 1 ? "s" : ""} no grupo`}
-            </p>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            {hasData && (
-              <>
-                <ExportMenu
-                  docs={ativos}
-                  cnpjGrupoSet={cnpjGrupoSet}
-                  filterLabels={{
-                    periodo: periodoLabel,
-                    empresa: cnpjNameMap[empresaFiltro] || (empresaFiltro ? empresaFiltro : "Consolidado do Grupo"),
-                    status: statusFiltro === "todos" ? "Todos" : statusFiltro,
-                    operacao: operacaoFiltro,
-                  }}
-                  kpis={exportKpis}
-                />
-                <button
-                  id="presentation-mode-btn"
-                  className={`fullscreen-btn${presentationMode ? " active" : ""}`}
-                  onClick={() => setPresentationMode(!presentationMode)}
-                  title={presentationMode ? "Sair do Modo Apresentação" : "Modo Apresentação"}
-                >
-                  <MonitorPlay className="h-4 w-4" />
-                </button>
-                <FullscreenButton />
-              </>
-            )}
-            <input
-              ref={inputRef}
-              type="file"
-              accept=".zip,.xml"
-              multiple
-              className="hidden"
-              onChange={(e) => {
-                if (e.target.files?.length) processFiles(e.target.files);
-                if (inputRef.current) inputRef.current.value = "";
+      {/* Title & Actions */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border/60 pb-5">
+        <div>
+          <h1 className="text-[26px] font-semibold tracking-tight text-slate-800 flex items-center gap-2">
+            <TrendingUp className="h-6 w-6 text-primary" />
+            Dashboard Executivo
+          </h1>
+          <p className="text-sm text-slate-400 mt-1 font-medium">
+            Cockpit inteligente de business intelligence consolidado para faturamento corporativo.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          {hasData && (
+            <ExportMenu
+              docs={filtrados}
+              cnpjGrupoSet={cnpjGrupoSet}
+              filterLabels={{
+                periodo: periodoLabel,
+                empresa: empresaFiltro ? cnpjNameMap[empresaFiltro] || empresaFiltro : "Consolidado",
+                status: statusFiltro,
+                operacao: operacaoFiltro,
+              }}
+              kpis={{
+                bruto: totals.bruto,
+                liquido: totals.liquido,
+                retido: totals.totalRetidos,
+                intercompany: 0,
+                qtd: totals.qtd,
+                ticketMedio: totals.ticket,
               }}
             />
-            <Button
-              id="header-import-btn"
-              onClick={() => inputRef.current?.click()}
-              disabled={importing}
-              variant="outline"
-              className="gap-2 h-9 font-medium"
-            >
-              {importing
-                ? <Loader2 className="h-4 w-4 animate-spin" />
-                : <Upload className="h-4 w-4" />
-              }
-              {importing ? "Importando..." : "Importar NFS-e"}
-            </Button>
-          </div>
-        </div>
-
-        {semClassificacaoCount > 0 && (
-          <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 flex items-center justify-between flex-wrap gap-3 animate-in fade-in duration-200">
-            <div className="flex items-center gap-2.5">
-              <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0" />
-              <div>
-                <div className="text-xs font-semibold text-foreground">Notas sem Classificação Gerencial</div>
-                <div className="text-[11px] text-muted-foreground mt-0.5">
-                  Existem <strong>{semClassificacaoCount}</strong> notas fiscais ativas sem classificação gerencial baseada em regras.
-                </div>
-              </div>
-            </div>
-            <Link
-              to="/classificacao"
-              className="inline-flex items-center justify-center rounded-md bg-amber-500/15 hover:bg-amber-500/25 px-3 py-1.5 text-xs font-medium text-amber-700 dark:text-amber-300 transition-colors"
-            >
-              Classificar Agora
-            </Link>
-          </div>
-        )}
-
-        {/* ── Filters Bar ── */}
-        <div
-          className="rounded-xl border border-border p-3 flex flex-wrap items-center gap-3"
-          style={{ background: "var(--color-card)", boxShadow: "0 1px 3px oklch(0 0 0 / 4%)" }}
-        >
-          <span className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground mr-1">
-            Filtros
-          </span>
-          <FavoriteFiltersPanel />
-          {/* Mês */}
-          <Select value={mesFiltro || "__all__"} onValueChange={(v) => setMesFiltro(v === "__all__" ? "" : v)}>
-            <SelectTrigger id="filter-mes" className="w-36 h-8 text-sm">
-              <SelectValue placeholder="Mês" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__all__">Todos os meses</SelectItem>
-              {MESES.map((m) => <SelectItem key={m.v} value={m.v}>{m.l}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          {/* Ano */}
-          <Select value={anoFiltro || "__all__"} onValueChange={(v) => setAnoFiltro(v === "__all__" ? "" : v)}>
-            <SelectTrigger id="filter-ano" className="w-28 h-8 text-sm">
-              <SelectValue placeholder="Ano" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__all__">Todos</SelectItem>
-              {anos.map((a) => <SelectItem key={a} value={a}>{a}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          {/* Empresa */}
-          <Select value={empresaFiltro || "__grupo__"} onValueChange={(v) => setEmpresaFiltro(v === "__grupo__" ? "" : v)}>
-            <SelectTrigger id="filter-empresa" className="w-52 h-8 text-sm">
-              <SelectValue placeholder="Empresa" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__grupo__">Consolidado do Grupo</SelectItem>
-              {grupoCnpjs?.map((g) => (
-                <SelectItem key={g.cnpj} value={g.cnpj}>
-                  {g.nome || fmtCnpj(g.cnpj)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <div className="h-5 w-px bg-border mx-0.5" />
-
-          {/* Status */}
-          <div className="filter-group">
-            {(["todos", "Ativo", "Cancelado"] as const).map((s) => (
-              <button
-                key={s}
-                id={`filter-status-${s}`}
-                onClick={() => setStatusFiltro(s)}
-                className={`filter-btn${statusFiltro === s ? " active" : ""}`}
-              >
-                {s === "todos" ? "Todos" : s}
-              </button>
-            ))}
-          </div>
-
-          {/* Operação */}
-          <div className="filter-group">
-            {(["Todas", "Externas", "Intercompany"] as const).map((op) => (
-              <button
-                key={op}
-                id={`filter-op-${op}`}
-                onClick={() => setOperacaoFiltro(op)}
-                className={`filter-btn${operacaoFiltro === op ? " active" : ""}`}
-              >
-                {op}
-              </button>
-            ))}
-          </div>
-
-          {/* Clear empresa filter badge */}
-          {empresaFiltro && (
-            <button
-              className="flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full border border-primary/30 text-primary bg-primary/8 hover:bg-primary/15 transition-colors"
-              onClick={() => setEmpresaFiltro("")}
-            >
-              <Building2 className="h-3 w-3" />
-              {cnpjNameMap[empresaFiltro] || fmtCnpj(empresaFiltro)}
-              <span className="opacity-60">×</span>
-            </button>
           )}
-          {/* Reset all filters */}
-          {(mesFiltro || anoFiltro || empresaFiltro || statusFiltro !== "Ativo" || operacaoFiltro !== "Todas") && (
-            <button
-              id="reset-filters-btn"
-              className="text-[11px] font-medium px-2 py-1 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-              onClick={resetFilters}
-              title="Limpar todos os filtros"
-            >
-              Limpar filtros
-            </button>
-          )}
-        </div>
 
-        {/* ── Upload Drop Zone ── */}
-        {(importing || !hasData) && (
-          <div
-            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={(e) => {
-              e.preventDefault();
-              setDragOver(false);
-              if (e.dataTransfer.files?.length) processFiles(e.dataTransfer.files);
-            }}
-            className={`upload-zone${dragOver ? " drag-over" : ""}`}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setPresentationMode(!presentationMode)}
+            className="h-9 text-xs font-semibold rounded-xl"
           >
-            <div className="flex items-center gap-4">
-              <div
-                className="h-11 w-11 rounded-xl flex items-center justify-center shrink-0"
-                style={{ background: `${C.blue}18` }}
-              >
-                <CloudUpload className="h-5 w-5" style={{ color: C.blue }} />
+            Modo Apresentação
+          </Button>
+
+          <input
+            ref={inputRef}
+            type="file"
+            accept=".zip,.xml"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              if (e.target.files?.length) processFiles(e.target.files);
+              if (inputRef.current) inputRef.current.value = "";
+            }}
+          />
+
+          <Button
+            onClick={() => inputRef.current?.click()}
+            disabled={importing}
+            size="sm"
+            className="gap-1.5 h-9 bg-primary text-primary-foreground font-semibold text-xs rounded-xl"
+          >
+            {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+            Importar NFS-e
+          </Button>
+        </div>
+      </div>
+
+      {/* Warnings */}
+      {semClassificacaoCount > 0 && (
+        <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 flex items-center justify-between flex-wrap gap-3 animate-in fade-in duration-200">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0" />
+            <div>
+              <div className="text-xs font-semibold text-slate-800">Serviços Sem Classificação Gerencial</div>
+              <div className="text-[11px] text-slate-500 mt-0.5">
+                Existem <strong>{semClassificacaoCount}</strong> notas fiscais associadas a "Outros Serviços" que requerem configuração na tabela de regras.
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="font-semibold text-sm text-foreground">Importar NFS-e Nacional</div>
-                <div className="text-xs text-muted-foreground mt-0.5">
-                  Arraste arquivos <span className="font-mono">.xml</span> ou <span className="font-mono">.zip</span> aqui, ou clique para selecionar.
-                </div>
-              </div>
-              <Button
-                id="dropzone-import-btn"
-                onClick={() => inputRef.current?.click()}
-                disabled={importing}
-                className="gap-2 shrink-0"
-                style={{ background: C.blue, color: "#fff" }}
-              >
-                {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                {importing ? "Importando..." : "Selecionar arquivos"}
-              </Button>
             </div>
-            {importing && progress && progress.total > 0 && (
-              <div className="mt-4">
-                <div className="flex justify-between text-xs text-muted-foreground mb-1.5">
-                  <span>Processando XMLs...</span>
-                  <span>{progress.done} / {progress.total}</span>
-                </div>
-                <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                  <div
-                    className="h-full rounded-full progress-bar-animated transition-all duration-300"
-                    style={{
-                      width: `${(progress.done / progress.total) * 100}%`,
-                      background: `linear-gradient(90deg, ${C.blue}, ${C.teal})`,
-                    }}
-                  />
-                </div>
-              </div>
-            )}
-            {lastSummary && !importing && (
-              <div className="mt-3 text-xs text-muted-foreground flex items-center gap-1.5">
-                <AlertCircle className="h-3 w-3" />
-                Último lote: <strong>{lastSummary.importadas}</strong> importadas,{" "}
-                <strong>{lastSummary.duplicadas}</strong> duplicadas,{" "}
-                <strong>{lastSummary.erros}</strong> erro(s).
-              </div>
-            )}
           </div>
-        )}
+          <Link
+            to="/classificacao"
+            className="inline-flex items-center justify-center rounded-xl bg-amber-500/15 hover:bg-amber-500/25 px-3 py-1.5 text-xs font-medium text-amber-700 dark:text-amber-300 transition-colors border-0"
+          >
+            Configurar Regras
+          </Link>
+        </div>
+      )}
 
-        {/* ── Loading Skeletons ── */}
-        {isLoading && (
-          <>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <SkeletonChart />
-              <SkeletonChart />
-            </div>
-            <SkeletonChart height={200} />
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-              <SkeletonChart height={260} />
-              <SkeletonChart height={260} />
-              <SkeletonChart height={260} />
-            </div>
-          </>
-        )}
+      {/* Superior Fixed Filter Bar */}
+      <div className="sticky top-0 z-40 bg-background/95 backdrop-blur-md border border-border/80 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3 shadow-sm">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Select Empresa */}
+          <select
+            value={empresaFiltro || "todos"}
+            onChange={(e) => setEmpresaFiltro(e.target.value === "todos" ? "" : e.target.value)}
+            className="h-8 rounded-lg border border-input bg-background px-2.5 py-0.5 text-xs focus:ring-1 focus:ring-primary shadow-sm w-[150px]"
+          >
+            <option value="todos">Empresas: Todas</option>
+            {empresas?.map((g) => (
+              <option key={g.cnpj} value={g.cnpj}>{g.razao_social || g.cnpj}</option>
+            ))}
+          </select>
 
-        {/* ── Empty State ── */}
-        {mounted && !isLoading && !hasData && (
-          <div className="chart-card">
+          {/* Select Competência Ano */}
+          <select
+            value={anoFiltro || "todos"}
+            onChange={(e) => setAnoFiltro(e.target.value === "todos" ? "" : e.target.value)}
+            className="h-8 rounded-lg border border-input bg-background px-2.5 py-0.5 text-xs focus:ring-1 focus:ring-primary shadow-sm"
+          >
+            <option value="todos">Competência: Anos</option>
+            {filterOptions.anos.map((y) => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
+
+          {/* Select Competência Mês */}
+          <select
+            value={mesFiltro || "todos"}
+            onChange={(e) => setMesFiltro(e.target.value === "todos" ? "" : e.target.value)}
+            className="h-8 rounded-lg border border-input bg-background px-2.5 py-0.5 text-xs focus:ring-1 focus:ring-primary shadow-sm"
+          >
+            <option value="todos">Competência: Meses</option>
+            {MESES.map((m) => (
+              <option key={m.v} value={m.v}>{m.l}</option>
+            ))}
+          </select>
+
+          {/* Select Cliente */}
+          <select
+            value={clienteFiltro || "todos"}
+            onChange={(e) => setClienteFiltro(e.target.value === "todos" ? "" : e.target.value)}
+            className="h-8 rounded-lg border border-input bg-background px-2.5 py-0.5 text-xs focus:ring-1 focus:ring-primary shadow-sm w-[160px]"
+          >
+            <option value="todos">Clientes: Todos</option>
+            {filterOptions.clientes.map((c) => (
+              <option key={c} value={c}>{c.length > 20 ? c.slice(0, 20) + "..." : c}</option>
+            ))}
+          </select>
+
+          {/* Select Categoria */}
+          <select
+            value={categoriaFiltro || "todos"}
+            onChange={(e) => setCategoriaFiltro(e.target.value === "todos" ? "" : e.target.value)}
+            className="h-8 rounded-lg border border-input bg-background px-2.5 py-0.5 text-xs focus:ring-1 focus:ring-primary shadow-sm w-[150px]"
+          >
+            <option value="todos">Categorias: Todas</option>
+            {filterOptions.categorias.map((cat) => (
+              <option key={cat} value={cat}>{cat}</option>
+            ))}
+          </select>
+
+          {/* Select Tipo de Serviço */}
+          <select
+            value={tipoServicoFiltro || "todos"}
+            onChange={(e) => setTipoServicoFiltro(e.target.value === "todos" ? "" : e.target.value)}
+            className="h-8 rounded-lg border border-input bg-background px-2.5 py-0.5 text-xs focus:ring-1 focus:ring-primary shadow-sm w-[140px]"
+          >
+            <option value="todos">Tipos: Todos</option>
+            {filterOptions.tipos.map((t) => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
+
+          {/* Select Município */}
+          <select
+            value={municipioFiltro || "todos"}
+            onChange={(e) => setMunicipioFiltro(e.target.value === "todos" ? "" : e.target.value)}
+            className="h-8 rounded-lg border border-input bg-background px-2.5 py-0.5 text-xs focus:ring-1 focus:ring-primary shadow-sm w-[140px]"
+          >
+            <option value="todos">Cidades: Todas</option>
+            {filterOptions.municipios.map((mun) => (
+              <option key={mun} value={mun}>{mun}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {hasActiveFilters && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={resetFilters}
+              className="h-8 text-xs font-semibold rounded-xl text-slate-500 hover:text-slate-700"
+            >
+              <RefreshCw className="h-3 w-3 mr-1" />
+              Limpar Filtros
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Drag & Drop Upload trigger */}
+      {(importing || !hasData) && (
+        <div
+          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragOver(false);
+            if (e.dataTransfer.files?.length) processFiles(e.dataTransfer.files);
+          }}
+          className={`border-2 border-dashed border-border rounded-2xl p-10 flex flex-col items-center justify-center bg-card/50 transition-all ${dragOver ? "border-primary bg-primary/5" : ""}`}
+        >
+          {importing ? (
+            <div className="w-full max-w-md text-center space-y-4">
+              <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" />
+              <p className="text-sm font-medium">Processando arquivos XML...</p>
+              {progress && (
+                <div className="space-y-1.5">
+                  <div className="h-2 bg-muted rounded-full overflow-hidden w-full">
+                    <div
+                      className="h-full bg-primary rounded-full transition-all duration-300"
+                      style={{ width: `${(progress.done / progress.total) * 100}%` }}
+                    />
+                  </div>
+                  <span className="text-[10px] text-muted-foreground">{progress.done} de {progress.total}</span>
+                </div>
+              )}
+            </div>
+          ) : (
             <EmptyState onUpload={() => inputRef.current?.click()} />
+          )}
+        </div>
+      )}
+
+      {hasData && !isLoading && (
+        <div className="space-y-8">
+
+          {/* ────────────────────────────────────────────────────────────────
+              LINHA 1: KPIs PREMIUM (Altura máx. 100px)
+              ──────────────────────────────────────────────────────────────── */}
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+            {[
+              {
+                title: "Faturamento Bruto",
+                value: fmtBRL(periodComparison?.cur.bruto ?? totals.bruto),
+                pct: periodComparison?.brutoPct,
+                hint: "Total bruto faturado.",
+                color: C.blue,
+                link: "/fiscal",
+              },
+              {
+                title: "Valor Líquido",
+                value: fmtBRL(periodComparison?.cur.liquido ?? totals.liquido),
+                pct: periodComparison?.liquidoPct,
+                hint: "Faturamento bruto deduzido das retenções.",
+                color: C.green,
+                link: "/fiscal",
+              },
+              {
+                title: "Tributos Retidos",
+                value: fmtBRL(periodComparison?.cur.retidos ?? totals.totalRetidos),
+                pct: periodComparison?.retidosPct,
+                hint: "Total retido em impostos.",
+                color: C.orange,
+                link: "/tributario",
+              },
+              {
+                title: "Quantidade NFS",
+                value: (periodComparison?.cur.count ?? totals.qtd).toLocaleString("pt-BR"),
+                pct: periodComparison?.countPct,
+                hint: "Total de NFS-e emitidas.",
+                color: C.purple,
+                link: "/notas",
+              },
+              {
+                title: "Ticket Médio",
+                value: fmtBRL(periodComparison?.cur.ticket ?? totals.ticket),
+                pct: periodComparison?.ticketPct,
+                hint: "Faturamento dividido pelas notas.",
+                color: C.secondary,
+                link: "/notas",
+              },
+              {
+                title: "Clientes",
+                value: `${periodComparison?.cur.clientes ?? totals.uniqueServicesCount} Tomadores`,
+                pct: periodComparison?.clientesPct,
+                hint: "Clientes ativos no período.",
+                color: C.secondary,
+                link: "/clientes",
+              },
+              {
+                title: "Empresas",
+                value: `${periodComparison?.cur.empresas ?? empresas?.length ?? 0} Emissores`,
+                pct: periodComparison?.empresasPct,
+                hint: "Empresas do grupo emissoras.",
+                color: C.secondary,
+                link: "/empresas",
+              },
+            ].map((kpi, idx) => {
+              const hasPct = kpi.pct !== undefined && !isNaN(kpi.pct);
+              const isGrowth = (kpi.pct ?? 0) >= 0;
+              return (
+                <Link
+                  key={idx}
+                  to={kpi.link}
+                  className="flex-1 snap-start bg-card border border-border/80 hover:border-slate-300 rounded-2xl p-4 shadow-sm relative overflow-hidden transition-all duration-200 hover:scale-[1.02] flex flex-col justify-between group max-h-[100px]"
+                  title={kpi.hint}
+                >
+                  <div className="flex items-center justify-between text-muted-foreground">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 truncate max-w-[120px]">
+                      {kpi.title}
+                    </span>
+                    <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ backgroundColor: kpi.color }} />
+                  </div>
+                  <div className="flex items-baseline justify-between mt-1">
+                    <span className="text-lg md:text-xl font-bold font-mono tracking-tight text-slate-800">
+                      {kpi.value}
+                    </span>
+                    {hasPct && (
+                      <span className={`text-[10px] font-bold flex items-center shrink-0 ml-1.5 ${isGrowth ? "text-emerald-600" : "text-rose-600"}`}>
+                        {isGrowth ? "+" : ""}{kpi.pct?.toFixed(1)}%
+                      </span>
+                    )}
+                  </div>
+                </Link>
+              );
+            })}
           </div>
-        )}
 
-        {/* ════════════════════════════════════════════════════════
-            MAIN CONTENT
-        ════════════════════════════════════════════════════════ */}
-        {mounted && hasData && (
-          <>
-            {/* ══ Auto Insights ══ */}
-            <div data-slide-id="kpis">
-            <AutoInsights
-              activeDocs={ativos}
-              allDocs={docs ?? []}
-              filteredDocs={filtrados}
-              cnpjGrupoSet={cnpjGrupoSet}
-              openDrillDown={(title, filter) => openDrillDown({ title, filter })}
-            />
-
-            {/* ── Executive KPI Summary ── */}
-            <ExecutiveKpis
-              activeDocs={ativos}
-              allDocs={docs ?? []}
-              filteredDocs={filtrados}
-              cnpjGrupoSet={cnpjGrupoSet}
-              onKpiClick={(kpiId) => {
-                const kpiDrillMap: Record<string, { title: string; filter: any }> = {
-                  bruto:          { title: "Faturamento Bruto",   filter: { type: "all" } },
-                  liquido:        { title: "Faturamento Líquido", filter: { type: "all" } },
-                  retencoes:      { title: "Retenções",           filter: { type: "all" } },
-                  intercompany:   { title: "Intercompany",        filter: { type: "intercompany" } },
-                  "qtd-notas":    { title: "Qtd. de Notas",      filter: { type: "all" } },
-                  "ticket-medio": { title: "Ticket Médio",        filter: { type: "all" } },
-                };
-                const cfg = kpiDrillMap[kpiId];
-                if (cfg) openDrillDown(cfg);
-              }}
-            />
+          {/* ────────────────────────────────────────────────────────────────
+              LINHA 2: 70% EVOLUÇÃO (LINHA) vs 30% PARTICIPAÇÃO (DONUT)
+              ──────────────────────────────────────────────────────────────── */}
+          <div className="grid grid-cols-1 lg:grid-cols-10 gap-6">
+            
+            {/* Gráfico 1: Evolução do Faturamento (70% - lg:col-span-7) */}
+            <div id="chart-evolucao-container" className="lg:col-span-7">
+              <DashboardChartCard
+                title="Evolução Mensal do Faturamento"
+                subtitle="Faturamento corrente vs ano anterior e média móvel consolidada de 3 meses"
+                onExportCsv={exportEvolutionCsv}
+                onExportPng={() => exportPng("chart-evolucao-container", "Evolução do Faturamento")}
+                onToggleFullScreen={() => setExpandedChart("evolucao")}
+              >
+                <div className="h-[220px] w-full mt-2 font-mono text-[9px] relative">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={evolutionData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke={axGrid} vertical={false} />
+                      <XAxis dataKey="name" tick={axTick} tickLine={false} axisLine={false} />
+                      <YAxis tickFormatter={(v) => fmtBRLCompact(Number(v))} tick={axTick} tickLine={false} axisLine={false} />
+                      <Tooltip content={<ChartTooltip />} />
+                      <Legend iconType="circle" wrapperStyle={{ fontSize: 10, paddingTop: 5 }} />
+                      <Line type="monotone" dataKey="bruto" name="Bruto (Ano Corrente)" stroke={C.blue} strokeWidth={2.5} dot={{ r: 2.5 }} activeDot={{ r: 4 }} />
+                      <Line type="monotone" dataKey="brutoAnterior" name="Bruto (Ano Anterior)" stroke={C.muted} strokeWidth={1.5} strokeDasharray="4 4" dot={false} />
+                      <Line type="monotone" dataKey="mediaMovel" name="Média Móvel (3m)" stroke={C.purple} strokeWidth={1.5} dot={false} />
+                      <Brush dataKey="name" height={18} stroke={C.blue} fill="transparent" />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </DashboardChartCard>
             </div>
 
-            {/* ════════════════════════════════════════════════
-                ROW 1 — Evolução Faturamento | Evolução Retenções
-            ════════════════════════════════════════════════ */}
-            <div data-slide-id="evolution" className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* Gráfico 2: Participação das Categorias (30% - lg:col-span-3) */}
+            <div id="chart-donut-container" className="lg:col-span-3">
+              <DashboardChartCard
+                title="Participação por Categoria"
+                subtitle="Divisão percentual das receitas"
+                onExportCsv={exportDonutCsv}
+                onExportPng={() => exportPng("chart-donut-container", "Participação de Categorias")}
+                onToggleFullScreen={() => setExpandedChart("donut")}
+              >
+                <div className="flex items-center justify-between gap-4 w-full h-[220px] pr-2">
+                  {/* Donut slice */}
+                  <div className="relative w-[130px] h-[130px] flex items-center justify-center shrink-0">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={categoriesDistribution}
+                          innerRadius={45}
+                          outerRadius={60}
+                          paddingAngle={2.5}
+                          dataKey="value"
+                          onClick={(entry) => openDrillDown({ title: `NFS-e - Categoria: ${entry.name}`, filter: { type: "categoria_sintetica", value: entry.name } })}
+                        >
+                          {categoriesDistribution.map((entry, idx) => (
+                            <Cell key={`cell-${idx}`} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip formatter={(v) => fmtBRL(Number(v))} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                      <span className="text-[9px] uppercase font-bold text-slate-400">Total</span>
+                      <span className="text-xs font-bold text-slate-800 font-mono mt-0.5">{fmtBRLCompact(totals.bruto)}</span>
+                    </div>
+                  </div>
 
-              {/* ── Chart 1: Evolução do Faturamento (Linha dupla) ── */}
-              <div className="chart-card">
-                <SectionHeader
-                  title="Evolução do Faturamento"
-                  subtitle="Bruto × Líquido — últimos 12 meses"
-                  accentColor={C.blue}
-                />
-                <ResponsiveContainer width="100%" height={240}>
-                  <LineChart
-                    data={evolutionData}
-                    onClick={(e) => {
-                      if (e?.activePayload?.[0]?.payload?.ym) {
-                        const ym = e.activePayload[0].payload.ym as string;
-                        const [y, m] = ym.split("-");
-                        openDrillDown({
-                          title: `Faturamento — ${NOME_MES[m]}/${y}`,
-                          filter: { type: "competencia", value: `${m}/${y}` },
-                        });
-                      }
-                    }}
-                    margin={{ left: 0, right: 8, top: 8, bottom: 0 }}
-                  >
-                    <defs>
-                      <filter id="glow-blue">
-                        <feGaussianBlur stdDeviation="2" result="blur" />
-                        <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
-                      </filter>
-                    </defs>
+                  {/* Legend side */}
+                  <div className="flex-1 flex flex-col justify-center space-y-1.5 overflow-y-auto max-h-[200px] pl-2 border-l border-border/40">
+                    {categoriesDistribution.slice(0, 4).map((entry, idx) => (
+                      <div key={idx} className="flex items-center justify-between text-[11px] font-medium text-slate-500">
+                        <span className="flex items-center gap-1.5 truncate max-w-[90px]" title={entry.name}>
+                          <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ backgroundColor: entry.color }} />
+                          {entry.name}
+                        </span>
+                        <span className="font-mono text-slate-800 shrink-0">{entry.pct.toFixed(0)}%</span>
+                      </div>
+                    ))}
+                    {categoriesDistribution.length > 4 && (
+                      <span className="text-[10px] text-slate-400 italic pl-3">
+                        +{categoriesDistribution.length - 4} categorias
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </DashboardChartCard>
+            </div>
+          </div>
+
+          {/* ────────────────────────────────────────────────────────────────
+              LINHA 3: 50% TOP CLIENTES vs 50% TOP CATEGORIAS (TABELAS)
+              ──────────────────────────────────────────────────────────────── */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            
+            {/* Tabela Top Clientes */}
+            <div className="bg-card border border-border/80 rounded-2xl p-6 shadow-sm flex flex-col justify-between transition-transform duration-200 hover:scale-[1.01]">
+              <div className="border-b border-border/40 pb-3 mb-4 flex items-center justify-between">
+                <div>
+                  <h3 className="text-[15px] font-bold text-slate-800 tracking-tight">Top Clientes tomadores</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">Ranking dos 5 maiores parceiros comerciais</p>
+                </div>
+                <Badge variant="secondary" className="px-2 py-0.5 text-[9px] rounded-lg font-bold">Consolidado</Badge>
+              </div>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader className="bg-muted/30">
+                    <TableRow>
+                      <TableHead className="font-bold text-[9px] uppercase text-slate-400 h-8">Cliente / Tomador</TableHead>
+                      <TableHead className="font-bold text-[9px] uppercase text-slate-400 text-right h-8">Valor Faturado</TableHead>
+                      <TableHead className="font-bold text-[9px] uppercase text-slate-400 text-center h-8">Part. %</TableHead>
+                      <TableHead className="font-bold text-[9px] uppercase text-slate-400 text-center h-8">Notas</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {rankingClientes.slice(0, 5).map((c, idx) => {
+                      const clientNotes = filtrados.filter(d => d.cnpj_tomador === c.cnpj || d.nome_tomador === c.name);
+                      const count = clientNotes.length;
+                      const pct = totals.bruto > 0 ? (c.value / totals.bruto) * 100 : 0;
+                      return (
+                        <TableRow
+                          key={idx}
+                          className="hover:bg-muted/10 cursor-pointer h-10 border-b border-border/40"
+                          onClick={() => openDrillDown({ title: `NFS-e - Cliente: ${c.name}`, filter: { type: "cliente", value: c.name, cnpj: c.cnpj } })}
+                        >
+                          <TableCell className="font-semibold text-xs text-slate-700 truncate max-w-[160px] py-2" title={c.name}>
+                            {c.name}
+                          </TableCell>
+                          <TableCell className="text-right font-mono font-medium text-xs py-2">{fmtBRL(c.value)}</TableCell>
+                          <TableCell className="text-center font-mono text-xs text-slate-500 py-2">{pct.toFixed(1)}%</TableCell>
+                          <TableCell className="text-center font-mono text-xs text-slate-400 py-2">{count}</TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+
+            {/* Tabela Top Categorias */}
+            <div className="bg-card border border-border/80 rounded-2xl p-6 shadow-sm flex flex-col justify-between transition-transform duration-200 hover:scale-[1.01]">
+              <div className="border-b border-border/40 pb-3 mb-4 flex items-center justify-between">
+                <div>
+                  <h3 className="text-[15px] font-bold text-slate-800 tracking-tight">Top Categorias de Serviço</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">Ranking por categoria sintética de NFS-e</p>
+                </div>
+                <Badge variant="secondary" className="px-2 py-0.5 text-[9px] rounded-lg font-bold">Classificado</Badge>
+              </div>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader className="bg-muted/30">
+                    <TableRow>
+                      <TableHead className="font-bold text-[9px] uppercase text-slate-400 h-8">Categoria</TableHead>
+                      <TableHead className="font-bold text-[9px] uppercase text-slate-400 text-right h-8">Valor Faturado</TableHead>
+                      <TableHead className="font-bold text-[9px] uppercase text-slate-400 text-center h-8">Part. %</TableHead>
+                      <TableHead className="font-bold text-[9px] uppercase text-slate-400 text-center h-8">Notas</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {categoriesDistribution.slice(0, 5).map((cat, idx) => (
+                      <TableRow
+                        key={idx}
+                        className="hover:bg-muted/10 cursor-pointer h-10 border-b border-border/40"
+                        onClick={() => openDrillDown({ title: `NFS-e - Categoria: ${cat.name}`, filter: { type: "categoria_sintetica", value: cat.name } })}
+                      >
+                        <TableCell className="font-semibold text-xs text-slate-700 truncate max-w-[160px] py-2" title={cat.name}>
+                          {cat.name}
+                        </TableCell>
+                        <TableCell className="text-right font-mono font-medium text-xs py-2">{fmtBRL(cat.value)}</TableCell>
+                        <TableCell className="text-center font-mono text-xs text-slate-500 py-2">{cat.pct.toFixed(1)}%</TableCell>
+                        <TableCell className="text-center font-mono text-xs text-slate-400 py-2">{cat.count}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          </div>
+
+          {/* ────────────────────────────────────────────────────────────────
+              LINHA 4: 50% FATURAMENTO POR EMPRESA vs 50% TRIBUTOS RETIDOS
+              ──────────────────────────────────────────────────────────────── */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            
+            {/* Gráfico 3: Faturamento por Empresa (Col: 50%) */}
+            <div id="chart-empresas-container">
+              <DashboardChartCard
+                title="Faturamento por Empresa"
+                subtitle="Faturamento bruto por CNPJ emissor"
+                onExportCsv={exportCompaniesCsv}
+                onExportPng={() => exportPng("chart-empresas-container", "Faturamento por Empresa")}
+                onToggleFullScreen={() => setExpandedChart("empresas")}
+              >
+                <div className="h-[220px] w-full mt-2 font-mono text-[9px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={rankingEmpresas} layout="vertical" margin={{ left: 20, right: 10, top: 0, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke={axGrid} horizontal={false} />
+                      <XAxis type="number" tick={axTick} tickFormatter={(v) => fmtBRLCompact(v)} />
+                      <YAxis type="category" dataKey="name" tick={axTick} width={90} />
+                      <Tooltip content={<ChartTooltip />} />
+                      <Bar dataKey="faturamento" name="Faturamento Bruto" fill={C.blue} radius={[0, 4, 4, 0]} onClick={(data) => openDrillDown({ title: `NFS-e - Empresa: ${data.name}`, filter: { type: "prestador", cnpj: data.cnpj } })} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </DashboardChartCard>
+            </div>
+
+            {/* Gráfico 4: Tributos Retidos por Empresa (Col: 50%) */}
+            <div id="chart-tributos-container">
+              <DashboardChartCard
+                title="Tributos Retidos por Empresa"
+                subtitle="Custos de retenção tributária consolidada por emissor"
+                onExportCsv={exportCompaniesCsv} // utiliza mesma planilha de faturamentos/tributos
+                onExportPng={() => exportPng("chart-tributos-container", "Tributos Retidos por Empresa")}
+                onToggleFullScreen={() => setExpandedChart("tributos")}
+              >
+                <div className="h-[220px] w-full mt-2 font-mono text-[9px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={rankingEmpresas} layout="vertical" margin={{ left: 20, right: 10, top: 0, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke={axGrid} horizontal={false} />
+                      <XAxis type="number" tick={axTick} tickFormatter={(v) => fmtBRLCompact(v)} />
+                      <YAxis type="category" dataKey="name" tick={axTick} width={90} />
+                      <Tooltip content={<ChartTooltip />} />
+                      <Bar dataKey="retido" name="Tributos Retidos" fill={C.orange} radius={[0, 4, 4, 0]} onClick={(data) => openDrillDown({ title: `NFS-e - Empresa: ${data.name}`, filter: { type: "prestador", cnpj: data.cnpj } })} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </DashboardChartCard>
+            </div>
+          </div>
+
+          {/* ────────────────────────────────────────────────────────────────
+              LINHA 5: GRÁFICO CASCATA (WATERFALL) (LARGURA TOTAL 100%)
+              ──────────────────────────────────────────────────────────────── */}
+          <div id="chart-waterfall-container">
+            <DashboardChartCard
+              title="Waterfall do Faturamento Líquido"
+              subtitle="Demonstrativo de deduções retidas na fonte (ISS, IRRF, CSLL, PIS, COFINS) do faturamento bruto ao líquido"
+              onExportCsv={exportWaterfallCsv}
+              onExportPng={() => exportPng("chart-waterfall-container", "Waterfall de Faturamento")}
+              onToggleFullScreen={() => setExpandedChart("waterfall")}
+            >
+              <div className="h-[260px] w-full mt-2 font-mono text-[9px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={waterfallData} margin={{ top: 20, right: 20, left: 10, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke={axGrid} vertical={false} />
-                    <XAxis dataKey="name" tick={axTick} axisLine={false} tickLine={false} />
-                    <YAxis
-                      tickFormatter={(v) => fmtBRLCompact(Number(v))}
-                      tick={axTick}
-                      width={68}
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <Tooltip
-                      content={<ChartTooltip />}
-                      cursor={{ stroke: "oklch(0.546 0.225 264 / 20%)", strokeWidth: 1 }}
-                    />
-                    <Legend
-                      iconType="circle"
-                      iconSize={7}
-                      wrapperStyle={{ fontSize: 11, paddingTop: 8 }}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="bruto"
-                      name="Bruto"
-                      stroke={C.blue}
-                      strokeWidth={2.5}
-                      dot={{ r: 3, fill: C.blue, strokeWidth: 0 }}
-                      activeDot={{ r: 5, fill: C.blue, strokeWidth: 2, stroke: "#fff" }}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="liquido"
-                      name="Líquido"
-                      stroke={C.teal}
-                      strokeWidth={2.5}
-                      strokeDasharray="6 3"
-                      dot={{ r: 3, fill: C.teal, strokeWidth: 0 }}
-                      activeDot={{ r: 5, fill: C.teal, strokeWidth: 2, stroke: "#fff" }}
-                    />
+                    <XAxis dataKey="name" tick={axTick} tickLine={false} />
+                    <YAxis tickFormatter={(v) => fmtBRLCompact(Number(v))} tick={axTick} tickLine={false} />
+                    <Tooltip content={<WaterfallTooltip />} />
+                    <Bar dataKey="range" radius={[4, 4, 0, 0]}>
+                      {waterfallData.map((entry, idx) => (
+                        <Cell
+                          key={`cell-${idx}`}
+                          fill={entry.fill}
+                          onClick={() => {
+                            const mapping: Record<string, string> = {
+                              "ISS Retido": "ISS Retido",
+                              "IRRF": "IRRF",
+                              "CSLL": "CSLL",
+                              "PIS": "PIS",
+                              "COFINS": "COFINS"
+                            };
+                            const filterVal = mapping[entry.name] || "Todos";
+                            openDrillDown({
+                              title: `NFS-e - Filtro Tributário: ${entry.name}`,
+                              filter: { type: "tributo", value: filterVal }
+                            });
+                          }}
+                          className="cursor-pointer"
+                        />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </DashboardChartCard>
+          </div>
+
+        </div>
+      )}
+
+      {/* Drill Down Modal */}
+      {drillDown && (
+        <DrillDownModal
+          title={drillDown.title}
+          filter={drillDown.filter}
+          filteredDocs={filtrados}
+          cnpjGrupoSet={cnpjGrupoSet}
+          onClose={closeDrillDown}
+        />
+      )}
+
+      {/* Expanded Chart Overlay Modal */}
+      {expandedChart && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-background rounded-2xl w-full max-w-4xl p-6 relative border border-border shadow-2xl animate-in fade-in duration-200">
+            <button
+              onClick={() => setExpandedChart(null)}
+              className="absolute right-4 top-4 p-1.5 rounded-full hover:bg-muted text-slate-400 hover:text-slate-600 transition-colors"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <h3 className="text-base font-bold text-slate-800 mb-4 border-b border-border/50 pb-2">
+              Visualização Ampliada:{" "}
+              {expandedChart === "evolucao" && "Evolução Mensal do Faturamento"}
+              {expandedChart === "donut" && "Participação por Categoria"}
+              {expandedChart === "empresas" && "Faturamento por Empresa"}
+              {expandedChart === "tributos" && "Tributos Retidos por Empresa"}
+              {expandedChart === "waterfall" && "Waterfall do Faturamento Líquido"}
+            </h3>
+            
+            <div className="h-[400px] w-full flex items-center justify-center">
+              {expandedChart === "evolucao" && (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={evolutionData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={axGrid} />
+                    <XAxis dataKey="name" stroke="#94a3b8" />
+                    <YAxis tickFormatter={(v) => fmtBRL(Number(v))} stroke="#94a3b8" />
+                    <Tooltip content={<ChartTooltip />} />
+                    <Legend iconType="circle" />
+                    <Line type="monotone" dataKey="bruto" name="Bruto (Ano Corrente)" stroke={C.blue} strokeWidth={2.5} />
+                    <Line type="monotone" dataKey="brutoAnterior" name="Bruto (Ano Anterior)" stroke={C.muted} strokeWidth={1.5} strokeDasharray="4 4" />
+                    <Line type="monotone" dataKey="mediaMovel" name="Média Móvel (3m)" stroke={C.purple} strokeWidth={1.5} />
+                    <Brush dataKey="name" height={20} stroke={C.blue} />
                   </LineChart>
                 </ResponsiveContainer>
-              </div>
+              )}
 
-              {/* ── Chart 2: Evolução das Retenções (Área) ── */}
-              <div className="chart-card">
-                <SectionHeader
-                  title="Evolução das Retenções"
-                  subtitle="Valor retido por competência — últimos 12 meses"
-                  accentColor={C.amber}
-                />
-                <ResponsiveContainer width="100%" height={240}>
-                  <AreaChart
-                    data={evolutionData}
-                    onClick={(e) => {
-                      if (e?.activePayload?.[0]?.payload?.ym) {
-                        const ym = e.activePayload[0].payload.ym as string;
-                        const [y, m] = ym.split("-");
-                        openDrillDown({
-                          title: `Retenções — ${NOME_MES[m]}/${y}`,
-                          filter: { type: "competencia", value: `${m}/${y}` },
-                        });
-                      }
-                    }}
-                    margin={{ left: 0, right: 8, top: 8, bottom: 0 }}
-                  >
-                    <defs>
-                      <linearGradient id="gradRetido" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor={C.amber} stopOpacity={0.25} />
-                        <stop offset="100%" stopColor={C.amber} stopOpacity={0.02} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke={axGrid} vertical={false} />
-                    <XAxis dataKey="name" tick={axTick} axisLine={false} tickLine={false} />
-                    <YAxis
-                      tickFormatter={(v) => fmtBRLCompact(Number(v))}
-                      tick={axTick}
-                      width={68}
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <Tooltip
-                      content={
-                        <ChartTooltip
-                          formatter={(v: number, name: string) => {
-                            const bruto = evolutionData.find(d => d.retido === v)?.bruto;
-                            const pct = bruto && bruto > 0 ? ` (${fmtPct((v / bruto) * 100)} do bruto)` : "";
-                            return `${fmtBRL(v)}${pct}`;
-                          }}
-                        />
-                      }
-                      cursor={{ stroke: `${C.amber}40`, strokeWidth: 1 }}
-                    />
-                    <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
-                    <Area
-                      type="monotone"
-                      dataKey="retido"
-                      name="Retenções"
-                      stroke={C.amber}
-                      strokeWidth={2.5}
-                      fill="url(#gradRetido)"
-                      dot={{ r: 3, fill: C.amber, strokeWidth: 0 }}
-                      activeDot={{ r: 5, fill: C.amber, strokeWidth: 2, stroke: "#fff" }}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            {/* ════════════════════════════════════════════════
-                ROW 2 — Ranking de Empresas (full width)
-            ════════════════════════════════════════════════ */}
-            <div data-slide-id="ranking" className="chart-card">
-              <SectionHeader
-                title="Ranking de Empresas"
-                subtitle={`Top ${Math.min(rankingData.length, 10)} prestadores por faturamento bruto`}
-                accentColor={C.purple}
-                hint="Clique para filtrar"
-              />
-              {rankingData.length === 0 ? (
-                <div className="flex items-center justify-center h-40 text-sm text-muted-foreground">
-                  Nenhum dado disponível
+              {expandedChart === "donut" && (
+                <div className="flex items-center justify-center gap-12 w-full h-full max-w-2xl">
+                  <div className="relative w-[220px] h-[220px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={categoriesDistribution}
+                          innerRadius={70}
+                          outerRadius={95}
+                          paddingAngle={2.5}
+                          dataKey="value"
+                        >
+                          {categoriesDistribution.map((entry, idx) => (
+                            <Cell key={`cell-${idx}`} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip formatter={(v) => fmtBRL(Number(v))} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                      <span className="text-xs uppercase font-bold text-slate-400">Total</span>
+                      <span className="text-base font-bold text-slate-800 font-mono mt-0.5">{fmtBRL(totals.bruto)}</span>
+                    </div>
+                  </div>
+                  <div className="flex flex-col justify-center space-y-2 max-h-[300px] overflow-y-auto pl-6 border-l border-border">
+                    {categoriesDistribution.map((entry, idx) => (
+                      <div key={idx} className="flex items-center gap-10 justify-between text-xs font-semibold text-slate-500">
+                        <span className="flex items-center gap-2 truncate max-w-[150px]">
+                          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: entry.color }} />
+                          {entry.name}
+                        </span>
+                        <span className="font-mono text-slate-800">{fmtBRL(entry.value)} ({entry.pct.toFixed(1)}%)</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              ) : (
-                <ResponsiveContainer
-                  width="100%"
-                  height={Math.max(180, Math.min(rankingData.length * 40 + 40, 400))}
-                >
-                  <BarChart
-                    data={rankingData}
-                    layout="vertical"
-                    margin={{ left: 8, right: 80, top: 4, bottom: 4 }}
-                    onClick={(e) => {
-                      const cnpj = e?.activePayload?.[0]?.payload?.cnpj;
-                      if (cnpj) {
-                        // Click → set global empresa filter
-                        setEmpresaFiltro(cnpj === empresaFiltro ? "" : cnpj);
-                      }
-                    }}
-                  >
+              )}
+
+              {expandedChart === "empresas" && (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={rankingEmpresas} layout="vertical" margin={{ left: 40, right: 20, top: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke={axGrid} horizontal={false} />
-                    <XAxis
-                      type="number"
-                      tickFormatter={(v) => fmtBRLCompact(Number(v))}
-                      tick={axTick}
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <YAxis
-                      dataKey="nome"
-                      type="category"
-                      tick={{ fontSize: 11, fill: "oklch(0.51 0.046 257)" }}
-                      width={160}
-                      axisLine={false}
-                      tickLine={false}
-                      tickFormatter={(v: string) => v.length > 22 ? v.slice(0, 22) + "…" : v}
-                    />
-                    <Tooltip
-                      content={({ active, payload }) => {
-                        if (!active || !payload?.length) return null;
-                        const d = payload[0].payload;
-                        return (
-                          <div className="chart-tooltip">
-                            <div className="chart-tooltip-label">{d.nome}</div>
-                            <div className="text-[10px] text-muted-foreground font-mono mb-1">{fmtCnpj(d.cnpj)}</div>
-                            <div className="chart-tooltip-row">
-                              <span className="chart-tooltip-name">
-                                <span className="chart-tooltip-dot" style={{ background: C.purple }} />
-                                Faturamento Bruto
-                              </span>
-                              <span className="chart-tooltip-value">{fmtBRL(d.bruto)}</span>
-                            </div>
-                            <div className="chart-tooltip-row" style={{ marginTop: 6 }}>
-                              <span style={{ fontSize: 10, color: "var(--color-muted-foreground)" }}>
-                                Clique para {d.cnpj === empresaFiltro ? "remover filtro" : "filtrar"}
-                              </span>
-                            </div>
-                          </div>
-                        );
-                      }}
-                    />
-                    <Bar
-                      dataKey="bruto"
-                      name="Faturamento Bruto"
-                      radius={[0, 5, 5, 0]}
-                      className="cursor-pointer"
-                      label={{
-                        position: "right",
-                        formatter: (v: number) => fmtBRLCompact(v),
-                        fontSize: 10,
-                        fill: "oklch(0.51 0.046 257)",
-                      }}
-                    >
-                      {rankingData.map((entry, i) => (
-                        <Cell
-                          key={i}
-                          fill={entry.cnpj === empresaFiltro ? C.blue : `${C.purple}cc`}
-                          stroke={entry.cnpj === empresaFiltro ? C.blue : "none"}
-                          strokeWidth={entry.cnpj === empresaFiltro ? 2 : 0}
-                        />
+                    <XAxis type="number" stroke="#94a3b8" tickFormatter={(v) => fmtBRL(v)} />
+                    <YAxis type="category" dataKey="name" stroke="#94a3b8" width={100} />
+                    <Tooltip content={<ChartTooltip />} />
+                    <Bar dataKey="faturamento" name="Faturamento Bruto" fill={C.blue} radius={[0, 4, 4, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+
+              {expandedChart === "tributos" && (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={rankingEmpresas} layout="vertical" margin={{ left: 40, right: 20, top: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={axGrid} horizontal={false} />
+                    <XAxis type="number" stroke="#94a3b8" tickFormatter={(v) => fmtBRL(v)} />
+                    <YAxis type="category" dataKey="name" stroke="#94a3b8" width={100} />
+                    <Tooltip content={<ChartTooltip />} />
+                    <Bar dataKey="retido" name="Tributos Retidos" fill={C.orange} radius={[0, 4, 4, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+
+              {expandedChart === "waterfall" && (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={waterfallData} margin={{ top: 20, right: 20, left: 10, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={axGrid} vertical={false} />
+                    <XAxis dataKey="name" stroke="#94a3b8" />
+                    <YAxis tickFormatter={(v) => fmtBRL(Number(v))} stroke="#94a3b8" />
+                    <Tooltip content={<WaterfallTooltip />} />
+                    <Bar dataKey="range" radius={[4, 4, 0, 0]}>
+                      {waterfallData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.fill} />
                       ))}
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               )}
             </div>
-
-            {/* ════════════════════════════════════════════════
-                ROW 3 — Participação | IC×Externo | IC Participação
-            ════════════════════════════════════════════════ */}
-            <div data-slide-id="consolidado" className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-
-              {/* ── Chart 4: Participação no Consolidado (Rosca por empresa) ── */}
-              <div className="chart-card flex flex-col">
-                <SectionHeader
-                  title="Participação no Consolidado"
-                  subtitle="Por empresa prestadora"
-                  accentColor={C.teal}
-                  hint="Clique para drill-down"
-                />
-                {consolidadoData.length === 0 ? (
-                  <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground py-8">
-                    Nenhum dado
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center">
-                    <ResponsiveContainer width="100%" height={200}>
-                      <PieChart>
-                        <Pie
-                          data={consolidadoData}
-                          dataKey="bruto"
-                          nameKey="nome"
-                          innerRadius={56}
-                          outerRadius={82}
-                          paddingAngle={2}
-                          onClick={(entry) => {
-                            if (entry.cnpj && entry.cnpj !== "__outros__") {
-                              openDrillDown({
-                                title: `Consolidado — ${entry.nome}`,
-                                filter: { type: "prestador", cnpj: entry.cnpj },
-                              });
-                            }
-                          }}
-                        >
-                          {consolidadoData.map((entry, i) => (
-                            <Cell
-                              key={i}
-                              fill={entry.color}
-                              strokeWidth={0}
-                              className={entry.cnpj !== "__outros__" ? "cursor-pointer" : ""}
-                            />
-                          ))}
-                        </Pie>
-                        <Tooltip content={<PieTooltip />} />
-                        {consolidadoData.length > 0 && (
-                          <text
-                            x="50%"
-                            y="47%"
-                            textAnchor="middle"
-                            dominantBaseline="middle"
-                            fill="var(--color-foreground)"
-                            fontSize={13}
-                            fontWeight={700}
-                          >
-                            {fmtBRLCompact(totalBruto)}
-                          </text>
-                        )}
-                        {consolidadoData.length > 0 && (
-                          <text
-                            x="50%"
-                            y="58%"
-                            textAnchor="middle"
-                            dominantBaseline="middle"
-                            fill="var(--color-muted-foreground)"
-                            fontSize={9}
-                          >
-                            total
-                          </text>
-                        )}
-                      </PieChart>
-                    </ResponsiveContainer>
-                    {/* Legend */}
-                    <div className="w-full mt-1 space-y-1.5 px-1">
-                      {consolidadoData.map((d) => (
-                        <div
-                          key={d.nome}
-                          className={`flex items-center justify-between text-xs gap-2 rounded-lg px-2 py-1 transition-colors ${d.cnpj !== "__outros__" ? "hover:bg-muted/50 cursor-pointer" : ""}`}
-                          onClick={() => {
-                            if (d.cnpj && d.cnpj !== "__outros__") {
-                              openDrillDown({
-                                title: `Consolidado — ${d.nome}`,
-                                filter: { type: "prestador", cnpj: d.cnpj },
-                              });
-                            }
-                          }}
-                        >
-                          <span className="flex items-center gap-1.5 min-w-0">
-                            <span className="h-2 w-2 rounded-full shrink-0" style={{ background: d.color }} />
-                            <span className="truncate text-muted-foreground">{d.nome}</span>
-                          </span>
-                          <span className="font-semibold text-foreground shrink-0">{fmtPct(d.pct)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* ── Chart 5: Intercompany × Externo evolução (Grouped bars) ── */}
-              <div className="chart-card">
-                <SectionHeader
-                  title="Comparativo IC × Externo"
-                  subtitle="Evolução mensal — últimos 12 meses"
-                  accentColor={C.blue}
-                />
-                <ResponsiveContainer width="100%" height={240}>
-                  <BarChart
-                    data={icEvolucaoData}
-                    margin={{ left: 0, right: 4, top: 8, bottom: 0 }}
-                    onClick={(e) => {
-                      if (e?.activePayload?.[0]?.payload?.name) {
-                        const name = e.activePayload[0].payload.name as string;
-                        // Find ym for drill-down
-                        const entry = evolutionData.find(d => d.name === name);
-                        if (entry) {
-                          openDrillDown({
-                            title: `Comparativo — ${name}`,
-                            filter: { type: "competencia", value: `${entry.ym.split("-")[1]}/${entry.ym.split("-")[0]}` },
-                          });
-                        }
-                      }
-                    }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" stroke={axGrid} vertical={false} />
-                    <XAxis dataKey="name" tick={{ fontSize: 9, fill: "oklch(0.51 0.046 257)" }} axisLine={false} tickLine={false} />
-                    <YAxis
-                      tickFormatter={(v) => fmtBRLCompact(Number(v))}
-                      tick={{ fontSize: 9, fill: "oklch(0.51 0.046 257)" }}
-                      width={62}
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <Tooltip content={<ChartTooltip />} />
-                    <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: 10, paddingTop: 6 }} />
-                    <Bar dataKey="Externo" fill={`${C.teal}cc`} radius={[3, 3, 0, 0]} maxBarSize={18} className="cursor-pointer" />
-                    <Bar dataKey="Intercompany" fill={`${C.blue}cc`} radius={[3, 3, 0, 0]} maxBarSize={18} className="cursor-pointer" />
-                  </BarChart>
-                </ResponsiveContainer>
-                {/* Summary row */}
-                <div className="mt-3 grid grid-cols-2 gap-2 pt-3 border-t border-border">
-                  {[
-                    { label: "Externo", value: externoBruto, pct: totalBruto ? (externoBruto / totalBruto) * 100 : 0, color: C.teal },
-                    { label: "Intercompany", value: intercompanyBruto, pct: totalBruto ? (intercompanyBruto / totalBruto) * 100 : 0, color: C.blue },
-                  ].map((row) => (
-                    <div key={row.label} className="rounded-lg bg-muted/40 p-2.5">
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <span className="h-2 w-2 rounded-full" style={{ background: row.color }} />
-                        <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{row.label}</span>
-                      </div>
-                      <div className="text-sm font-bold text-foreground">{fmtBRLCompact(row.value)}</div>
-                      <div className="text-[10px] text-muted-foreground">{fmtPct(row.pct)} do total</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* ── Chart 6: Participação Intercompany (Rosca por empresa) ── */}
-              <div className="chart-card flex flex-col">
-                <SectionHeader
-                  title="Participação Intercompany"
-                  subtitle="Por empresa prestadora"
-                  accentColor={C.red}
-                  hint="Clique para drill-down"
-                />
-                {icParticipacaoData.length === 0 ? (
-                  <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground py-8">
-                    {cnpjGrupoSet.size === 0
-                      ? "Cadastre CNPJs do grupo em Configurações"
-                      : "Nenhuma operação intercompany"}
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center">
-                    <ResponsiveContainer width="100%" height={200}>
-                      <PieChart>
-                        <Pie
-                          data={icParticipacaoData}
-                          dataKey="bruto"
-                          nameKey="nome"
-                          innerRadius={56}
-                          outerRadius={82}
-                          paddingAngle={2}
-                          onClick={(entry) => {
-                            if (entry.cnpj && entry.cnpj !== "__outros__") {
-                              openDrillDown({
-                                title: `Intercompany — ${entry.nome}`,
-                                filter: { type: "prestador", cnpj: entry.cnpj },
-                              });
-                            }
-                          }}
-                        >
-                          {icParticipacaoData.map((entry, i) => (
-                            <Cell
-                              key={i}
-                              fill={entry.color}
-                              strokeWidth={0}
-                              className={entry.cnpj !== "__outros__" ? "cursor-pointer" : ""}
-                            />
-                          ))}
-                        </Pie>
-                        <Tooltip content={<PieTooltip />} />
-                      </PieChart>
-                    </ResponsiveContainer>
-                    {/* Legend */}
-                    <div className="w-full mt-1 space-y-1.5 px-1">
-                      {icParticipacaoData.map((d) => (
-                        <div
-                          key={d.nome}
-                          className={`flex items-center justify-between text-xs gap-2 rounded-lg px-2 py-1 transition-colors ${d.cnpj !== "__outros__" ? "hover:bg-muted/50 cursor-pointer" : ""}`}
-                          onClick={() => {
-                            if (d.cnpj && d.cnpj !== "__outros__") {
-                              openDrillDown({
-                                title: `Intercompany — ${d.nome}`,
-                                filter: { type: "prestador", cnpj: d.cnpj },
-                              });
-                            }
-                          }}
-                        >
-                          <span className="flex items-center gap-1.5 min-w-0">
-                            <span className="h-2 w-2 rounded-full shrink-0" style={{ background: d.color }} />
-                            <span className="truncate text-muted-foreground">{d.nome}</span>
-                          </span>
-                          <span className="font-semibold text-foreground shrink-0">{fmtPct(d.pct)}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="mt-2 pt-2 border-t border-border w-full text-center">
-                      <span className="text-[10px] text-muted-foreground">Total IC: </span>
-                      <span className="text-[11px] font-semibold text-foreground">{fmtBRLCompact(intercompanyBruto)}</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* ════════════════════════════════════════════════
-                ROW 4 — Análise por Serviço
-            ════════════════════════════════════════════════ */}
-            <div data-slide-id="service-analysis">
-            <ServiceAnalysis
-              filtrados={filtrados}
-              onServiceDrillDown={(serviceKey, serviceLabel) =>
-                openDrillDown({
-                  title: `Serviço — ${serviceLabel}`,
-                  filter: { type: "servico", serviceKey, serviceLabel },
-                })
-              }
-            />
-            </div>
-
-            {/* ── Footer note ── */}
-            <div className="flex items-center justify-between text-[11px] text-muted-foreground pb-2">
-              <span className="flex items-center gap-1.5">
-                <Building2 className="h-3.5 w-3.5" />
-                Intercompany = prestador e tomador ambos no grupo ({cnpjGrupoSet.size} CNPJ{cnpjGrupoSet.size !== 1 ? "s" : ""} cadastrado{cnpjGrupoSet.size !== 1 ? "s" : ""}).
-              </span>
-              <span className="flex items-center gap-1.5">
-                <FileText className="h-3.5 w-3.5" />
-                {ativos.length} nota{ativos.length !== 1 ? "s" : ""} ativa{ativos.length !== 1 ? "s" : ""} · {filtrados.length} total no recorte
-              </span>
-            </div>
-          </>
-        )}
-
-        {/* ── Drill-Down Modal ── */}
-        {drillDown && (
-          <DrillDownModal
-            title={drillDown.title}
-            filter={drillDown.filter}
-            filteredDocs={filtrados}
-            cnpjGrupoSet={cnpjGrupoSet}
-            onClose={closeDrillDown}
-          />
-        )}
-      </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

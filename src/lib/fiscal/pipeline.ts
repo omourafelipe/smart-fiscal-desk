@@ -1,4 +1,4 @@
-import { db, type FiscalDocument, type ImportAudit } from "@/lib/db";
+import { db, type FiscalDocument, type ImportAudit, type Empresa } from "@/lib/db";
 import { parseFiscalXml, buildHash } from "./parser";
 import { classifyDocument } from "./rulesEngine";
 
@@ -80,7 +80,13 @@ export async function importFiles(
   );
   const seenInBatch = new Set<string>();
   const toInsert: FiscalDocument[] = [];
-  const rules = await db.taxRules.toArray();
+  const rules = await db.classificationRules.toArray();
+
+  const empresasExistentes = await db.empresas.toArray();
+  const empresasAtualizadas = new Map<string, Empresa>();
+  for (const emp of empresasExistentes) {
+    empresasAtualizadas.set(emp.cnpj, emp);
+  }
 
   onProgress?.({ done: 0, total: all.length });
   const nowIso = new Date().toISOString();
@@ -102,14 +108,54 @@ export async function importFiles(
             summary.duplicadas++;
           } else {
             seenInBatch.add(hash);
+
+            const cnpjPrestador = parsed.nota.cnpj_prestador || "00000000000000";
+            const nomePrestador = parsed.nota.nome_prestador || "Empresa Não Identificada";
+
+            let emp = empresasAtualizadas.get(cnpjPrestador);
+            if (!emp) {
+              emp = {
+                cnpj: cnpjPrestador,
+                razao_social: nomePrestador,
+                municipio: parsed.nota.municipio || "",
+                primeira_importacao: nowIso,
+                ultima_importacao: nowIso,
+                quantidade_notas: 0,
+                valor_total: 0,
+                iss_total: 0,
+                irrf_total: 0,
+                pis_total: 0,
+                cofins_total: 0,
+                csll_total: 0,
+                ativo: true,
+                origem_cadastro: "XML"
+              };
+            }
+
+            emp.quantidade_notas += 1;
+            emp.valor_total += Number(parsed.nota.valor_bruto || 0);
+            emp.iss_total += Number(parsed.nota.vlr_iss || 0);
+            emp.irrf_total += Number(parsed.nota.vlr_irrf || 0);
+            emp.pis_total += Number(parsed.nota.vlr_pis || 0);
+            emp.cofins_total += Number(parsed.nota.vlr_cofins || 0);
+            emp.csll_total += Number(parsed.nota.vlr_csll || 0);
+            emp.ultima_importacao = nowIso;
+
+            empresasAtualizadas.set(cnpjPrestador, emp);
+
             const rawDoc: FiscalDocument = {
               ...parsed.nota,
               status_manual: "Ativo",
               origem_arquivo: arquivo,
               data_importacao: nowIso,
               hash_documento: hash,
+              empresa_cnpj: cnpjPrestador,
+              empresa_nome: emp.razao_social,
             };
+
+            // Classificação Dinâmica por Regras do Banco
             const classifiedDoc = classifyDocument(rawDoc, rules);
+
             toInsert.push(classifiedDoc);
             summary.importadas++;
           }
@@ -130,6 +176,10 @@ export async function importFiles(
   // Grava em lote (bulkPut sobrescreve por id_nota — mas só inserimos não-duplicadas por hash)
   if (toInsert.length > 0) {
     await db.documents.bulkPut(toInsert);
+    const empresasParaSalvar = Array.from(empresasAtualizadas.values());
+    if (empresasParaSalvar.length > 0) {
+      await db.empresas.bulkPut(empresasParaSalvar);
+    }
   }
 
   const audit: ImportAudit = {

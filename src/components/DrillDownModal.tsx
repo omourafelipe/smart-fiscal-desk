@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 import type { FiscalDocument } from "@/lib/db";
 import type { DrillDownFilter } from "@/store/useFiscalStore";
+import { exportToCsv } from "@/lib/export/exportCsv";
+import { exportToExcel } from "@/lib/export/exportExcel";
 
 /* ─── Helpers ─────────────────────────────────────────────────────── */
 
@@ -136,6 +138,20 @@ export function DrillDownModal({
           return !isIntercompany(d);
         case "servico":
           return docServiceKey(d) === filter.serviceKey;
+        case "cliente":
+          return d.cnpj_tomador === filter.cnpj || (d.nome_tomador || d.cnpj_tomador) === filter.value;
+        case "municipio":
+          return d.municipio === filter.value;
+        case "categoria_sintetica":
+          return (d.categoria_sintetica || d.categoria) === filter.value;
+        case "tributo": {
+          if (filter.value === "ISS Retido") return (d.vlr_iss_ret || 0) > 0;
+          if (filter.value === "IRRF") return (d.vlr_irrf || 0) > 0;
+          if (filter.value === "CSLL") return (d.vlr_csll || 0) > 0;
+          if (filter.value === "PIS") return (d.vlr_pis || 0) > 0;
+          if (filter.value === "COFINS") return (d.vlr_cofins || 0) > 0;
+          return d.valor_retido > 0;
+        }
         default:
           return true;
       }
@@ -318,6 +334,53 @@ export function DrillDownModal({
           <span className="text-xs text-muted-foreground whitespace-nowrap">
             {searched.length} nota(s)
           </span>
+          <div className="flex items-center gap-2 ml-auto">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                exportToCsv({
+                  docs: sorted,
+                  cnpjGrupoSet,
+                  filters: {
+                    periodo: title,
+                    empresa: "Drilldown",
+                    status: "Ativo",
+                    operacao: "Todas",
+                  }
+                });
+              }}
+              className="h-9 gap-1 text-xs"
+            >
+              Exportar CSV
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                exportToExcel({
+                  docs: sorted,
+                  cnpjGrupoSet,
+                  filters: {
+                    periodo: title,
+                    empresa: "Drilldown",
+                    status: "Ativo",
+                    operacao: "Todas",
+                  }
+                }, {
+                  bruto: summaryBruto,
+                  liquido: summaryLiquido,
+                  retido: summaryRetido,
+                  intercompany: sorted.filter(isIntercompany).reduce((s, d) => s + d.valor_bruto, 0),
+                  qtd: summaryQty,
+                  ticketMedio: summaryQty > 0 ? summaryBruto / summaryQty : 0
+                });
+              }}
+              className="h-9 gap-1 text-xs"
+            >
+              Exportar Excel
+            </Button>
+          </div>
         </div>
 
         {/* Table */}
