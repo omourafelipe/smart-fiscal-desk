@@ -55,12 +55,12 @@ export function Sidebar() {
     <aside className="exec-sidebar">
       {/* Logo / Brand */}
       <div className="exec-sidebar-logo">
-        <div className="exec-sidebar-logo-icon">
+        <div className="exec-sidebar-logo-icon gradient-bg neon-glow">
           <BarChart3 className="h-4 w-4 text-white" />
         </div>
         <div>
-          <div className="text-[13px] font-bold text-white leading-tight">Smart Fiscal</div>
-          <div className="text-[10px] font-medium" style={{ color: "oklch(0.55 0.04 255)" }}>Desk · Analytics</div>
+          <div className="text-[14px] font-extrabold text-white leading-tight tracking-wide">Smart Fiscal</div>
+          <div className="text-[10px] font-semibold text-indigo-400">Desk · Analytics</div>
         </div>
       </div>
 
@@ -73,11 +73,11 @@ export function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div className="exec-sidebar-footer">
-        <div className="text-[11px] font-medium" style={{ color: "oklch(0.45 0.03 255)" }}>
+      <div className="exec-sidebar-footer border-t border-white/5 pt-4">
+        <div className="text-[11px] font-semibold text-slate-400">
           Modo local · v2.0
         </div>
-        <div className="text-[10px] mt-0.5" style={{ color: "oklch(0.38 0.025 255)" }}>
+        <div className="text-[10px] mt-0.5 text-slate-500">
           Dados processados localmente
         </div>
       </div>

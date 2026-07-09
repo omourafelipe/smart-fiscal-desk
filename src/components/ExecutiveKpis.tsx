@@ -436,8 +436,8 @@ function ExecKpiCard({ def, value, prevValue, sparkData, onClick }: ExecKpiCardP
 
   return (
     <div
-      className={`bg-card border border-border/80 rounded-2xl p-5 shadow-sm flex flex-col justify-between transition-all duration-200 hover:scale-[1.01] hover:shadow-md cursor-pointer ${
-        onClick ? "hover:border-primary/40" : ""
+      className={`glass-panel border-border/30 rounded-3xl p-6 transition-all duration-300 hover:scale-[1.02] cursor-pointer neon-glow flex flex-col justify-between ${
+        onClick ? "hover:border-primary/50" : ""
       }`}
       onClick={onClick}
       role={onClick ? "button" : undefined}
@@ -445,17 +445,17 @@ function ExecKpiCard({ def, value, prevValue, sparkData, onClick }: ExecKpiCardP
     >
       {/* Top row */}
       <div className="flex items-center justify-between mb-3">
-        <div className="h-9 w-9 rounded-xl flex items-center justify-center" style={{ background: `${def.colorHex}10` }}>
-          <def.icon className="h-5 w-5" style={{ color: def.colorHex }} />
+        <div className="h-10 w-10 rounded-2xl flex items-center justify-center bg-primary/10 border border-primary/20">
+          <def.icon className="h-5 w-5 text-primary" />
         </div>
         <FormulaTooltip text={def.tooltip} />
       </div>
 
       {/* Label */}
-      <div className="text-xs text-slate-400 font-medium tracking-tight mb-1">{def.label}</div>
+      <div className="text-xs text-muted-foreground font-semibold tracking-wide uppercase mb-1">{def.label}</div>
 
       {/* Main value */}
-      <div className="text-2xl font-bold text-slate-800 tracking-tight mb-2">
+      <div className="text-3xl font-black text-foreground tracking-tight mb-2 gradient-text">
         {def.format(value)}
       </div>
 
@@ -464,10 +464,10 @@ function ExecKpiCard({ def, value, prevValue, sparkData, onClick }: ExecKpiCardP
         {hasPrev ? (
           <>
             <TrendBadge pct={pct} dir={dir} />
-            <span className="text-[10px] text-slate-400 font-medium">vs. anterior</span>
+            <span className="text-[10px] text-muted-foreground font-medium">vs. período ant.</span>
           </>
         ) : (
-          <span className="text-[10px] text-slate-400 font-medium">Sem comparativo</span>
+          <span className="text-[10px] text-muted-foreground font-medium">Sem comparativo</span>
         )}
       </div>
 
@@ -478,21 +478,21 @@ function ExecKpiCard({ def, value, prevValue, sparkData, onClick }: ExecKpiCardP
             <Line
               type="monotone"
               dataKey="value"
-              stroke={def.colorHex}
-              strokeWidth={1.5}
+              stroke="var(--color-primary)"
+              strokeWidth={2}
               dot={false}
-              activeDot={{ r: 3, fill: def.colorHex }}
+              activeDot={{ r: 4, fill: "var(--color-primary)" }}
             />
             <RechartTooltip
               content={<SparkTooltip format={def.format} />}
-              cursor={{ stroke: def.colorHex, strokeWidth: 1, strokeDasharray: "3 3" }}
+              cursor={{ stroke: "var(--color-primary)", strokeWidth: 1, strokeDasharray: "3 3" }}
             />
           </LineChart>
         </ResponsiveContainer>
       </div>
 
       {/* Bottom label */}
-      <div className="text-[9px] text-slate-400/80 font-medium text-right mt-1.5">
+      <div className="text-[9px] text-muted-foreground/80 font-medium text-right mt-1.5 uppercase tracking-wider">
         Histórico 12m
       </div>
     </div>

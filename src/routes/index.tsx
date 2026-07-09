@@ -136,11 +136,11 @@ function DashboardChartCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="exec-card group bg-card border border-border/80 rounded-2xl p-6 shadow-sm flex flex-col justify-between transition-transform duration-200 hover:scale-[1.01]">
+    <div className="glass-panel border border-border/30 rounded-3xl p-6 neon-glow flex flex-col justify-between transition-all duration-300 hover:scale-[1.01]">
       <div className="flex items-center justify-between border-b border-border/40 pb-3 mb-4">
         <div>
-          <h3 className="text-[15px] font-bold text-slate-800 tracking-tight">{title}</h3>
-          {subtitle && <p className="text-xs text-slate-400 mt-0.5">{subtitle}</p>}
+          <h3 className="text-[15px] font-black text-foreground tracking-tight">{title}</h3>
+          {subtitle && <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>}
         </div>
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
           {onExportCsv && (
