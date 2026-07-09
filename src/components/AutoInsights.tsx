@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import {
   TrendingUp, TrendingDown, AlertTriangle, Building2,
   Tag, Receipt, XCircle, ChevronDown, ChevronUp, Lightbulb,
-  Info,
+  Info, Users, UserMinus
 } from "lucide-react";
 import type { FiscalDocument } from "@/lib/db";
 
@@ -256,7 +256,73 @@ function computeInsights(
     });
   }
 
-  return insights;
+  /* 7 — Dependência Comercial / Concentração de Cliente */
+  const clientBruto: Record<string, number> = {};
+  activeDocs.forEach(d => {
+    const key = d.nome_tomador || d.cnpj_tomador || "Desconhecido";
+    clientBruto[key] = (clientBruto[key] || 0) + d.valor_bruto;
+  });
+  let maxClientName = "";
+  let maxClientVal = 0;
+  Object.entries(clientBruto).forEach(([name, val]) => {
+    if (val > maxClientVal) {
+      maxClientVal = val;
+      maxClientName = name;
+    }
+  });
+  const clientPct = totalBruto > 0 ? (maxClientVal / totalBruto) * 100 : 0;
+  if (clientPct > 40) {
+    insights.push({
+      id: "concentracao-cliente",
+      severity: clientPct > 60 ? "danger" : "warning",
+      icon: Users,
+      title: "Alta Dependência Comercial",
+      description: `O cliente "${maxClientName}" representa ${clientPct.toFixed(1)}% do faturamento total do período (${fmtBRLCompact(maxClientVal)}). Considere diversificar sua carteira de tomadores para mitigar riscos de receita.`,
+      value: `${clientPct.toFixed(1)}%`
+    });
+  }
+
+  /* 8 — Inconsistências Tributárias */
+  let taxIssues = 0;
+  activeDocs.forEach(d => {
+    const retVal = d.valor_retido || 0;
+    const retFlag = d.iss_retido;
+    if ((retFlag === "Sim" && retVal === 0) || (retFlag === "Não" && d.vlr_iss_ret && d.vlr_iss_ret > 0)) {
+      taxIssues++;
+    }
+  });
+  if (taxIssues > 0) {
+    insights.push({
+      id: "inconsistencia-tributaria-alert",
+      severity: "danger",
+      icon: AlertTriangle,
+      title: "Inconsistências Tributárias Detectadas",
+      description: `${taxIssues} nota(s) fiscal(is) possui(em) divergência entre a flag de ISS retido e o valor retido declarado no XML.`,
+      value: `${taxIssues} nota(s)`
+    });
+  }
+
+  /* 9 — Clientes Perdidos (Churn) */
+  const currentClients = new Set(activeDocs.map(d => d.cnpj_tomador || d.nome_tomador).filter(Boolean));
+  const prevClients = new Set(prevDocs.map(d => d.cnpj_tomador || d.nome_tomador).filter(Boolean));
+  const lost = Array.from(prevClients).filter(c => !currentClients.has(c)).length;
+  if (lost > 0 && prevClients.size > 0) {
+    const churnRate = (lost / prevClients.size) * 100;
+    if (churnRate > 15) {
+      insights.push({
+        id: "churn-clientes-alert",
+        severity: churnRate > 30 ? "danger" : "warning",
+        icon: UserMinus,
+        title: "Perda Acentuada de Clientes (Churn)",
+        description: `Foram perdidos ${lost} cliente(s) que faturaram no período anterior e não compraram no atual (Taxa de Churn: ${churnRate.toFixed(1)}%).`,
+        value: `${churnRate.toFixed(1)}%`
+      });
+    }
+  }
+
+  // Prioritize danger first, then warning, then success/info
+  const severityOrder: Record<Severity, number> = { danger: 0, warning: 1, success: 2, info: 3 };
+  return insights.sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity]);
 }
 
 /* ─── Severity Config ─────────────────────────────────────────────────── */

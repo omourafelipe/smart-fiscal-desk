@@ -21,6 +21,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { DrillDownModal } from "@/components/DrillDownModal";
 import { ExportMenu } from "@/components/ExportMenu";
 import { PresentationMode } from "@/components/PresentationMode";
+import { GlobalFilters } from "@/components/GlobalFilters";
+import { ExecutiveKpis } from "@/components/ExecutiveKpis";
+import { BiChartsDashboard } from "@/components/BiChartsDashboard";
+import { AutoInsights } from "@/components/AutoInsights";
 
 export const Route = createFileRoute("/")({
   component: Dashboard,
@@ -187,9 +191,15 @@ function Dashboard() {
     operacaoFiltro,
     clienteFiltro, setClienteFiltro,
     municipioFiltro, setMunicipioFiltro,
+    ufFiltro,
+    lc116Filtro,
+    nbsFiltro,
     codigoTributarioFiltro,
     tipoServicoFiltro, setTipoServicoFiltro,
+    retencaoFiltro,
     categoriaFiltro, setCategoriaFiltro,
+    valorMinFiltro,
+    valorMaxFiltro,
     resetFilters,
     drillDown,
     openDrillDown,
@@ -224,6 +234,14 @@ function Dashboard() {
     const m: Record<string, string> = {};
     (empresas ?? []).forEach((e) => {
       if (e.cnpj && e.razao_social) m[e.cnpj] = e.razao_social;
+    });
+    return m;
+  }, [empresas]);
+
+  const empresaUfMap = useMemo(() => {
+    const m: Record<string, string> = {};
+    (empresas ?? []).forEach((e) => {
+      if (e.cnpj && e.uf) m[e.cnpj] = e.uf;
     });
     return m;
   }, [empresas]);
@@ -274,20 +292,34 @@ function Dashboard() {
       if (clienteFiltro && (d.nome_tomador || d.cnpj_tomador) !== clienteFiltro) return false;
       if (municipioFiltro && d.municipio !== municipioFiltro) return false;
       
+      if (ufFiltro) {
+        const docUf = empresaUfMap[d.cnpj_prestador];
+        if (docUf !== ufFiltro) return false;
+      }
+      if (lc116Filtro && d.item_lista_servico !== lc116Filtro) return false;
+      if (nbsFiltro && d.codigo_nbs !== nbsFiltro) return false;
+      
+      if (retencaoFiltro === "Com Retenção" && (d.valor_retido || 0) <= 0) return false;
+      if (retencaoFiltro === "Sem Retenção" && (d.valor_retido || 0) > 0) return false;
+
+      if (valorMinFiltro && d.valor_bruto < parseFloat(valorMinFiltro)) return false;
+      if (valorMaxFiltro && d.valor_bruto > parseFloat(valorMaxFiltro)) return false;
+
       if (categoriaFiltro && (d.categoria_sintetica || d.categoria) !== categoriaFiltro) return false;
       if (tipoServicoFiltro && (d.tipo_servico || d.grupo) !== tipoServicoFiltro) return false;
       if (codigoTributarioFiltro && (d.item_lista_servico || d.codigo_servico) !== codigoTributarioFiltro) return false;
 
       return true;
     });
-  }, [docs, anoFiltro, mesFiltro, emissaoAnoFiltro, emissaoMesFiltro, empresaFiltro, statusFiltro, operacaoFiltro, clienteFiltro, municipioFiltro, categoriaFiltro, tipoServicoFiltro, codigoTributarioFiltro, cnpjGrupoSet]);
+  }, [docs, anoFiltro, mesFiltro, emissaoAnoFiltro, emissaoMesFiltro, empresaFiltro, statusFiltro, operacaoFiltro, clienteFiltro, municipioFiltro, ufFiltro, lc116Filtro, nbsFiltro, retencaoFiltro, valorMinFiltro, valorMaxFiltro, categoriaFiltro, tipoServicoFiltro, codigoTributarioFiltro, cnpjGrupoSet, empresaUfMap]);
 
   const hasActiveFilters = useMemo(() => {
     return !!(
       anoFiltro || mesFiltro || empresaFiltro || clienteFiltro ||
-      categoriaFiltro || tipoServicoFiltro || municipioFiltro
+      categoriaFiltro || tipoServicoFiltro || municipioFiltro || ufFiltro ||
+      lc116Filtro || nbsFiltro || retencaoFiltro !== "Todos" || valorMinFiltro || valorMaxFiltro
     );
-  }, [anoFiltro, mesFiltro, empresaFiltro, clienteFiltro, categoriaFiltro, tipoServicoFiltro, municipioFiltro]);
+  }, [anoFiltro, mesFiltro, empresaFiltro, clienteFiltro, categoriaFiltro, tipoServicoFiltro, municipioFiltro, ufFiltro, lc116Filtro, nbsFiltro, retencaoFiltro, valorMinFiltro, valorMaxFiltro]);
 
   // Overall totals for dashboard display
   const totals = useMemo(() => {
@@ -809,16 +841,6 @@ function Dashboard() {
               if (inputRef.current) inputRef.current.value = "";
             }}
           />
-
-          <Button
-            onClick={() => inputRef.current?.click()}
-            disabled={importing}
-            size="sm"
-            className="gap-1.5 h-9 bg-primary text-primary-foreground font-semibold text-xs rounded-xl"
-          >
-            {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-            Importar NFS-e
-          </Button>
         </div>
       </div>
 
@@ -843,108 +865,8 @@ function Dashboard() {
         </div>
       )}
 
-      {/* Superior Fixed Filter Bar */}
-      <div className="sticky top-0 z-40 bg-background/95 backdrop-blur-md border border-border/80 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3 shadow-sm">
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Select Empresa */}
-          <select
-            value={empresaFiltro || "todos"}
-            onChange={(e) => setEmpresaFiltro(e.target.value === "todos" ? "" : e.target.value)}
-            className="h-8 rounded-lg border border-input bg-background px-2.5 py-0.5 text-xs focus:ring-1 focus:ring-primary shadow-sm w-[150px]"
-          >
-            <option value="todos">Empresas: Todas</option>
-            {empresas?.map((g) => (
-              <option key={g.cnpj} value={g.cnpj}>{g.razao_social || g.cnpj}</option>
-            ))}
-          </select>
-
-          {/* Select Competência Ano */}
-          <select
-            value={anoFiltro || "todos"}
-            onChange={(e) => setAnoFiltro(e.target.value === "todos" ? "" : e.target.value)}
-            className="h-8 rounded-lg border border-input bg-background px-2.5 py-0.5 text-xs focus:ring-1 focus:ring-primary shadow-sm"
-          >
-            <option value="todos">Competência: Anos</option>
-            {filterOptions.anos.map((y) => (
-              <option key={y} value={y}>{y}</option>
-            ))}
-          </select>
-
-          {/* Select Competência Mês */}
-          <select
-            value={mesFiltro || "todos"}
-            onChange={(e) => setMesFiltro(e.target.value === "todos" ? "" : e.target.value)}
-            className="h-8 rounded-lg border border-input bg-background px-2.5 py-0.5 text-xs focus:ring-1 focus:ring-primary shadow-sm"
-          >
-            <option value="todos">Competência: Meses</option>
-            {MESES.map((m) => (
-              <option key={m.v} value={m.v}>{m.l}</option>
-            ))}
-          </select>
-
-          {/* Select Cliente */}
-          <select
-            value={clienteFiltro || "todos"}
-            onChange={(e) => setClienteFiltro(e.target.value === "todos" ? "" : e.target.value)}
-            className="h-8 rounded-lg border border-input bg-background px-2.5 py-0.5 text-xs focus:ring-1 focus:ring-primary shadow-sm w-[160px]"
-          >
-            <option value="todos">Clientes: Todos</option>
-            {filterOptions.clientes.map((c) => (
-              <option key={c} value={c}>{c.length > 20 ? c.slice(0, 20) + "..." : c}</option>
-            ))}
-          </select>
-
-          {/* Select Categoria */}
-          <select
-            value={categoriaFiltro || "todos"}
-            onChange={(e) => setCategoriaFiltro(e.target.value === "todos" ? "" : e.target.value)}
-            className="h-8 rounded-lg border border-input bg-background px-2.5 py-0.5 text-xs focus:ring-1 focus:ring-primary shadow-sm w-[150px]"
-          >
-            <option value="todos">Categorias: Todas</option>
-            {filterOptions.categorias.map((cat) => (
-              <option key={cat} value={cat}>{cat}</option>
-            ))}
-          </select>
-
-          {/* Select Tipo de Serviço */}
-          <select
-            value={tipoServicoFiltro || "todos"}
-            onChange={(e) => setTipoServicoFiltro(e.target.value === "todos" ? "" : e.target.value)}
-            className="h-8 rounded-lg border border-input bg-background px-2.5 py-0.5 text-xs focus:ring-1 focus:ring-primary shadow-sm w-[140px]"
-          >
-            <option value="todos">Tipos: Todos</option>
-            {filterOptions.tipos.map((t) => (
-              <option key={t} value={t}>{t}</option>
-            ))}
-          </select>
-
-          {/* Select Município */}
-          <select
-            value={municipioFiltro || "todos"}
-            onChange={(e) => setMunicipioFiltro(e.target.value === "todos" ? "" : e.target.value)}
-            className="h-8 rounded-lg border border-input bg-background px-2.5 py-0.5 text-xs focus:ring-1 focus:ring-primary shadow-sm w-[140px]"
-          >
-            <option value="todos">Cidades: Todas</option>
-            {filterOptions.municipios.map((mun) => (
-              <option key={mun} value={mun}>{mun}</option>
-            ))}
-          </select>
-        </div>
-
-        <div className="flex items-center gap-2">
-          {hasActiveFilters && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={resetFilters}
-              className="h-8 text-xs font-semibold rounded-xl text-slate-500 hover:text-slate-700"
-            >
-              <RefreshCw className="h-3 w-3 mr-1" />
-              Limpar Filtros
-            </Button>
-          )}
-        </div>
-      </div>
+      {/* Global Filters Panel */}
+      <GlobalFilters />
 
       {/* Drag & Drop Upload trigger */}
       {(importing || !hasData) && (
@@ -982,376 +904,57 @@ function Dashboard() {
 
       {hasData && !isLoading && (
         <div className="space-y-8">
+          {/* KPIs SECTION */}
+          <ExecutiveKpis
+            activeDocs={filtrados}
+            allDocs={docs ?? []}
+            filteredDocs={filtrados}
+            cnpjGrupoSet={cnpjGrupoSet}
+            onKpiClick={(kpiId) => {
+              const titleMap: Record<string, string> = {
+                bruto: "Receita Bruta",
+                liquido: "Receita Líquida",
+                "qtd-notas": "Número de NFS",
+                "ticket-medio": "Ticket Médio",
+                "clientes-ativos": "Clientes Ativos",
+                "novos-clientes": "Novos Clientes",
+                "clientes-perdidos": "Clientes Perdidos",
+                "crescimento-pct": "Crescimento %",
+                "iss-retido": "ISS Retido",
+                "tributos-totais": "Tributos Totais",
+                "margem-tributaria": "Margem Tributária",
+                "valor-medio-nota": "Valor Médio por Nota",
+              };
+              openDrillDown({
+                title: `Detalhamento - ${titleMap[kpiId] || kpiId}`,
+                filter: kpiId === "iss-retido"
+                  ? { type: "tributo", value: "ISS Retido" }
+                  : kpiId === "tributos-totais"
+                  ? { type: "tributo", value: "Todos" }
+                  : kpiId === "clientes-ativos"
+                  ? { type: "all" }
+                  : { type: "all" }
+              });
+            }}
+          />
 
-          {/* ────────────────────────────────────────────────────────────────
-              LINHA 1: KPIs PREMIUM (Altura máx. 100px)
-              ──────────────────────────────────────────────────────────────── */}
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
-            {[
-              {
-                title: "Faturamento Bruto",
-                value: fmtBRL(periodComparison?.cur.bruto ?? totals.bruto),
-                pct: periodComparison?.brutoPct,
-                hint: "Total bruto faturado.",
-                color: C.blue,
-                link: "/fiscal",
-              },
-              {
-                title: "Valor Líquido",
-                value: fmtBRL(periodComparison?.cur.liquido ?? totals.liquido),
-                pct: periodComparison?.liquidoPct,
-                hint: "Faturamento bruto deduzido das retenções.",
-                color: C.green,
-                link: "/fiscal",
-              },
-              {
-                title: "Tributos Retidos",
-                value: fmtBRL(periodComparison?.cur.retidos ?? totals.totalRetidos),
-                pct: periodComparison?.retidosPct,
-                hint: "Total retido em impostos.",
-                color: C.orange,
-                link: "/tributario",
-              },
-              {
-                title: "Quantidade NFS",
-                value: (periodComparison?.cur.count ?? totals.qtd).toLocaleString("pt-BR"),
-                pct: periodComparison?.countPct,
-                hint: "Total de NFS-e emitidas.",
-                color: C.purple,
-                link: "/notas",
-              },
-              {
-                title: "Ticket Médio",
-                value: fmtBRL(periodComparison?.cur.ticket ?? totals.ticket),
-                pct: periodComparison?.ticketPct,
-                hint: "Faturamento dividido pelas notas.",
-                color: C.secondary,
-                link: "/notas",
-              },
-              {
-                title: "Clientes",
-                value: `${periodComparison?.cur.clientes ?? totals.uniqueServicesCount} Tomadores`,
-                pct: periodComparison?.clientesPct,
-                hint: "Clientes ativos no período.",
-                color: C.secondary,
-                link: "/clientes",
-              },
-              {
-                title: "Empresas",
-                value: `${periodComparison?.cur.empresas ?? empresas?.length ?? 0} Emissores`,
-                pct: periodComparison?.empresasPct,
-                hint: "Empresas do grupo emissoras.",
-                color: C.secondary,
-                link: "/empresas",
-              },
-            ].map((kpi, idx) => {
-              const hasPct = kpi.pct !== undefined && !isNaN(kpi.pct);
-              const isGrowth = (kpi.pct ?? 0) >= 0;
-              return (
-                <Link
-                  key={idx}
-                  to={kpi.link}
-                  className="flex-1 snap-start bg-card border border-border/80 hover:border-slate-300 rounded-2xl p-4 shadow-sm relative overflow-hidden transition-all duration-200 hover:scale-[1.02] flex flex-col justify-between group max-h-[100px]"
-                  title={kpi.hint}
-                >
-                  <div className="flex items-center justify-between text-muted-foreground">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 truncate max-w-[120px]">
-                      {kpi.title}
-                    </span>
-                    <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ backgroundColor: kpi.color }} />
-                  </div>
-                  <div className="flex items-baseline justify-between mt-1">
-                    <span className="text-lg md:text-xl font-bold font-mono tracking-tight text-slate-800">
-                      {kpi.value}
-                    </span>
-                    {hasPct && (
-                      <span className={`text-[10px] font-bold flex items-center shrink-0 ml-1.5 ${isGrowth ? "text-emerald-600" : "text-rose-600"}`}>
-                        {isGrowth ? "+" : ""}{kpi.pct?.toFixed(1)}%
-                      </span>
-                    )}
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
+          {/* AUTO INSIGHTS */}
+          <AutoInsights
+            activeDocs={filtrados.filter(d => d.status_manual !== "Cancelado")}
+            allDocs={docs ?? []}
+            filteredDocs={filtrados}
+            cnpjGrupoSet={cnpjGrupoSet}
+            openDrillDown={openDrillDown}
+          />
 
-          {/* ────────────────────────────────────────────────────────────────
-              LINHA 2: 70% EVOLUÇÃO (LINHA) vs 30% PARTICIPAÇÃO (DONUT)
-              ──────────────────────────────────────────────────────────────── */}
-          <div className="grid grid-cols-1 lg:grid-cols-10 gap-6">
-            
-            {/* Gráfico 1: Evolução do Faturamento (70% - lg:col-span-7) */}
-            <div id="chart-evolucao-container" className="lg:col-span-7">
-              <DashboardChartCard
-                title="Evolução Mensal do Faturamento"
-                subtitle="Faturamento corrente vs ano anterior e média móvel consolidada de 3 meses"
-                onExportCsv={exportEvolutionCsv}
-                onExportPng={() => exportPng("chart-evolucao-container", "Evolução do Faturamento")}
-                onToggleFullScreen={() => setExpandedChart("evolucao")}
-              >
-                <div className="h-[220px] w-full mt-2 font-mono text-[9px] relative">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={evolutionData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke={axGrid} vertical={false} />
-                      <XAxis dataKey="name" tick={axTick} tickLine={false} axisLine={false} />
-                      <YAxis tickFormatter={(v) => fmtBRLCompact(Number(v))} tick={axTick} tickLine={false} axisLine={false} />
-                      <Tooltip content={<ChartTooltip />} />
-                      <Legend iconType="circle" wrapperStyle={{ fontSize: 10, paddingTop: 5 }} />
-                      <Line type="monotone" dataKey="bruto" name="Bruto (Ano Corrente)" stroke={C.blue} strokeWidth={2.5} dot={{ r: 2.5 }} activeDot={{ r: 4 }} />
-                      <Line type="monotone" dataKey="brutoAnterior" name="Bruto (Ano Anterior)" stroke={C.muted} strokeWidth={1.5} strokeDasharray="4 4" dot={false} />
-                      <Line type="monotone" dataKey="mediaMovel" name="Média Móvel (3m)" stroke={C.purple} strokeWidth={1.5} dot={false} />
-                      <Brush dataKey="name" height={18} stroke={C.blue} fill="transparent" />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              </DashboardChartCard>
-            </div>
-
-            {/* Gráfico 2: Participação das Categorias (30% - lg:col-span-3) */}
-            <div id="chart-donut-container" className="lg:col-span-3">
-              <DashboardChartCard
-                title="Participação por Categoria"
-                subtitle="Divisão percentual das receitas"
-                onExportCsv={exportDonutCsv}
-                onExportPng={() => exportPng("chart-donut-container", "Participação de Categorias")}
-                onToggleFullScreen={() => setExpandedChart("donut")}
-              >
-                <div className="flex items-center justify-between gap-4 w-full h-[220px] pr-2">
-                  {/* Donut slice */}
-                  <div className="relative w-[130px] h-[130px] flex items-center justify-center shrink-0">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={categoriesDistribution}
-                          innerRadius={45}
-                          outerRadius={60}
-                          paddingAngle={2.5}
-                          dataKey="value"
-                          onClick={(entry) => openDrillDown({ title: `NFS-e - Categoria: ${entry.name}`, filter: { type: "categoria_sintetica", value: entry.name } })}
-                        >
-                          {categoriesDistribution.map((entry, idx) => (
-                            <Cell key={`cell-${idx}`} fill={entry.color} />
-                          ))}
-                        </Pie>
-                        <Tooltip formatter={(v) => fmtBRL(Number(v))} />
-                      </PieChart>
-                    </ResponsiveContainer>
-                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                      <span className="text-[9px] uppercase font-bold text-slate-400">Total</span>
-                      <span className="text-xs font-bold text-slate-800 font-mono mt-0.5">{fmtBRLCompact(totals.bruto)}</span>
-                    </div>
-                  </div>
-
-                  {/* Legend side */}
-                  <div className="flex-1 flex flex-col justify-center space-y-1.5 overflow-y-auto max-h-[200px] pl-2 border-l border-border/40">
-                    {categoriesDistribution.slice(0, 4).map((entry, idx) => (
-                      <div key={idx} className="flex items-center justify-between text-[11px] font-medium text-slate-500">
-                        <span className="flex items-center gap-1.5 truncate max-w-[90px]" title={entry.name}>
-                          <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ backgroundColor: entry.color }} />
-                          {entry.name}
-                        </span>
-                        <span className="font-mono text-slate-800 shrink-0">{entry.pct.toFixed(0)}%</span>
-                      </div>
-                    ))}
-                    {categoriesDistribution.length > 4 && (
-                      <span className="text-[10px] text-slate-400 italic pl-3">
-                        +{categoriesDistribution.length - 4} categorias
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </DashboardChartCard>
-            </div>
-          </div>
-
-          {/* ────────────────────────────────────────────────────────────────
-              LINHA 3: 50% TOP CLIENTES vs 50% TOP CATEGORIAS (TABELAS)
-              ──────────────────────────────────────────────────────────────── */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            
-            {/* Tabela Top Clientes */}
-            <div className="bg-card border border-border/80 rounded-2xl p-6 shadow-sm flex flex-col justify-between transition-transform duration-200 hover:scale-[1.01]">
-              <div className="border-b border-border/40 pb-3 mb-4 flex items-center justify-between">
-                <div>
-                  <h3 className="text-[15px] font-bold text-slate-800 tracking-tight">Top Clientes tomadores</h3>
-                  <p className="text-xs text-slate-400 mt-0.5">Ranking dos 5 maiores parceiros comerciais</p>
-                </div>
-                <Badge variant="secondary" className="px-2 py-0.5 text-[9px] rounded-lg font-bold">Consolidado</Badge>
-              </div>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader className="bg-muted/30">
-                    <TableRow>
-                      <TableHead className="font-bold text-[9px] uppercase text-slate-400 h-8">Cliente / Tomador</TableHead>
-                      <TableHead className="font-bold text-[9px] uppercase text-slate-400 text-right h-8">Valor Faturado</TableHead>
-                      <TableHead className="font-bold text-[9px] uppercase text-slate-400 text-center h-8">Part. %</TableHead>
-                      <TableHead className="font-bold text-[9px] uppercase text-slate-400 text-center h-8">Notas</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {rankingClientes.slice(0, 5).map((c, idx) => {
-                      const clientNotes = filtrados.filter(d => d.cnpj_tomador === c.cnpj || d.nome_tomador === c.name);
-                      const count = clientNotes.length;
-                      const pct = totals.bruto > 0 ? (c.value / totals.bruto) * 100 : 0;
-                      return (
-                        <TableRow
-                          key={idx}
-                          className="hover:bg-muted/10 cursor-pointer h-10 border-b border-border/40"
-                          onClick={() => openDrillDown({ title: `NFS-e - Cliente: ${c.name}`, filter: { type: "cliente", value: c.name, cnpj: c.cnpj } })}
-                        >
-                          <TableCell className="font-semibold text-xs text-slate-700 truncate max-w-[160px] py-2" title={c.name}>
-                            {c.name}
-                          </TableCell>
-                          <TableCell className="text-right font-mono font-medium text-xs py-2">{fmtBRL(c.value)}</TableCell>
-                          <TableCell className="text-center font-mono text-xs text-slate-500 py-2">{pct.toFixed(1)}%</TableCell>
-                          <TableCell className="text-center font-mono text-xs text-slate-400 py-2">{count}</TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
-            </div>
-
-            {/* Tabela Top Categorias */}
-            <div className="bg-card border border-border/80 rounded-2xl p-6 shadow-sm flex flex-col justify-between transition-transform duration-200 hover:scale-[1.01]">
-              <div className="border-b border-border/40 pb-3 mb-4 flex items-center justify-between">
-                <div>
-                  <h3 className="text-[15px] font-bold text-slate-800 tracking-tight">Top Categorias de Serviço</h3>
-                  <p className="text-xs text-slate-400 mt-0.5">Ranking por categoria sintética de NFS-e</p>
-                </div>
-                <Badge variant="secondary" className="px-2 py-0.5 text-[9px] rounded-lg font-bold">Classificado</Badge>
-              </div>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader className="bg-muted/30">
-                    <TableRow>
-                      <TableHead className="font-bold text-[9px] uppercase text-slate-400 h-8">Categoria</TableHead>
-                      <TableHead className="font-bold text-[9px] uppercase text-slate-400 text-right h-8">Valor Faturado</TableHead>
-                      <TableHead className="font-bold text-[9px] uppercase text-slate-400 text-center h-8">Part. %</TableHead>
-                      <TableHead className="font-bold text-[9px] uppercase text-slate-400 text-center h-8">Notas</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {categoriesDistribution.slice(0, 5).map((cat, idx) => (
-                      <TableRow
-                        key={idx}
-                        className="hover:bg-muted/10 cursor-pointer h-10 border-b border-border/40"
-                        onClick={() => openDrillDown({ title: `NFS-e - Categoria: ${cat.name}`, filter: { type: "categoria_sintetica", value: cat.name } })}
-                      >
-                        <TableCell className="font-semibold text-xs text-slate-700 truncate max-w-[160px] py-2" title={cat.name}>
-                          {cat.name}
-                        </TableCell>
-                        <TableCell className="text-right font-mono font-medium text-xs py-2">{fmtBRL(cat.value)}</TableCell>
-                        <TableCell className="text-center font-mono text-xs text-slate-500 py-2">{cat.pct.toFixed(1)}%</TableCell>
-                        <TableCell className="text-center font-mono text-xs text-slate-400 py-2">{cat.count}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </div>
-          </div>
-
-          {/* ────────────────────────────────────────────────────────────────
-              LINHA 4: 50% FATURAMENTO POR EMPRESA vs 50% TRIBUTOS RETIDOS
-              ──────────────────────────────────────────────────────────────── */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            
-            {/* Gráfico 3: Faturamento por Empresa (Col: 50%) */}
-            <div id="chart-empresas-container">
-              <DashboardChartCard
-                title="Faturamento por Empresa"
-                subtitle="Faturamento bruto por CNPJ emissor"
-                onExportCsv={exportCompaniesCsv}
-                onExportPng={() => exportPng("chart-empresas-container", "Faturamento por Empresa")}
-                onToggleFullScreen={() => setExpandedChart("empresas")}
-              >
-                <div className="h-[220px] w-full mt-2 font-mono text-[9px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={rankingEmpresas} layout="vertical" margin={{ left: 20, right: 10, top: 0, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke={axGrid} horizontal={false} />
-                      <XAxis type="number" tick={axTick} tickFormatter={(v) => fmtBRLCompact(v)} />
-                      <YAxis type="category" dataKey="name" tick={axTick} width={90} />
-                      <Tooltip content={<ChartTooltip />} />
-                      <Bar dataKey="faturamento" name="Faturamento Bruto" fill={C.blue} radius={[0, 4, 4, 0]} onClick={(data) => openDrillDown({ title: `NFS-e - Empresa: ${data.name}`, filter: { type: "prestador", cnpj: data.cnpj } })} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </DashboardChartCard>
-            </div>
-
-            {/* Gráfico 4: Tributos Retidos por Empresa (Col: 50%) */}
-            <div id="chart-tributos-container">
-              <DashboardChartCard
-                title="Tributos Retidos por Empresa"
-                subtitle="Custos de retenção tributária consolidada por emissor"
-                onExportCsv={exportCompaniesCsv} // utiliza mesma planilha de faturamentos/tributos
-                onExportPng={() => exportPng("chart-tributos-container", "Tributos Retidos por Empresa")}
-                onToggleFullScreen={() => setExpandedChart("tributos")}
-              >
-                <div className="h-[220px] w-full mt-2 font-mono text-[9px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={rankingEmpresas} layout="vertical" margin={{ left: 20, right: 10, top: 0, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke={axGrid} horizontal={false} />
-                      <XAxis type="number" tick={axTick} tickFormatter={(v) => fmtBRLCompact(v)} />
-                      <YAxis type="category" dataKey="name" tick={axTick} width={90} />
-                      <Tooltip content={<ChartTooltip />} />
-                      <Bar dataKey="retido" name="Tributos Retidos" fill={C.orange} radius={[0, 4, 4, 0]} onClick={(data) => openDrillDown({ title: `NFS-e - Empresa: ${data.name}`, filter: { type: "prestador", cnpj: data.cnpj } })} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </DashboardChartCard>
-            </div>
-          </div>
-
-          {/* ────────────────────────────────────────────────────────────────
-              LINHA 5: GRÁFICO CASCATA (WATERFALL) (LARGURA TOTAL 100%)
-              ──────────────────────────────────────────────────────────────── */}
-          <div id="chart-waterfall-container">
-            <DashboardChartCard
-              title="Waterfall do Faturamento Líquido"
-              subtitle="Demonstrativo de deduções retidas na fonte (ISS, IRRF, CSLL, PIS, COFINS) do faturamento bruto ao líquido"
-              onExportCsv={exportWaterfallCsv}
-              onExportPng={() => exportPng("chart-waterfall-container", "Waterfall de Faturamento")}
-              onToggleFullScreen={() => setExpandedChart("waterfall")}
-            >
-              <div className="h-[260px] w-full mt-2 font-mono text-[9px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={waterfallData} margin={{ top: 20, right: 20, left: 10, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={axGrid} vertical={false} />
-                    <XAxis dataKey="name" tick={axTick} tickLine={false} />
-                    <YAxis tickFormatter={(v) => fmtBRLCompact(Number(v))} tick={axTick} tickLine={false} />
-                    <Tooltip content={<WaterfallTooltip />} />
-                    <Bar dataKey="range" radius={[4, 4, 0, 0]}>
-                      {waterfallData.map((entry, idx) => (
-                        <Cell
-                          key={`cell-${idx}`}
-                          fill={entry.fill}
-                          onClick={() => {
-                            const mapping: Record<string, string> = {
-                              "ISS Retido": "ISS Retido",
-                              "IRRF": "IRRF",
-                              "CSLL": "CSLL",
-                              "PIS": "PIS",
-                              "COFINS": "COFINS"
-                            };
-                            const filterVal = mapping[entry.name] || "Todos";
-                            openDrillDown({
-                              title: `NFS-e - Filtro Tributário: ${entry.name}`,
-                              filter: { type: "tributo", value: filterVal }
-                            });
-                          }}
-                          className="cursor-pointer"
-                        />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </DashboardChartCard>
-          </div>
-
+          {/* BI CHARTS AND ANALYTICS PANEL */}
+          <BiChartsDashboard
+            filtrados={filtrados}
+            allDocs={docs ?? []}
+            empresas={empresas ?? []}
+            cnpjGrupoSet={cnpjGrupoSet}
+            openDrillDown={openDrillDown}
+          />
         </div>
       )}
 
@@ -1364,124 +967,6 @@ function Dashboard() {
           cnpjGrupoSet={cnpjGrupoSet}
           onClose={closeDrillDown}
         />
-      )}
-
-      {/* Expanded Chart Overlay Modal */}
-      {expandedChart && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-background rounded-2xl w-full max-w-4xl p-6 relative border border-border shadow-2xl animate-in fade-in duration-200">
-            <button
-              onClick={() => setExpandedChart(null)}
-              className="absolute right-4 top-4 p-1.5 rounded-full hover:bg-muted text-slate-400 hover:text-slate-600 transition-colors"
-            >
-              <X className="h-5 w-5" />
-            </button>
-            <h3 className="text-base font-bold text-slate-800 mb-4 border-b border-border/50 pb-2">
-              Visualização Ampliada:{" "}
-              {expandedChart === "evolucao" && "Evolução Mensal do Faturamento"}
-              {expandedChart === "donut" && "Participação por Categoria"}
-              {expandedChart === "empresas" && "Faturamento por Empresa"}
-              {expandedChart === "tributos" && "Tributos Retidos por Empresa"}
-              {expandedChart === "waterfall" && "Waterfall do Faturamento Líquido"}
-            </h3>
-            
-            <div className="h-[400px] w-full flex items-center justify-center">
-              {expandedChart === "evolucao" && (
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={evolutionData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={axGrid} />
-                    <XAxis dataKey="name" stroke="#94a3b8" />
-                    <YAxis tickFormatter={(v) => fmtBRL(Number(v))} stroke="#94a3b8" />
-                    <Tooltip content={<ChartTooltip />} />
-                    <Legend iconType="circle" />
-                    <Line type="monotone" dataKey="bruto" name="Bruto (Ano Corrente)" stroke={C.blue} strokeWidth={2.5} />
-                    <Line type="monotone" dataKey="brutoAnterior" name="Bruto (Ano Anterior)" stroke={C.muted} strokeWidth={1.5} strokeDasharray="4 4" />
-                    <Line type="monotone" dataKey="mediaMovel" name="Média Móvel (3m)" stroke={C.purple} strokeWidth={1.5} />
-                    <Brush dataKey="name" height={20} stroke={C.blue} />
-                  </LineChart>
-                </ResponsiveContainer>
-              )}
-
-              {expandedChart === "donut" && (
-                <div className="flex items-center justify-center gap-12 w-full h-full max-w-2xl">
-                  <div className="relative w-[220px] h-[220px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={categoriesDistribution}
-                          innerRadius={70}
-                          outerRadius={95}
-                          paddingAngle={2.5}
-                          dataKey="value"
-                        >
-                          {categoriesDistribution.map((entry, idx) => (
-                            <Cell key={`cell-${idx}`} fill={entry.color} />
-                          ))}
-                        </Pie>
-                        <Tooltip formatter={(v) => fmtBRL(Number(v))} />
-                      </PieChart>
-                    </ResponsiveContainer>
-                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                      <span className="text-xs uppercase font-bold text-slate-400">Total</span>
-                      <span className="text-base font-bold text-slate-800 font-mono mt-0.5">{fmtBRL(totals.bruto)}</span>
-                    </div>
-                  </div>
-                  <div className="flex flex-col justify-center space-y-2 max-h-[300px] overflow-y-auto pl-6 border-l border-border">
-                    {categoriesDistribution.map((entry, idx) => (
-                      <div key={idx} className="flex items-center gap-10 justify-between text-xs font-semibold text-slate-500">
-                        <span className="flex items-center gap-2 truncate max-w-[150px]">
-                          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: entry.color }} />
-                          {entry.name}
-                        </span>
-                        <span className="font-mono text-slate-800">{fmtBRL(entry.value)} ({entry.pct.toFixed(1)}%)</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {expandedChart === "empresas" && (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={rankingEmpresas} layout="vertical" margin={{ left: 40, right: 20, top: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={axGrid} horizontal={false} />
-                    <XAxis type="number" stroke="#94a3b8" tickFormatter={(v) => fmtBRL(v)} />
-                    <YAxis type="category" dataKey="name" stroke="#94a3b8" width={100} />
-                    <Tooltip content={<ChartTooltip />} />
-                    <Bar dataKey="faturamento" name="Faturamento Bruto" fill={C.blue} radius={[0, 4, 4, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-
-              {expandedChart === "tributos" && (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={rankingEmpresas} layout="vertical" margin={{ left: 40, right: 20, top: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={axGrid} horizontal={false} />
-                    <XAxis type="number" stroke="#94a3b8" tickFormatter={(v) => fmtBRL(v)} />
-                    <YAxis type="category" dataKey="name" stroke="#94a3b8" width={100} />
-                    <Tooltip content={<ChartTooltip />} />
-                    <Bar dataKey="retido" name="Tributos Retidos" fill={C.orange} radius={[0, 4, 4, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-
-              {expandedChart === "waterfall" && (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={waterfallData} margin={{ top: 20, right: 20, left: 10, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={axGrid} vertical={false} />
-                    <XAxis dataKey="name" stroke="#94a3b8" />
-                    <YAxis tickFormatter={(v) => fmtBRL(Number(v))} stroke="#94a3b8" />
-                    <Tooltip content={<WaterfallTooltip />} />
-                    <Bar dataKey="range" radius={[4, 4, 0, 0]}>
-                      {waterfallData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.fill} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-          </div>
-        </div>
       )}
     </div>
   );

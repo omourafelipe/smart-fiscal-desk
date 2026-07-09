@@ -46,11 +46,16 @@ interface FiscalState {
   operacaoFiltro: "Todas" | "Externas" | "Intercompany";
   clienteFiltro: string;
   municipioFiltro: string;
+  ufFiltro: string;
+  lc116Filtro: string;
+  nbsFiltro: string;
   codigoTributarioFiltro: string;
   tipoServicoFiltro: string;
   retencaoFiltro: "Todos" | "Com Retenção" | "Sem Retenção";
   categoriaFiltro: string;
   grupoFiltro: string;
+  valorMinFiltro: string;
+  valorMaxFiltro: string;
 
   setMesFiltro: (m: string) => void;
   setAnoFiltro: (a: string) => void;
@@ -61,11 +66,16 @@ interface FiscalState {
   setOperacaoFiltro: (o: "Todas" | "Externas" | "Intercompany") => void;
   setClienteFiltro: (c: string) => void;
   setMunicipioFiltro: (m: string) => void;
+  setUfFiltro: (u: string) => void;
+  setLc116Filtro: (l: string) => void;
+  setNbsFiltro: (n: string) => void;
   setCodigoTributarioFiltro: (c: string) => void;
   setTipoServicoFiltro: (t: string) => void;
   setRetencaoFiltro: (r: "Todos" | "Com Retenção" | "Sem Retenção") => void;
   setCategoriaFiltro: (c: string) => void;
   setGrupoFiltro: (g: string) => void;
+  setValorMinFiltro: (v: string) => void;
+  setValorMaxFiltro: (v: string) => void;
   resetFilters: () => void;
 
   /* ── Saved Filters ── */
@@ -95,11 +105,16 @@ const DEFAULT_FILTERS = {
   operacaoFiltro: "Todas" as const,
   clienteFiltro: "",
   municipioFiltro: "",
+  ufFiltro: "",
+  lc116Filtro: "",
+  nbsFiltro: "",
   codigoTributarioFiltro: "",
   tipoServicoFiltro: "",
   retencaoFiltro: "Todos" as const,
   categoriaFiltro: "",
   grupoFiltro: "",
+  valorMinFiltro: "",
+  valorMaxFiltro: "",
 };
 
 export const useFiscalStore = create<FiscalState>()(
@@ -120,11 +135,16 @@ export const useFiscalStore = create<FiscalState>()(
         setOperacaoFiltro: (o) => set({ operacaoFiltro: o }),
         setClienteFiltro: (c) => set({ clienteFiltro: c }),
         setMunicipioFiltro: (m) => set({ municipioFiltro: m }),
+        setUfFiltro: (u) => set({ ufFiltro: u }),
+        setLc116Filtro: (l) => set({ lc116Filtro: l }),
+        setNbsFiltro: (n) => set({ nbsFiltro: n }),
         setCodigoTributarioFiltro: (c) => set({ codigoTributarioFiltro: c }),
         setTipoServicoFiltro: (t) => set({ tipoServicoFiltro: t }),
         setRetencaoFiltro: (r) => set({ retencaoFiltro: r }),
         setCategoriaFiltro: (c) => set({ categoriaFiltro: c }),
         setGrupoFiltro: (g) => set({ grupoFiltro: g }),
+        setValorMinFiltro: (v) => set({ valorMinFiltro: v }),
+        setValorMaxFiltro: (v) => set({ valorMaxFiltro: v }),
         resetFilters: () => set(DEFAULT_FILTERS),
 
         /* ── Saved Filters ── */
@@ -184,11 +204,16 @@ export const useFiscalStore = create<FiscalState>()(
           operacaoFiltro: state.operacaoFiltro,
           clienteFiltro: state.clienteFiltro,
           municipioFiltro: state.municipioFiltro,
+          ufFiltro: state.ufFiltro,
+          lc116Filtro: state.lc116Filtro,
+          nbsFiltro: state.nbsFiltro,
           codigoTributarioFiltro: state.codigoTributarioFiltro,
           tipoServicoFiltro: state.tipoServicoFiltro,
           retencaoFiltro: state.retencaoFiltro,
           categoriaFiltro: state.categoriaFiltro,
           grupoFiltro: state.grupoFiltro,
+          valorMinFiltro: state.valorMinFiltro,
+          valorMaxFiltro: state.valorMaxFiltro,
           savedFilters: state.savedFilters,
         }),
       }

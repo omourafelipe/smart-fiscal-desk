@@ -231,6 +231,54 @@ export function GlobalFilters() {
             </Select>
           </div>
 
+          {/* UF do Prestador */}
+          <div className="space-y-1">
+            <label className="text-[9px] font-semibold text-muted-foreground uppercase">UF Prestadora</label>
+            <Select value={ufFiltro || "__all__"} onValueChange={(v) => setUfFiltro(v === "__all__" ? "" : v)}>
+              <SelectTrigger className="w-full h-8 text-xs bg-background">
+                <SelectValue placeholder="UF" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">Todas as UFs</SelectItem>
+                {Array.from(new Set(empresas?.map((e) => e.uf).filter(Boolean) || [])).sort().map((uf) => (
+                  <SelectItem key={uf} value={uf}>{uf}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* LC 116 */}
+          <div className="space-y-1">
+            <label className="text-[9px] font-semibold text-muted-foreground uppercase">LC 116</label>
+            <Select value={lc116Filtro || "__all__"} onValueChange={(v) => setLc116Filtro(v === "__all__" ? "" : v)}>
+              <SelectTrigger className="w-full h-8 text-xs bg-background">
+                <SelectValue placeholder="LC 116" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">Todas as LCs</SelectItem>
+                {Array.from(new Set(docs?.map((d) => d.item_lista_servico).filter(Boolean) || [])).sort().map((lc) => (
+                  <SelectItem key={lc} value={lc}>{lc}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* NBS */}
+          <div className="space-y-1">
+            <label className="text-[9px] font-semibold text-muted-foreground uppercase">NBS</label>
+            <Select value={nbsFiltro || "__all__"} onValueChange={(v) => setNbsFiltro(v === "__all__" ? "" : v)}>
+              <SelectTrigger className="w-full h-8 text-xs bg-background">
+                <SelectValue placeholder="NBS" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">Todas as NBSs</SelectItem>
+                {Array.from(new Set(docs?.map((d) => d.codigo_nbs).filter(Boolean) || [])).sort().map((nbs) => (
+                  <SelectItem key={nbs} value={nbs}>{nbs}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           {/* Município */}
           <div className="space-y-1">
             <label className="text-[9px] font-semibold text-muted-foreground uppercase">Município</label>
@@ -301,6 +349,21 @@ export function GlobalFilters() {
             </Select>
           </div>
 
+          {/* Retenções */}
+          <div className="space-y-1">
+            <label className="text-[9px] font-semibold text-muted-foreground uppercase">Retenções</label>
+            <Select value={retencaoFiltro} onValueChange={(v) => setRetencaoFiltro(v as any)}>
+              <SelectTrigger className="w-full h-8 text-xs bg-background">
+                <SelectValue placeholder="Retenções" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Todos">Todos</SelectItem>
+                <SelectItem value="Com Retenção">Com Retenção</SelectItem>
+                <SelectItem value="Sem Retenção">Sem Retenção</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
           {/* Situação da NFS-e */}
           <div className="space-y-1">
             <label className="text-[9px] font-semibold text-muted-foreground uppercase">Situação da NFS-e</label>
@@ -314,6 +377,30 @@ export function GlobalFilters() {
                 <SelectItem value="Cancelado">Canceladas</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+
+          {/* Faixa de Valor: Mínimo */}
+          <div className="space-y-1">
+            <label className="text-[9px] font-semibold text-muted-foreground uppercase">Valor Mínimo (R$)</label>
+            <input
+              type="number"
+              placeholder="Ex: 1000"
+              value={valorMinFiltro}
+              onChange={(e) => setValorMinFiltro(e.target.value)}
+              className="w-full h-8 px-2 border border-input bg-background rounded-md text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            />
+          </div>
+
+          {/* Faixa de Valor: Máximo */}
+          <div className="space-y-1">
+            <label className="text-[9px] font-semibold text-muted-foreground uppercase">Valor Máximo (R$)</label>
+            <input
+              type="number"
+              placeholder="Ex: 50000"
+              value={valorMaxFiltro}
+              onChange={(e) => setValorMaxFiltro(e.target.value)}
+              className="w-full h-8 px-2 border border-input bg-background rounded-md text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            />
           </div>
         </div>
       )}

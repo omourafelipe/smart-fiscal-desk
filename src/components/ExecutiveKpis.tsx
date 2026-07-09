@@ -1,10 +1,11 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   LineChart, Line, ResponsiveContainer, Tooltip as RechartTooltip,
 } from "recharts";
 import {
   TrendingUp, TrendingDown, Coins, Building2,
   Hash, Receipt, Info, ArrowUpRight, ArrowDownRight, Minus,
+  Users, UserPlus, UserMinus, Percent, Landmark, BarChart3
 } from "lucide-react";
 import type { FiscalDocument } from "@/lib/db";
 
@@ -23,17 +24,11 @@ const fmtPct = (n: number) =>
 
 /* ─── Helpers ─────────────────────────────────────────────────── */
 function getYearMonth(doc: FiscalDocument): string {
-  // returns "YYYY-MM"
   return doc.data_competencia?.slice(0, 7) ?? "";
 }
 
-/**
- * Build the last 12 calendar months (YYYY-MM) ending at the most-recent month
- * present in the data (or current month if no data).
- */
 function last12Months(docs: FiscalDocument[]): string[] {
   const months: string[] = [];
-  // find the latest month in docs
   const latest = docs.reduce((acc: string, d) => {
     const ym = getYearMonth(d);
     return ym > acc ? ym : acc;
@@ -53,9 +48,19 @@ function last12Months(docs: FiscalDocument[]): string[] {
   return months;
 }
 
+function getClientesAtivos(docs: FiscalDocument[]): Set<string> {
+  const clients = new Set<string>();
+  docs.forEach((d) => {
+    if (d.status_manual !== "Cancelado") {
+      const c = d.cnpj_tomador || d.nome_tomador;
+      if (c) clients.add(c);
+    }
+  });
+  return clients;
+}
+
 /* ─── Types ───────────────────────────────────────────────────── */
 interface SparkPoint { month: string; value: number }
-
 type TrendDir = "up" | "down" | "flat";
 
 interface KpiDef {
@@ -64,7 +69,7 @@ interface KpiDef {
   icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
   color: string;
   colorHex: string;
-  getValue: (docs: FiscalDocument[], icSet: Set<string>) => number;
+  getValue: (docs: FiscalDocument[], allDocs: FiscalDocument[], prevDocs: FiscalDocument[], icSet: Set<string>) => number;
   getSparkPoints: (
     allDocs: FiscalDocument[],
     months: string[],
@@ -78,12 +83,12 @@ interface KpiDef {
 const KPI_DEFS: KpiDef[] = [
   {
     id: "bruto",
-    label: "Faturamento Bruto",
+    label: "Receita Bruta",
     icon: TrendingUp,
     color: "oklch(0.546 0.225 264)",
     colorHex: "#2563EB",
     getValue: (docs) => docs.reduce((s, d) => s + d.valor_bruto, 0),
-    getSparkPoints: (all, months, _icSet) =>
+    getSparkPoints: (all, months) =>
       months.map((ym) => ({
         month: ym,
         value: all
@@ -91,17 +96,16 @@ const KPI_DEFS: KpiDef[] = [
           .reduce((s, d) => s + d.valor_bruto, 0),
       })),
     format: fmtBRLCompact,
-    tooltip:
-      "Soma de valor_bruto de todas as notas ativas (exclui canceladas) no período filtrado.",
+    tooltip: "Soma de valor_bruto de todas as notas ativas (exclui canceladas) no período.",
   },
   {
     id: "liquido",
-    label: "Faturamento Líquido",
-    icon: TrendingUp,
+    label: "Receita Líquida",
+    icon: BarChart3,
     color: "oklch(0.7 0.14 192)",
     colorHex: "#14B8A6",
     getValue: (docs) => docs.reduce((s, d) => s + d.valor_liquido, 0),
-    getSparkPoints: (all, months, _icSet) =>
+    getSparkPoints: (all, months) =>
       months.map((ym) => ({
         month: ym,
         value: all
@@ -109,65 +113,16 @@ const KPI_DEFS: KpiDef[] = [
           .reduce((s, d) => s + d.valor_liquido, 0),
       })),
     format: fmtBRLCompact,
-    tooltip:
-      "Faturamento Líquido = Bruto − Retenções. Soma de valor_liquido das notas ativas.",
-  },
-  {
-    id: "retencoes",
-    label: "Retenções",
-    icon: Coins,
-    color: "oklch(0.75 0.18 75)",
-    colorHex: "#F59E0B",
-    getValue: (docs) => docs.reduce((s, d) => s + d.valor_retido, 0),
-    getSparkPoints: (all, months, _icSet) =>
-      months.map((ym) => ({
-        month: ym,
-        value: all
-          .filter((d) => getYearMonth(d) === ym && d.status_manual !== "Cancelado")
-          .reduce((s, d) => s + d.valor_retido, 0),
-      })),
-    format: fmtBRLCompact,
-    tooltip:
-      "Total de tributos retidos na fonte (ISS, PIS, COFINS, IRRF etc.). Fórmula: Σ valor_retido das notas ativas.",
-  },
-  {
-    id: "intercompany",
-    label: "Intercompany",
-    icon: Building2,
-    color: "oklch(0.63 0.21 27)",
-    colorHex: "#EF4444",
-    getValue: (docs, icSet) =>
-      docs
-        .filter(
-          (d) =>
-            icSet.has(d.cnpj_prestador) && icSet.has(d.cnpj_tomador)
-        )
-        .reduce((s, d) => s + d.valor_bruto, 0),
-    getSparkPoints: (all, months, icSet) =>
-      months.map((ym) => ({
-        month: ym,
-        value: all
-          .filter(
-            (d) =>
-              getYearMonth(d) === ym &&
-              d.status_manual !== "Cancelado" &&
-              icSet.has(d.cnpj_prestador) &&
-              icSet.has(d.cnpj_tomador)
-          )
-          .reduce((s, d) => s + d.valor_bruto, 0),
-      })),
-    format: fmtBRLCompact,
-    tooltip:
-      "Operações entre empresas do mesmo grupo econômico (prestador e tomador ambos cadastrados no grupo). Fórmula: Σ valor_bruto notas Intercompany ativas.",
+    tooltip: "Receita Líquida = Bruto − Retenções Totais. Soma de valor_liquido das notas ativas.",
   },
   {
     id: "qtd-notas",
-    label: "Qtd. de Notas",
+    label: "Número de NFS",
     icon: Hash,
     color: "oklch(0.55 0.18 300)",
     colorHex: "#7C3AED",
     getValue: (docs) => docs.length,
-    getSparkPoints: (all, months, _icSet) =>
+    getSparkPoints: (all, months) =>
       months.map((ym) => ({
         month: ym,
         value: all.filter(
@@ -175,8 +130,7 @@ const KPI_DEFS: KpiDef[] = [
         ).length,
       })),
     format: (n) => n.toLocaleString("pt-BR"),
-    tooltip:
-      "Quantidade de NFS-e com status Ativo no período filtrado. Notas Canceladas são excluídas automaticamente.",
+    tooltip: "Quantidade total de notas fiscais de serviço ativas emitidas no período.",
   },
   {
     id: "ticket-medio",
@@ -186,9 +140,211 @@ const KPI_DEFS: KpiDef[] = [
     colorHex: "#10B981",
     getValue: (docs) => {
       const bruto = docs.reduce((s, d) => s + d.valor_bruto, 0);
+      const activeClients = getClientesAtivos(docs).size;
+      return activeClients > 0 ? bruto / activeClients : 0;
+    },
+    getSparkPoints: (all, months) =>
+      months.map((ym) => {
+        const filtered = all.filter(
+          (d) => getYearMonth(d) === ym && d.status_manual !== "Cancelado"
+        );
+        const bruto = filtered.reduce((s, d) => s + d.valor_bruto, 0);
+        const activeClients = getClientesAtivos(filtered).size;
+        return { month: ym, value: activeClients > 0 ? bruto / activeClients : 0 };
+      }),
+    format: fmtBRLCompact,
+    tooltip: "Faturamento Bruto dividido pelo número de Clientes Ativos.",
+  },
+  {
+    id: "clientes-ativos",
+    label: "Clientes Ativos",
+    icon: Users,
+    color: "oklch(0.6 0.18 200)",
+    colorHex: "#06B6D4",
+    getValue: (docs) => getClientesAtivos(docs).size,
+    getSparkPoints: (all, months) =>
+      months.map((ym) => {
+        const filtered = all.filter(
+          (d) => getYearMonth(d) === ym && d.status_manual !== "Cancelado"
+        );
+        return { month: ym, value: getClientesAtivos(filtered).size };
+      }),
+    format: (n) => n.toLocaleString("pt-BR"),
+    tooltip: "Número de clientes tomadores únicos com notas ativas no período.",
+  },
+  {
+    id: "novos-clientes",
+    label: "Novos Clientes",
+    icon: UserPlus,
+    color: "oklch(0.68 0.19 140)",
+    colorHex: "#22C55E",
+    getValue: (docs, allDocs) => {
+      const minCompet = docs.reduce((min, d) => (!d.data_competencia || d.data_competencia < min) ? (d.data_competencia || min) : min, "9999-12-31");
+      const current = getClientesAtivos(docs);
+      const historical = new Set<string>();
+      allDocs.forEach((d) => {
+        if (d.status_manual !== "Cancelado" && d.data_competencia && d.data_competencia < minCompet) {
+          const c = d.cnpj_tomador || d.nome_tomador;
+          if (c) historical.add(c);
+        }
+      });
+      return Array.from(current).filter((c) => !historical.has(c)).length;
+    },
+    getSparkPoints: (all, months) => {
+      return months.map((ym) => {
+        const filtered = all.filter(
+          (d) => getYearMonth(d) === ym && d.status_manual !== "Cancelado"
+        );
+        const current = getClientesAtivos(filtered);
+        const historical = new Set<string>();
+        all.forEach((d) => {
+          if (d.status_manual !== "Cancelado" && d.data_competencia && d.data_competencia < `${ym}-01`) {
+            const c = d.cnpj_tomador || d.nome_tomador;
+            if (c) historical.add(c);
+          }
+        });
+        return { month: ym, value: Array.from(current).filter((c) => !historical.has(c)).length };
+      });
+    },
+    format: (n) => n.toLocaleString("pt-BR"),
+    tooltip: "Clientes que faturaram no período mas nunca haviam faturado anteriormente.",
+  },
+  {
+    id: "clientes-perdidos",
+    label: "Clientes Perdidos",
+    icon: UserMinus,
+    color: "oklch(0.6 0.22 25)",
+    colorHex: "#EF4444",
+    getValue: (docs, _allDocs, prevDocs) => {
+      const current = getClientesAtivos(docs);
+      const prev = getClientesAtivos(prevDocs);
+      return Array.from(prev).filter((c) => !current.has(c)).length;
+    },
+    getSparkPoints: (all, months) => {
+      return months.map((ym, idx) => {
+        const filtered = all.filter(
+          (d) => getYearMonth(d) === ym && d.status_manual !== "Cancelado"
+        );
+        const current = getClientesAtivos(filtered);
+        
+        let prevYM = "";
+        const [y, m] = ym.split("-").map(Number);
+        if (m === 1) prevYM = `${y - 1}-12`;
+        else prevYM = `${y}-${String(m - 1).padStart(2, "0")}`;
+
+        const prevFiltered = all.filter(
+          (d) => getYearMonth(d) === prevYM && d.status_manual !== "Cancelado"
+        );
+        const prev = getClientesAtivos(prevFiltered);
+        return { month: ym, value: Array.from(prev).filter((c) => !current.has(c)).length };
+      });
+    },
+    format: (n) => n.toLocaleString("pt-BR"),
+    tooltip: "Clientes que faturaram no período anterior mas não registraram compras no período atual (Churn MoM).",
+  },
+  {
+    id: "crescimento-pct",
+    label: "Crescimento %",
+    icon: Percent,
+    color: "oklch(0.62 0.17 220)",
+    colorHex: "#3B82F6",
+    getValue: (docs, _allDocs, prevDocs) => {
+      const bruto = docs.reduce((s, d) => s + d.valor_bruto, 0);
+      const prevBruto = prevDocs.reduce((s, d) => s + d.valor_bruto, 0);
+      if (prevBruto === 0) return bruto > 0 ? 100 : 0;
+      return ((bruto - prevBruto) / prevBruto) * 100;
+    },
+    getSparkPoints: (all, months) => {
+      return months.map((ym) => {
+        const filtered = all.filter(
+          (d) => getYearMonth(d) === ym && d.status_manual !== "Cancelado"
+        );
+        const bruto = filtered.reduce((s, d) => s + d.valor_bruto, 0);
+
+        let prevYM = "";
+        const [y, m] = ym.split("-").map(Number);
+        if (m === 1) prevYM = `${y - 1}-12`;
+        else prevYM = `${y}-${String(m - 1).padStart(2, "0")}`;
+
+        const prevFiltered = all.filter(
+          (d) => getYearMonth(d) === prevYM && d.status_manual !== "Cancelado"
+        );
+        const prevBruto = prevFiltered.reduce((s, d) => s + d.valor_bruto, 0);
+        const val = prevBruto === 0 ? (bruto > 0 ? 100 : 0) : ((bruto - prevBruto) / prevBruto) * 100;
+        return { month: ym, value: val };
+      });
+    },
+    format: (n) => `${n >= 0 ? "+" : ""}${n.toFixed(1)}%`,
+    tooltip: "Variação percentual do faturamento bruto em relação ao período anterior.",
+  },
+  {
+    id: "iss-retido",
+    label: "ISS Retido",
+    icon: Landmark,
+    color: "oklch(0.76 0.15 80)",
+    colorHex: "#D97706",
+    getValue: (docs) => docs.reduce((s, d) => s + (d.vlr_iss_ret || 0), 0),
+    getSparkPoints: (all, months) =>
+      months.map((ym) => ({
+        month: ym,
+        value: all
+          .filter((d) => getYearMonth(d) === ym && d.status_manual !== "Cancelado")
+          .reduce((s, d) => s + (d.vlr_iss_ret || 0), 0),
+      })),
+    format: fmtBRLCompact,
+    tooltip: "Total de ISS retido na fonte pelos tomadores no período.",
+  },
+  {
+    id: "tributos-totais",
+    label: "Tributos Totais",
+    icon: Coins,
+    color: "oklch(0.72 0.17 60)",
+    colorHex: "#EA580C",
+    getValue: (docs) => docs.reduce((s, d) => s + (d.valor_retido || 0), 0),
+    getSparkPoints: (all, months) =>
+      months.map((ym) => ({
+        month: ym,
+        value: all
+          .filter((d) => getYearMonth(d) === ym && d.status_manual !== "Cancelado")
+          .reduce((s, d) => s + (d.valor_retido || 0), 0),
+      })),
+    format: fmtBRLCompact,
+    tooltip: "Soma de todos os impostos e retenções (ISS, IRRF, CSLL, PIS, COFINS, etc.).",
+  },
+  {
+    id: "margem-tributaria",
+    label: "Margem Tributária",
+    icon: Percent,
+    color: "oklch(0.58 0.16 280)",
+    colorHex: "#6366F1",
+    getValue: (docs) => {
+      const bruto = docs.reduce((s, d) => s + d.valor_bruto, 0);
+      const tributos = docs.reduce((s, d) => s + (d.valor_retido || 0), 0);
+      return bruto > 0 ? (tributos / bruto) * 100 : 0;
+    },
+    getSparkPoints: (all, months) =>
+      months.map((ym) => {
+        const filtered = all.filter(
+          (d) => getYearMonth(d) === ym && d.status_manual !== "Cancelado"
+        );
+        const bruto = filtered.reduce((s, d) => s + d.valor_bruto, 0);
+        const tributos = filtered.reduce((s, d) => s + (d.valor_retido || 0), 0);
+        return { month: ym, value: bruto > 0 ? (tributos / bruto) * 100 : 0 };
+      }),
+    format: (n) => `${n.toFixed(1)}%`,
+    tooltip: "Proporção de Tributos Totais sobre o Faturamento Bruto.",
+  },
+  {
+    id: "valor-medio-nota",
+    label: "Valor Médio por Nota",
+    icon: Receipt,
+    color: "oklch(0.65 0.19 120)",
+    colorHex: "#16A34A",
+    getValue: (docs) => {
+      const bruto = docs.reduce((s, d) => s + d.valor_bruto, 0);
       return docs.length > 0 ? bruto / docs.length : 0;
     },
-    getSparkPoints: (all, months, _icSet) =>
+    getSparkPoints: (all, months) =>
       months.map((ym) => {
         const filtered = all.filter(
           (d) => getYearMonth(d) === ym && d.status_manual !== "Cancelado"
@@ -197,8 +353,7 @@ const KPI_DEFS: KpiDef[] = [
         return { month: ym, value: filtered.length > 0 ? bruto / filtered.length : 0 };
       }),
     format: fmtBRLCompact,
-    tooltip:
-      "Ticket Médio = Faturamento Bruto ÷ Quantidade de Notas Ativas. Indica o valor médio por nota fiscal emitida.",
+    tooltip: "Faturamento Bruto total dividido pelo número de Notas Fiscais emitidas.",
   },
 ];
 
@@ -206,9 +361,9 @@ const KPI_DEFS: KpiDef[] = [
 function FormulaTooltip({ text }: { text: string }) {
   const [visible, setVisible] = useState(false);
   return (
-    <div className="exec-kpi-tooltip-wrapper">
+    <div className="relative">
       <button
-        className="exec-kpi-info-btn"
+        className="text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
         onMouseEnter={() => setVisible(true)}
         onMouseLeave={() => setVisible(false)}
         onFocus={() => setVisible(true)}
@@ -216,10 +371,10 @@ function FormulaTooltip({ text }: { text: string }) {
         aria-label="Fórmula do indicador"
         type="button"
       >
-        <Info className="h-3 w-3" />
+        <Info className="h-3.5 w-3.5" />
       </button>
       {visible && (
-        <div className="exec-kpi-tooltip-popup" role="tooltip">
+        <div className="absolute right-0 mt-1 w-64 bg-slate-900 text-white rounded-lg p-2.5 shadow-xl text-xs z-50 pointer-events-none" role="tooltip">
           {text}
         </div>
       )}
@@ -231,7 +386,7 @@ function FormulaTooltip({ text }: { text: string }) {
 function SparkTooltip({ active, payload, format }: any) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="exec-spark-tooltip">
+    <div className="bg-slate-900 text-white text-[10px] px-2 py-1 rounded shadow">
       <span>{format(payload[0].value)}</span>
     </div>
   );
@@ -241,19 +396,19 @@ function SparkTooltip({ active, payload, format }: any) {
 function TrendBadge({ pct, dir }: { pct: number; dir: TrendDir }) {
   if (dir === "flat")
     return (
-      <span className="exec-trend-badge exec-trend-flat">
-        <Minus className="h-2.5 w-2.5" /> —
+      <span className="flex items-center gap-0.5 text-xs text-slate-400 font-medium">
+        <Minus className="h-3 w-3" /> —
       </span>
     );
   if (dir === "up")
     return (
-      <span className="exec-trend-badge exec-trend-up">
-        <ArrowUpRight className="h-2.5 w-2.5" /> {fmtPct(pct)}
+      <span className="flex items-center gap-0.5 text-xs text-emerald-600 dark:text-emerald-400 font-semibold bg-emerald-50 dark:bg-emerald-950/30 px-1.5 py-0.5 rounded-md">
+        <ArrowUpRight className="h-3.5 w-3.5" /> {fmtPct(pct)}
       </span>
     );
   return (
-    <span className="exec-trend-badge exec-trend-down">
-      <ArrowDownRight className="h-2.5 w-2.5" /> {fmtPct(pct)}
+    <span className="flex items-center gap-0.5 text-xs text-rose-600 dark:text-rose-400 font-semibold bg-rose-50 dark:bg-rose-950/30 px-1.5 py-0.5 rounded-md">
+      <ArrowDownRight className="h-3.5 w-3.5" /> {fmtPct(pct)}
     </span>
   );
 }
@@ -281,49 +436,45 @@ function ExecKpiCard({ def, value, prevValue, sparkData, onClick }: ExecKpiCardP
 
   return (
     <div
-      className={`exec-kpi-card${onClick ? " exec-kpi-clickable" : ""}`}
-      style={{ "--kpi-color": def.colorHex } as React.CSSProperties}
+      className={`bg-card border border-border/80 rounded-2xl p-5 shadow-sm flex flex-col justify-between transition-all duration-200 hover:scale-[1.01] hover:shadow-md cursor-pointer ${
+        onClick ? "hover:border-primary/40" : ""
+      }`}
       onClick={onClick}
       role={onClick ? "button" : undefined}
       tabIndex={onClick ? 0 : undefined}
-      onKeyDown={
-        onClick
-          ? (e) => {
-              if (e.key === "Enter" || e.key === " ") onClick();
-            }
-          : undefined
-      }
     >
       {/* Top row */}
-      <div className="exec-kpi-top">
-        <div className="exec-kpi-icon" style={{ background: `${def.colorHex}18` }}>
-          <def.icon className="h-4 w-4" style={{ color: def.colorHex }} />
+      <div className="flex items-center justify-between mb-3">
+        <div className="h-9 w-9 rounded-xl flex items-center justify-center" style={{ background: `${def.colorHex}10` }}>
+          <def.icon className="h-5 w-5" style={{ color: def.colorHex }} />
         </div>
         <FormulaTooltip text={def.tooltip} />
       </div>
 
       {/* Label */}
-      <div className="exec-kpi-label">{def.label}</div>
+      <div className="text-xs text-slate-400 font-medium tracking-tight mb-1">{def.label}</div>
 
       {/* Main value */}
-      <div className="exec-kpi-value">{def.format(value)}</div>
+      <div className="text-2xl font-bold text-slate-800 tracking-tight mb-2">
+        {def.format(value)}
+      </div>
 
       {/* Comparison + badge */}
-      <div className="exec-kpi-comparison">
+      <div className="flex items-center gap-1.5 mb-4">
         {hasPrev ? (
           <>
             <TrendBadge pct={pct} dir={dir} />
-            <span className="exec-kpi-prev-label">vs. período anterior</span>
+            <span className="text-[10px] text-slate-400 font-medium">vs. anterior</span>
           </>
         ) : (
-          <span className="exec-kpi-prev-label">Sem comparativo</span>
+          <span className="text-[10px] text-slate-400 font-medium">Sem comparativo</span>
         )}
       </div>
 
       {/* Sparkline */}
-      <div className="exec-kpi-sparkline">
-        <ResponsiveContainer width="100%" height={44}>
-          <LineChart data={sparkData} margin={{ top: 4, right: 2, bottom: 2, left: 2 }}>
+      <div className="h-10 w-full mt-auto">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={sparkData}>
             <Line
               type="monotone"
               dataKey="value"
@@ -341,8 +492,8 @@ function ExecKpiCard({ def, value, prevValue, sparkData, onClick }: ExecKpiCardP
       </div>
 
       {/* Bottom label */}
-      <div className="exec-kpi-sparkline-label">
-        Últimos 12 meses
+      <div className="text-[9px] text-slate-400/80 font-medium text-right mt-1.5">
+        Histórico 12m
       </div>
     </div>
   );
@@ -371,7 +522,7 @@ function SecondaryIndicators({
       label: "Retenção Média",
       value: `${retencaoPct.toFixed(2)}%`,
       sub: "Retenções ÷ Bruto",
-      color: "#F59E0B",
+      color: "#D97706",
     },
     {
       id: "sec-intercompany-pct",
@@ -397,14 +548,14 @@ function SecondaryIndicators({
   ];
 
   return (
-    <div className="exec-secondary-strip">
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-slate-50 border border-slate-200/60 rounded-2xl p-4 shadow-sm">
       {items.map((item) => (
-        <div key={item.id} id={item.id} className="exec-secondary-item">
-          <div className="exec-secondary-dot" style={{ background: item.color }} />
+        <div key={item.id} id={item.id} className="flex items-center gap-3">
+          <div className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: item.color }} />
           <div>
-            <div className="exec-secondary-label">{item.label}</div>
-            <div className="exec-secondary-value">{item.value}</div>
-            <div className="exec-secondary-sub">{item.sub}</div>
+            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{item.label}</div>
+            <div className="text-base font-bold text-slate-700 mt-0.5">{item.value}</div>
+            <div className="text-[9px] text-slate-400">{item.sub}</div>
           </div>
         </div>
       ))}
@@ -414,11 +565,8 @@ function SecondaryIndicators({
 
 /* ─── Main Export ─────────────────────────────────────────────── */
 interface ExecutiveKpisProps {
-  /** Current-period active docs (cancelled already excluded by filtrados + ativos logic) */
   activeDocs: FiscalDocument[];
-  /** All docs in DB (for sparkline historical data, unfiltered by period but cancelled-excluded) */
   allDocs: FiscalDocument[];
-  /** All filtered docs including cancelled (for cancelled count) */
   filteredDocs: FiscalDocument[];
   cnpjGrupoSet: Set<string>;
   onKpiClick?: (kpiId: string) => void;
@@ -431,7 +579,6 @@ export function ExecutiveKpis({
   cnpjGrupoSet,
   onKpiClick,
 }: ExecutiveKpisProps) {
-  // Sparkline months: last 12 months relative to all active data
   const activeAllDocs = useMemo(
     () => allDocs.filter((d) => d.status_manual !== "Cancelado"),
     [allDocs]
@@ -439,10 +586,7 @@ export function ExecutiveKpis({
 
   const months = useMemo(() => last12Months(activeAllDocs), [activeAllDocs]);
 
-  // Previous period: the month before the EARLIEST month in current activeDocs
-  // For simplicity: compare against previous period data from all docs
   const prevActiveDocs = useMemo(() => {
-    // Find current period's date range
     const dates = activeDocs
       .map((d) => d.data_competencia?.slice(0, 7))
       .filter(Boolean) as string[];
@@ -452,20 +596,17 @@ export function ExecutiveKpis({
     const minYM = dates.reduce((a, b) => (a < b ? a : b));
     const maxYM = dates.reduce((a, b) => (a > b ? a : b));
 
-    // Shift each month back by 1 month
     function shiftBack(ym: string): string {
       const [y, m] = ym.split("-").map(Number);
       if (m === 1) return `${y - 1}-12`;
       return `${y}-${String(m - 1).padStart(2, "0")}`;
     }
 
-    // Single month selected?
     if (minYM === maxYM) {
       const prevYM = shiftBack(minYM);
       return activeAllDocs.filter((d) => d.data_competencia?.startsWith(prevYM));
     }
 
-    // Multi-month: shift whole range back by 1 year
     const [minY, minM] = minYM.split("-").map(Number);
     const [maxY, maxM] = maxYM.split("-").map(Number);
     const prevMinYM = `${minY - 1}-${String(minM).padStart(2, "0")}`;
@@ -482,17 +623,18 @@ export function ExecutiveKpis({
     [filteredDocs]
   );
 
-  const bruto       = KPI_DEFS[0].getValue(activeDocs, cnpjGrupoSet);
-  const retencoes   = KPI_DEFS[2].getValue(activeDocs, cnpjGrupoSet);
-  const intercompany = KPI_DEFS[3].getValue(activeDocs, cnpjGrupoSet);
+  const bruto = activeDocs.reduce((s, d) => s + d.valor_bruto, 0);
+  const retencoes = activeDocs.reduce((s, d) => s + (d.valor_retido || 0), 0);
+  const intercompany = activeDocs
+    .filter((d) => cnpjGrupoSet.has(d.cnpj_prestador) && cnpjGrupoSet.has(d.cnpj_tomador))
+    .reduce((s, d) => s + d.valor_bruto, 0);
 
   return (
-    <div className="exec-kpi-section">
-      {/* 6-card grid */}
-      <div className="exec-kpi-grid">
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-5">
         {KPI_DEFS.map((def) => {
-          const value     = def.getValue(activeDocs, cnpjGrupoSet);
-          const prevValue = def.getValue(prevActiveDocs, cnpjGrupoSet);
+          const value = def.getValue(activeDocs, allDocs, prevActiveDocs, cnpjGrupoSet);
+          const prevValue = def.getValue(prevActiveDocs, allDocs, prevActiveDocs, cnpjGrupoSet);
           const sparkData = def.getSparkPoints(activeAllDocs, months, cnpjGrupoSet);
 
           return (
@@ -508,7 +650,6 @@ export function ExecutiveKpis({
         })}
       </div>
 
-      {/* Secondary indicators strip */}
       <SecondaryIndicators
         bruto={bruto}
         retencoes={retencoes}
